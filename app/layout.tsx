@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+import { Manrope } from "next/font/google";
+
+import "./globals.css";
+
+import { cn } from "@/lib/utils";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "Revenue Recovery",
+  description:
+    "A contractor-friendly revenue recovery dashboard for invoices, clients, and payment follow-up.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className={cn(manrope.variable, "h-full antialiased")}>
+      <body className="flex min-h-full flex-col bg-background text-foreground">
+        {children}
+      </body>
+    </html>
+  );
+}
