@@ -38,6 +38,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import { seedDemoData } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -168,6 +169,7 @@ export default function DashboardPage() {
   )
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSeeding, setIsSeeding] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const loadDashboard = useCallback(async () => {
@@ -537,6 +539,19 @@ export default function DashboardPage() {
     setReminderForm((current) => ({ ...current, [field]: value }))
   }
 
+  async function handleLoadDemoData() {
+    if (!userId) return
+    setIsSeeding(true)
+    setErrorMessage(null)
+    const { error } = await seedDemoData(supabase, userId)
+    if (error) {
+      setErrorMessage(error)
+    } else {
+      await loadDashboard()
+    }
+    setIsSeeding(false)
+  }
+
   function openAddReminder() {
     setReminderForm(getInitialReminderForm(invoices[0]?.id || ""))
     setReminderDialogOpen(true)
@@ -814,6 +829,20 @@ export default function DashboardPage() {
                 </Button>
                 <Button variant="outline" asChild>
                   <a href="/dashboard/clients">Add client</a>
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={isSeeding || !userId}
+                  onClick={() => void handleLoadDemoData()}
+                >
+                  {isSeeding ? (
+                    <>
+                      <RefreshCw className="size-4 animate-spin" />
+                      Loading demo…
+                    </>
+                  ) : (
+                    "Load demo data"
+                  )}
                 </Button>
               </div>
             </CardContent>

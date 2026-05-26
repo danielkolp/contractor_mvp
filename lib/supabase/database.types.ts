@@ -122,8 +122,10 @@ export type Database = {
           id: string
           user_id: string
           company_name: string | null
+          owner_name: string | null
           trade: string | null
           phone: string | null
+          website: string | null
           service_area: string | null
           created_at: string
           updated_at: string
@@ -132,8 +134,10 @@ export type Database = {
           id?: string
           user_id: string
           company_name?: string | null
+          owner_name?: string | null
           trade?: string | null
           phone?: string | null
+          website?: string | null
           service_area?: string | null
           created_at?: string
           updated_at?: string
@@ -142,9 +146,53 @@ export type Database = {
           id?: string
           user_id?: string
           company_name?: string | null
+          owner_name?: string | null
           trade?: string | null
           phone?: string | null
+          website?: string | null
           service_area?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          id: string
+          user_id: string
+          default_payment_terms: number
+          late_fee_percentage: number
+          currency: string
+          first_reminder_days: number
+          second_reminder_days: number
+          final_notice_days: number
+          default_tone: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          default_payment_terms?: number
+          late_fee_percentage?: number
+          currency?: string
+          first_reminder_days?: number
+          second_reminder_days?: number
+          final_notice_days?: number
+          default_tone?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          default_payment_terms?: number
+          late_fee_percentage?: number
+          currency?: string
+          first_reminder_days?: number
+          second_reminder_days?: number
+          final_notice_days?: number
+          default_tone?: string
           created_at?: string
           updated_at?: string
         }

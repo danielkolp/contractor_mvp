@@ -4,6 +4,7 @@ import { Manrope } from "next/font/google";
 import "./globals.css";
 
 import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/sonner";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -26,6 +27,7 @@ export default function RootLayout({
     <html lang="en" className={cn(manrope.variable, "h-full antialiased")}>
       <body className="flex min-h-full flex-col bg-background text-foreground">
         {children}
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

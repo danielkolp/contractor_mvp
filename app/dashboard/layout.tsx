@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation"
 
+export const dynamic = "force-dynamic"
+
 import { AppShell } from "@/components/dashboard/app-shell"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { createClient } from "@/lib/supabase/server"

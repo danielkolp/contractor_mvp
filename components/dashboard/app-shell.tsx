@@ -63,6 +63,11 @@ const navigation = [
     icon: ClipboardCheck,
   },
   {
+    name: "Reminders",
+    href: "/dashboard/reminders",
+    icon: Bell,
+  },
+  {
     name: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
