@@ -281,7 +281,7 @@ function SelectField({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        "flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 min-w-0 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}
@@ -1100,7 +1100,7 @@ export default function InvoicesPage() {
                   value={form.notes}
                   onChange={(event) => updateForm("notes", event.target.value)}
                   placeholder="What work was completed or what follow-up is needed?"
-                  className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="min-h-24 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 />
               </div>
 
@@ -1138,29 +1138,35 @@ export default function InvoicesPage() {
       <Sheet open={detailSheetOpen} onOpenChange={closeDetailSheet}>
         <SheetContent
           side="right"
-          className="flex h-full w-full flex-col overflow-y-auto sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
+          className="flex h-full w-full max-w-full flex-col overflow-y-auto sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
         >
           {selectedInvoice ? (
             <>
               <SheetHeader className="border-b border-border px-4 py-4 sm:px-6">
                 <div className="flex flex-col gap-3 pr-8 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <SheetTitle className="text-xl">
                       {selectedInvoice.invoice_number}
                     </SheetTitle>
-                    <SheetDescription>
+                    <SheetDescription className="break-words">
                       {selectedInvoice.client_name || "No client"} -{" "}
                       {moneyFormatter.format(selectedInvoice.amount)}
                     </SheetDescription>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant={statusTone[selectedInvoice.status]}>
+                    <Badge
+                      variant={statusTone[selectedInvoice.status]}
+                      className="max-w-full"
+                    >
                       {selectedInvoice.status}
                     </Badge>
                     {selectedRecoveryStage ? (
                       <Badge
                         variant="outline"
-                        className={stageTone[selectedRecoveryStage]}
+                        className={cn(
+                          "max-w-full",
+                          stageTone[selectedRecoveryStage]
+                        )}
                       >
                         {stageLabels[selectedRecoveryStage]}
                       </Badge>
@@ -1391,12 +1397,16 @@ export default function InvoicesPage() {
                       onChange={(event) =>
                         updateDetailForm("notes", event.target.value)
                       }
-                      className="min-h-28 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="min-h-28 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     />
                   </div>
 
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={isSaving}>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="w-full sm:w-auto"
+                    >
                       {isSaving ? "Saving..." : "Save changes"}
                     </Button>
                   </div>
@@ -1415,7 +1425,7 @@ export default function InvoicesPage() {
                           className="rounded-lg border border-border bg-muted/20 p-3"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="font-medium">
+                            <div className="min-w-0 break-words font-medium">
                               {action.action_type}
                             </div>
                             <Badge
@@ -1458,6 +1468,7 @@ export default function InvoicesPage() {
                       type="button"
                       size="sm"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() => openAddReminder(selectedInvoice)}
                     >
                       <Bell className="size-3.5" />
@@ -1504,10 +1515,14 @@ export default function InvoicesPage() {
                   <textarea
                     readOnly
                     value={detailFollowUpMessage}
-                    className="min-h-36 w-full rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm leading-6 shadow-xs outline-none"
+                    className="min-h-36 w-full resize-y rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm leading-6 shadow-xs outline-none"
                   />
                   <div className="flex justify-end">
-                    <Button type="button" onClick={copyDetailFollowUpMessage}>
+                    <Button
+                      type="button"
+                      className="w-full sm:w-auto"
+                      onClick={copyDetailFollowUpMessage}
+                    >
                       <ClipboardCopy className="size-4" />
                       {detailCopyState === "copied"
                         ? "Copied"
@@ -1582,6 +1597,7 @@ export default function InvoicesPage() {
               <Button
                 type="button"
                 variant="outline"
+                className="w-full lg:w-auto"
                 disabled={!hasActiveFilters}
                 onClick={resetFilters}
               >
@@ -1634,7 +1650,7 @@ export default function InvoicesPage() {
               </div>
             ) : filteredInvoices.length > 0 ? (
               <div className="overflow-hidden rounded-lg border border-border">
-                <div className="hidden grid-cols-[120px_1fr_120px_120px_120px_150px_48px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
+                <div className="hidden grid-cols-[120px_1fr_112px_112px_112px_132px_48px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
                   <div>Invoice</div>
                   <div>Client</div>
                   <div>Issued</div>
@@ -1649,18 +1665,15 @@ export default function InvoicesPage() {
                       invoice.due_date,
                       invoice.status
                     )
-                    const invoiceReminders =
-                      remindersByInvoice.get(invoice.id) || []
+                    const reminderCount =
+                      remindersByInvoice.get(invoice.id)?.length || 0
 
                     return (
-                      <div
-                        key={invoice.id}
-                        className="px-4 py-4"
-                      >
+                      <div key={invoice.id} className="min-w-0 px-4 py-3">
                         <div
                           role="button"
                           tabIndex={0}
-                          className="grid cursor-pointer gap-4 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 xl:grid-cols-[120px_1fr_120px_120px_120px_150px_48px] xl:items-center"
+                          className="grid min-w-0 cursor-pointer gap-3 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 xl:grid-cols-[120px_1fr_112px_112px_112px_132px_48px] xl:items-center"
                           onClick={() => openInvoiceDetails(invoice)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -1669,8 +1682,8 @@ export default function InvoicesPage() {
                             }
                           }}
                         >
-                          <div>
-                            <div className="font-medium">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">
                               {invoice.invoice_number}
                             </div>
                             <div className="text-xs text-muted-foreground">
@@ -1678,7 +1691,7 @@ export default function InvoicesPage() {
                             </div>
                           </div>
                           <div className="min-w-0">
-                            <div className="font-medium">
+                            <div className="break-words font-medium">
                               {invoice.client_name || "No client"}
                             </div>
                             <div className="mt-1 truncate text-sm text-muted-foreground">
@@ -1713,12 +1726,19 @@ export default function InvoicesPage() {
                             <Badge variant={statusTone[invoice.status]}>
                               {invoice.status}
                             </Badge>
+                            {reminderCount > 0 ? (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {reminderCount} reminder
+                                {reminderCount === 1 ? "" : "s"}
+                              </div>
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
                             {isOverdueInvoice(invoice) ? (
                               <Button
                                 size="sm"
                                 variant="outline"
+                                className="w-full sm:w-auto"
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   openFollowUp(invoice)
@@ -1789,42 +1809,6 @@ export default function InvoicesPage() {
                           </div>
                         </div>
 
-                        <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <div className="text-sm font-medium">
-                                Invoice reminders
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Follow-ups tied to this invoice.
-                              </div>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openAddReminder(invoice)}
-                            >
-                              <Bell className="size-3.5" />
-                              Add reminder
-                            </Button>
-                          </div>
-                          <div className="mt-3">
-                            <ReminderList
-                              reminders={invoiceReminders}
-                              invoiceById={invoiceById}
-                              emptyText="No reminders yet. Add one to keep this invoice on your radar."
-                              showInvoice={false}
-                              isSaving={isSaving}
-                              onMarkComplete={(reminder) =>
-                                void markReminderComplete(reminder)
-                              }
-                              onDelete={(reminder) =>
-                                void deleteReminder(reminder)
-                              }
-                            />
-                          </div>
-                        </div>
                       </div>
                     )
                   })}
@@ -1851,16 +1835,24 @@ export default function InvoicesPage() {
                 </p>
                 <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
                   {hasActiveFilters ? (
-                    <Button variant="outline" onClick={resetFilters}>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      onClick={resetFilters}
+                    >
                       Clear filters
                     </Button>
                   ) : null}
-                  <Button onClick={openAddInvoice}>
+                  <Button className="w-full sm:w-auto" onClick={openAddInvoice}>
                     <Plus className="size-4" />
                     Add invoice
                   </Button>
                   {!hasActiveFilters ? (
-                    <Button variant="outline" asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      asChild
+                    >
                       <a href="/dashboard/clients">Add client</a>
                     </Button>
                   ) : null}
@@ -1940,7 +1932,7 @@ export default function InvoicesPage() {
                   id="follow-up-message"
                   readOnly
                   value={followUpMessage}
-                  className="min-h-40 w-full rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm leading-6 shadow-xs outline-none"
+                  className="min-h-40 w-full resize-y rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm leading-6 shadow-xs outline-none"
                 />
               </div>
 

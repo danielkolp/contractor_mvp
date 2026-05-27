@@ -23,14 +23,18 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
           {title}
         </h1>
         <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
           {description}
         </p>
       </div>
-      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
+      {children ? (
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto">
+          {children}
+        </div>
+      ) : null}
     </div>
   )
 }

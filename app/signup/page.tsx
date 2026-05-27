@@ -32,10 +32,10 @@ export default async function SignupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-8 sm:px-6">
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-6xl items-center">
-        <div className="grid w-full gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-          <section className="flex flex-col justify-center">
+    <main className="min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center">
+        <div className="grid min-w-0 w-full gap-8 lg:grid-cols-[0.95fr_1.05fr]">
+          <section className="min-w-0 flex flex-col justify-center">
             <Link href="/" className="mb-8 flex items-center gap-3">
               <div className="grid size-9 place-items-center rounded-lg bg-teal-700 text-sm font-semibold text-white">
                 RR
@@ -44,10 +44,10 @@ export default async function SignupPage() {
                 Revenue Recovery
               </span>
             </Link>
-            <h1 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="max-w-xl break-words text-3xl font-semibold tracking-tight sm:text-4xl">
               Build a calmer way to get paid for completed work.
             </h1>
-            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
+            <p className="mt-4 max-w-xl break-words text-base leading-7 text-muted-foreground">
               Create a contractor workspace with placeholder data. Supabase and
               live payments can be connected after the interface is settled.
             </p>
@@ -61,7 +61,7 @@ export default async function SignupPage() {
             </div>
           </section>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-xl">Create your account</CardTitle>
               <CardDescription>

@@ -44,8 +44,8 @@ function SheetContent({
         className={cn(
           "fixed z-50 gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-300",
           "data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:border-t",
-          "data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-80 data-[side=left]:border-r",
-          "data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-80 data-[side=right]:border-l",
+          "data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-80 data-[side=left]:max-w-[calc(100vw-1rem)] data-[side=left]:border-r",
+          "data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-80 data-[side=right]:max-w-[100vw] data-[side=right]:border-l",
           "data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:border-b",
           "data-[state=closed]:data-[side=bottom]:slide-out-to-bottom data-[state=closed]:data-[side=left]:slide-out-to-left data-[state=closed]:data-[side=right]:slide-out-to-right data-[state=closed]:data-[side=top]:slide-out-to-top",
           "data-[state=open]:data-[side=bottom]:slide-in-from-bottom data-[state=open]:data-[side=left]:slide-in-from-left data-[state=open]:data-[side=right]:slide-in-from-right data-[state=open]:data-[side=top]:slide-in-from-top",

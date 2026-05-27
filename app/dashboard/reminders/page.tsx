@@ -388,19 +388,19 @@ export default function RemindersPage() {
 
             {/* Filter tabs */}
             {stats.total > 0 ? (
-              <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
+              <div className="grid w-full grid-cols-3 gap-1 rounded-lg border border-border bg-muted/40 p-1 sm:w-fit">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors sm:px-3 ${
                       activeTab === tab.id
                         ? "bg-background shadow-xs text-foreground"
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {tab.label}
+                    <span className="truncate">{tab.label}</span>
                     <span
                       className={`rounded-full px-1.5 py-0.5 text-xs ${
                         activeTab === tab.id

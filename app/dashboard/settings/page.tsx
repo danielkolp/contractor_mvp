@@ -50,6 +50,17 @@ type SettingsForm = {
   default_tone: string
 }
 
+type ProfileErrors = Partial<Record<keyof ProfileForm, string>>
+type SettingsErrors = Partial<Record<keyof SettingsForm, string>>
+
+type ValidSettingsValues = {
+  paymentTerms: number
+  lateFeePercentage: number
+  firstReminderDays: number
+  secondReminderDays: number
+  finalNoticeDays: number
+}
+
 function toProfileForm(profile: ProfileRow | null): ProfileForm {
   return {
     company_name: profile?.company_name ?? "",
@@ -78,6 +89,116 @@ function nullableText(value: string) {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null
+
+  return <p className="text-xs text-destructive">{message}</p>
+}
+
+function parsePositiveInteger(value: string) {
+  const parsed = Number(value)
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseNonNegativeNumber(value: string) {
+  const parsed = Number(value)
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+function isValidWebsite(value: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed) return true
+
+  try {
+    const url = new URL(trimmed)
+    return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function validateProfileForm(form: ProfileForm): ProfileErrors {
+  const errors: ProfileErrors = {}
+
+  if (!form.company_name.trim()) {
+    errors.company_name = "Business name is required."
+  }
+
+  if (!form.owner_name.trim()) {
+    errors.owner_name = "Owner name is required."
+  }
+
+  if (!isValidWebsite(form.website)) {
+    errors.website = "Enter a full website URL, like https://example.com."
+  }
+
+  return errors
+}
+
+function validateSettingsForm(form: SettingsForm): {
+  errors: SettingsErrors
+  values?: ValidSettingsValues
+} {
+  const errors: SettingsErrors = {}
+  const paymentTerms = parsePositiveInteger(form.default_payment_terms)
+  const lateFeePercentage = parseNonNegativeNumber(form.late_fee_percentage)
+  const firstReminderDays = parsePositiveInteger(form.first_reminder_days)
+  const secondReminderDays = parsePositiveInteger(form.second_reminder_days)
+  const finalNoticeDays = parsePositiveInteger(form.final_notice_days)
+
+  if (paymentTerms === null) {
+    errors.default_payment_terms = "Payment terms must be a positive whole number."
+  }
+
+  if (lateFeePercentage === null) {
+    errors.late_fee_percentage = "Late fee cannot be negative."
+  }
+
+  if (firstReminderDays === null) {
+    errors.first_reminder_days = "First reminder must be a positive whole number."
+  }
+
+  if (secondReminderDays === null) {
+    errors.second_reminder_days = "Second reminder must be a positive whole number."
+  }
+
+  if (finalNoticeDays === null) {
+    errors.final_notice_days = "Final notice must be a positive whole number."
+  }
+
+  if (
+    firstReminderDays !== null &&
+    secondReminderDays !== null &&
+    finalNoticeDays !== null &&
+    !(firstReminderDays < secondReminderDays && secondReminderDays < finalNoticeDays)
+  ) {
+    errors.first_reminder_days =
+      "Reminder timing must be first < second < final notice."
+    errors.second_reminder_days =
+      "Reminder timing must be first < second < final notice."
+    errors.final_notice_days =
+      "Reminder timing must be first < second < final notice."
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors }
+  }
+
+  return {
+    errors,
+    values: {
+      paymentTerms: paymentTerms as number,
+      lateFeePercentage: lateFeePercentage as number,
+      firstReminderDays: firstReminderDays as number,
+      secondReminderDays: secondReminderDays as number,
+      finalNoticeDays: finalNoticeDays as number,
+    },
+  }
+}
+
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), [])
   const [userId, setUserId] = useState<string | null>(null)
@@ -85,6 +206,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsRow | null>(null)
   const [profileForm, setProfileForm] = useState<ProfileForm>(toProfileForm(null))
   const [settingsForm, setSettingsForm] = useState<SettingsForm>(toSettingsForm(null))
+  const [profileErrors, setProfileErrors] = useState<ProfileErrors>({})
+  const [settingsErrors, setSettingsErrors] = useState<SettingsErrors>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
@@ -122,6 +245,8 @@ export default function SettingsPage() {
     setSettings(settingsResult.data)
     setProfileForm(toProfileForm(profileResult.data))
     setSettingsForm(toSettingsForm(settingsResult.data))
+    setProfileErrors({})
+    setSettingsErrors({})
     setIsLoading(false)
   }, [supabase])
 
@@ -132,21 +257,31 @@ export default function SettingsPage() {
 
   function updateProfile(field: keyof ProfileForm, value: string) {
     setProfileForm((curr) => ({ ...curr, [field]: value }))
+    setProfileErrors((curr) => ({ ...curr, [field]: undefined }))
   }
 
   function updateSettings(field: keyof SettingsForm, value: string) {
     setSettingsForm((curr) => ({ ...curr, [field]: value }))
+    setSettingsErrors((curr) => ({ ...curr, [field]: undefined }))
   }
 
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!userId) return
 
+    const errors = validateProfileForm(profileForm)
+    setProfileErrors(errors)
+
+    if (Object.keys(errors).length > 0) {
+      toast.error("Fix the highlighted profile fields before saving.")
+      return
+    }
+
     setIsSavingProfile(true)
 
     const payload: ProfileUpdate = {
-      company_name: nullableText(profileForm.company_name),
-      owner_name: nullableText(profileForm.owner_name),
+      company_name: profileForm.company_name.trim(),
+      owner_name: profileForm.owner_name.trim(),
       trade: nullableText(profileForm.trade),
       phone: nullableText(profileForm.phone),
       website: nullableText(profileForm.website),
@@ -187,15 +322,23 @@ export default function SettingsPage() {
     event.preventDefault()
     if (!userId) return
 
+    const validation = validateSettingsForm(settingsForm)
+    setSettingsErrors(validation.errors)
+
+    if (!validation.values) {
+      toast.error("Fix the highlighted invoice settings before saving.")
+      return
+    }
+
     setIsSavingSettings(true)
 
     const payload: SettingsUpdate = {
-      default_payment_terms: parseInt(settingsForm.default_payment_terms, 10) || 30,
-      late_fee_percentage: parseFloat(settingsForm.late_fee_percentage) || 0,
+      default_payment_terms: validation.values.paymentTerms,
+      late_fee_percentage: validation.values.lateFeePercentage,
       currency: settingsForm.currency,
-      first_reminder_days: parseInt(settingsForm.first_reminder_days, 10) || 3,
-      second_reminder_days: parseInt(settingsForm.second_reminder_days, 10) || 7,
-      final_notice_days: parseInt(settingsForm.final_notice_days, 10) || 14,
+      first_reminder_days: validation.values.firstReminderDays,
+      second_reminder_days: validation.values.secondReminderDays,
+      final_notice_days: validation.values.finalNoticeDays,
       default_tone: settingsForm.default_tone,
     }
 
@@ -270,7 +413,7 @@ export default function SettingsPage() {
         ) : null}
 
         {/* ── Business profile ── */}
-        <form onSubmit={(e) => void saveProfile(e)}>
+        <form noValidate onSubmit={(e) => void saveProfile(e)}>
           <Card>
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -280,7 +423,11 @@ export default function SettingsPage() {
                     Your name and company details used in follow-up messages.
                   </CardDescription>
                 </div>
-                <Button type="submit" disabled={isSavingProfile} className="w-fit">
+                <Button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="w-full sm:w-fit"
+                >
                   <Save className="size-4" />
                   {isSavingProfile ? "Saving…" : "Save profile"}
                 </Button>
@@ -295,7 +442,10 @@ export default function SettingsPage() {
                     value={profileForm.company_name}
                     onChange={(e) => updateProfile("company_name", e.target.value)}
                     placeholder="e.g. North Shore Contracting"
+                    required
+                    aria-invalid={Boolean(profileErrors.company_name)}
                   />
+                  <FieldError message={profileErrors.company_name} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="owner_name">Owner name</Label>
@@ -304,7 +454,10 @@ export default function SettingsPage() {
                     value={profileForm.owner_name}
                     onChange={(e) => updateProfile("owner_name", e.target.value)}
                     placeholder="e.g. Daniel Smith"
+                    required
+                    aria-invalid={Boolean(profileErrors.owner_name)}
                   />
+                  <FieldError message={profileErrors.owner_name} />
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -337,7 +490,9 @@ export default function SettingsPage() {
                     value={profileForm.website}
                     onChange={(e) => updateProfile("website", e.target.value)}
                     placeholder="e.g. https://yoursite.ca"
+                    aria-invalid={Boolean(profileErrors.website)}
                   />
+                  <FieldError message={profileErrors.website} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="service_area">Service area</Label>
@@ -354,7 +509,7 @@ export default function SettingsPage() {
         </form>
 
         {/* ── Invoice & follow-up settings ── */}
-        <form onSubmit={(e) => void saveSettings(e)}>
+        <form noValidate onSubmit={(e) => void saveSettings(e)}>
           <Card>
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -364,7 +519,11 @@ export default function SettingsPage() {
                     Default values applied to new invoices and follow-up timing.
                   </CardDescription>
                 </div>
-                <Button type="submit" disabled={isSavingSettings} className="w-fit">
+                <Button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="w-full sm:w-fit"
+                >
                   <Save className="size-4" />
                   {isSavingSettings ? "Saving…" : "Save settings"}
                 </Button>
@@ -381,7 +540,9 @@ export default function SettingsPage() {
                     max="365"
                     value={settingsForm.default_payment_terms}
                     onChange={(e) => updateSettings("default_payment_terms", e.target.value)}
+                    aria-invalid={Boolean(settingsErrors.default_payment_terms)}
                   />
+                  <FieldError message={settingsErrors.default_payment_terms} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="late_fee">Late fee (%)</Label>
@@ -392,7 +553,9 @@ export default function SettingsPage() {
                     step="0.5"
                     value={settingsForm.late_fee_percentage}
                     onChange={(e) => updateSettings("late_fee_percentage", e.target.value)}
+                    aria-invalid={Boolean(settingsErrors.late_fee_percentage)}
                   />
+                  <FieldError message={settingsErrors.late_fee_percentage} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="currency">Currency</Label>
@@ -425,7 +588,9 @@ export default function SettingsPage() {
                       min="1"
                       value={settingsForm.first_reminder_days}
                       onChange={(e) => updateSettings("first_reminder_days", e.target.value)}
+                      aria-invalid={Boolean(settingsErrors.first_reminder_days)}
                     />
+                    <FieldError message={settingsErrors.first_reminder_days} />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="second_reminder">Second reminder (days after due)</Label>
@@ -435,7 +600,9 @@ export default function SettingsPage() {
                       min="1"
                       value={settingsForm.second_reminder_days}
                       onChange={(e) => updateSettings("second_reminder_days", e.target.value)}
+                      aria-invalid={Boolean(settingsErrors.second_reminder_days)}
                     />
+                    <FieldError message={settingsErrors.second_reminder_days} />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="final_notice">Final notice (days after due)</Label>
@@ -445,7 +612,9 @@ export default function SettingsPage() {
                       min="1"
                       value={settingsForm.final_notice_days}
                       onChange={(e) => updateSettings("final_notice_days", e.target.value)}
+                      aria-invalid={Boolean(settingsErrors.final_notice_days)}
                     />
+                    <FieldError message={settingsErrors.final_notice_days} />
                   </div>
                 </div>
               </div>

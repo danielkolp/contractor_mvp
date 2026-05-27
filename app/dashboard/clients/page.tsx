@@ -184,9 +184,6 @@ function getClientInvoiceStats(client: ClientRow, invoices: InvoiceRow[]) {
       ? relatedInvoices.filter(isOverdueInvoice).length
       : client.overdue_invoice_count ?? 0,
     invoiceCount: relatedInvoices.length,
-    linkedInvoiceCount: relatedInvoices.filter(
-      (invoice) => invoice.client_id === client.id
-    ).length,
   }
 }
 
@@ -222,7 +219,7 @@ function SelectField({
       id={id}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex h-9 min-w-0 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       {children}
     </select>
@@ -597,15 +594,15 @@ export default function ClientsPage() {
               <div>
                 <CardTitle>Client directory</CardTitle>
                 <CardDescription>
-                  Clients load from Supabase. Balances use linked or matched
-                  invoices where possible.
+                  Clients and balances stay connected to invoices where
+                  possible.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="w-fit">
                 {filteredClients.length} of {clients.length} clients
               </Badge>
             </div>
-            <div className="relative max-w-xl">
+            <div className="relative w-full max-w-xl">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -659,7 +656,7 @@ export default function ClientsPage() {
                 </Button>
               </div>
             ) : filteredClients.length > 0 ? (
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 xl:grid-cols-2">
                 {filteredClients.map((client) => {
                   const stats = getClientInvoiceStats(client, invoices)
 
@@ -674,9 +671,11 @@ export default function ClientsPage() {
                             <Building2 className="size-5" />
                           </div>
                           <div className="min-w-0">
-                            <div className="font-medium">{client.company}</div>
+                            <div className="break-words font-medium">
+                              {client.company}
+                            </div>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                              <span>{client.name}</span>
+                              <span className="break-words">{client.name}</span>
                               <span>{client.trade || "Trade not set"}</span>
                             </div>
                           </div>
@@ -725,17 +724,21 @@ export default function ClientsPage() {
                       </div>
 
                       <div className="mt-3 text-xs text-muted-foreground">
-                        {stats.linkedInvoiceCount} linked invoices ·{" "}
-                        {stats.invoiceCount} matched invoices
+                        {stats.invoiceCount === 0
+                          ? "No invoices connected yet"
+                          : `${stats.invoiceCount} invoice${
+                              stats.invoiceCount === 1 ? "" : "s"
+                            } connected`}
                       </div>
 
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-sm text-muted-foreground">
                           Last contacted {formatDate(client.last_contacted_date)}
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                           <Button
                             variant="outline"
+                            className="col-span-2 w-full sm:w-auto"
                             onClick={() => setSelectedClient(client)}
                           >
                             <UserRound className="size-4" />
@@ -743,6 +746,7 @@ export default function ClientsPage() {
                           </Button>
                           <Button
                             variant="outline"
+                            className="w-full sm:w-auto"
                             onClick={() => openEditClient(client)}
                           >
                             <Pencil className="size-4" />
@@ -750,6 +754,7 @@ export default function ClientsPage() {
                           </Button>
                           <Button
                             variant="destructive"
+                            className="w-full sm:w-auto"
                             onClick={() => void deleteClient(client.id)}
                             disabled={isSaving}
                           >
@@ -783,16 +788,20 @@ export default function ClientsPage() {
                 </p>
                 <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
                   {searchQuery.trim() ? (
-                    <Button variant="outline" onClick={() => setSearchQuery("")}>
-                      Clear search
-                    </Button>
-                  ) : null}
-                  <Button onClick={openAddClient}>
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    Clear search
+                  </Button>
+                ) : null}
+                  <Button className="w-full sm:w-auto" onClick={openAddClient}>
                     <Plus className="size-4" />
                     Add client
                   </Button>
                   {!searchQuery.trim() ? (
-                    <Button variant="outline" asChild>
+                    <Button variant="outline" className="w-full sm:w-auto" asChild>
                       <a href="/dashboard/invoices">Add invoice</a>
                     </Button>
                   ) : null}
@@ -997,7 +1006,7 @@ export default function ClientsPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border border-border p-3">
                     <div className="text-xs text-muted-foreground">Email</div>
-                    <div className="mt-1 text-sm font-medium">
+                    <div className="mt-1 break-all text-sm font-medium">
                       {selectedClient.email || "No email"}
                     </div>
                   </div>

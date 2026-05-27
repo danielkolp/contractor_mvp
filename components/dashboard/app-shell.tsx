@@ -12,7 +12,6 @@ import {
   LogOut,
   Menu,
   ReceiptText,
-  Search,
   Settings,
   ShieldCheck,
   UsersRound,
@@ -166,7 +165,10 @@ function MobileSidebar() {
           <span className="sr-only">Open navigation</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="flex p-0">
+      <SheetContent
+        side="left"
+        className="flex w-[min(20rem,calc(100vw-1rem))] p-0"
+      >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation</SheetTitle>
           <SheetDescription>Move between dashboard sections.</SheetDescription>
@@ -205,16 +207,17 @@ function TopBar({ userEmail }: { userEmail?: string }) {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-6 lg:px-8">
       <MobileSidebar />
-      <div className="hidden min-w-0 flex-1 items-center md:flex">
-        <div className="flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm text-muted-foreground shadow-xs">
-          <Search className="size-4" />
-          <span>Search invoices, clients, or jobs</span>
-        </div>
-      </div>
-      <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
-        <Button variant="outline" size="sm" className="hidden gap-2 sm:flex">
-          <CreditCard className="size-4" />
-          New invoice
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="hidden gap-2 sm:flex"
+        >
+          <Link href="/dashboard/invoices">
+            <CreditCard className="size-4" />
+            New invoice
+          </Link>
         </Button>
         <Button variant="ghost" size="icon" aria-label="Notifications">
           <Bell className="size-4" />

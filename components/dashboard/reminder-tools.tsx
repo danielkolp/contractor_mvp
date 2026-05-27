@@ -114,7 +114,7 @@ function SelectField({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        "flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 min-w-0 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}
@@ -212,7 +212,7 @@ export function ReminderDialog({
               value={form.notes}
               onChange={(event) => onFormChange("notes", event.target.value)}
               placeholder="What should you remember before contacting this client?"
-              className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="min-h-24 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           </div>
 
@@ -294,7 +294,7 @@ export function ReminderList({
               reminder.completed && "bg-muted/40 opacity-75"
             )}
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={reminder.completed ? "success" : "muted"}>
@@ -304,7 +304,7 @@ export function ReminderList({
                   </Badge>
                   <span
                     className={cn(
-                      "text-sm font-medium",
+                      "min-w-0 break-words text-sm font-medium",
                       reminder.completed && "line-through"
                     )}
                   >
@@ -312,7 +312,7 @@ export function ReminderList({
                   </span>
                 </div>
                 {showInvoice ? (
-                  <div className="mt-2 text-sm text-muted-foreground">
+                  <div className="mt-2 break-words text-sm text-muted-foreground">
                     {invoice
                       ? `${invoice.invoice_number} - ${
                           invoice.client_name || "No client"
@@ -321,7 +321,7 @@ export function ReminderList({
                   </div>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                 {!reminder.completed && onMarkComplete ? (
                   <Button
                     type="button"

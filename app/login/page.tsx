@@ -34,8 +34,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams
 
   return (
-    <main className="grid min-h-screen bg-zinc-50 px-4 py-8 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
-      <section className="mx-auto flex w-full max-w-md flex-col justify-center lg:px-8">
+    <main className="grid min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-6 sm:px-6 sm:py-8 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
+      <section className="mx-auto flex min-w-0 w-full max-w-md flex-col justify-center lg:px-8">
         <Link href="/" className="mb-8 flex items-center gap-3">
           <div className="grid size-9 place-items-center rounded-lg bg-teal-700 text-sm font-semibold text-white">
             RR
@@ -45,7 +45,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </span>
         </Link>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle className="text-xl">Welcome back</CardTitle>
             <CardDescription>

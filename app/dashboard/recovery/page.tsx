@@ -292,7 +292,7 @@ function RecoveryCard({
             {item.invoiceNumber}
           </div>
         </div>
-        <Badge variant={isResolved ? "success" : "warning"}>
+        <Badge variant={isResolved ? "success" : "warning"} className="shrink-0">
           {item.daysOverdue} days
         </Badge>
       </div>
@@ -319,7 +319,10 @@ function RecoveryCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Badge variant="outline" className={cn("max-w-full", stageStyle[item.stage])}>
+        <Badge
+          variant="outline"
+          className={cn("max-w-full truncate", stageStyle[item.stage])}
+        >
           {item.status}
         </Badge>
         <Badge variant="outline">{item.invoice.status}</Badge>
@@ -364,7 +367,9 @@ function RecoveryCard({
             {latestHistory.map((action) => (
               <div key={action.id} className="grid gap-1 text-xs">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{action.action_type}</span>
+                  <span className="min-w-0 break-words font-medium">
+                    {action.action_type}
+                  </span>
                   <Badge variant={actionStatusTone[action.status]}>
                     {action.status}
                   </Badge>
@@ -972,31 +977,39 @@ export default function RecoveryPage() {
             </CardContent>
           </Card>
         ) : (
-          <section className="overflow-x-auto pb-2">
-            <div className="grid min-w-[1680px] grid-cols-6 gap-4">
-              {stages.map((stage) => {
-                const stageItems = recoveryItems.filter(
-                  (item) => item.stage === stage
+          <>
+            <section className="grid gap-4 2xl:hidden">
+              {stages
+                .filter((stage) =>
+                  recoveryItems.some((item) => item.stage === stage)
                 )
+                .map((stage) => {
+                  const stageItems = recoveryItems.filter(
+                    (item) => item.stage === stage
+                  )
 
-                return (
-                  <Card key={stage} className="min-h-[480px] bg-muted/20">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <CardTitle className="text-base">
-                            {stageLabels[stage]}
-                          </CardTitle>
-                          <CardDescription>{stageSummary[stage]}</CardDescription>
+                  return (
+                    <Card key={`mobile-${stage}`}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-base">
+                              {stageLabels[stage]}
+                            </CardTitle>
+                            <CardDescription>
+                              {stageSummary[stage]}
+                            </CardDescription>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={stageStyle[stage]}
+                          >
+                            {stageItems.length}
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className={stageStyle[stage]}>
-                          {stageItems.length}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="grid gap-3">
-                      {stageItems.length > 0 ? (
-                        stageItems.map((item) => (
+                      </CardHeader>
+                      <CardContent className="grid gap-3">
+                        {stageItems.map((item) => (
                           <RecoveryCard
                             key={item.id}
                             item={item}
@@ -1022,18 +1035,81 @@ export default function RecoveryPage() {
                               void markResolved(selectedItem)
                             }
                           />
-                        ))
-                      ) : (
-                        <div className="rounded-lg border border-dashed border-border bg-background/70 p-4 text-sm text-muted-foreground">
-                          No invoices in this stage.
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+            </section>
+
+            <section className="hidden pb-2 2xl:block">
+              <div className="grid grid-cols-6 gap-4">
+                {stages.map((stage) => {
+                  const stageItems = recoveryItems.filter(
+                    (item) => item.stage === stage
+                  )
+
+                  return (
+                    <Card key={stage} className="min-h-[480px] bg-muted/20">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-base">
+                              {stageLabels[stage]}
+                            </CardTitle>
+                            <CardDescription>
+                              {stageSummary[stage]}
+                            </CardDescription>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={stageStyle[stage]}
+                          >
+                            {stageItems.length}
+                          </Badge>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          </section>
+                      </CardHeader>
+                      <CardContent className="grid gap-3">
+                        {stageItems.length > 0 ? (
+                          stageItems.map((item) => (
+                            <RecoveryCard
+                              key={item.id}
+                              item={item}
+                              invoiceById={invoiceById}
+                              reminders={
+                                remindersByInvoice.get(item.invoice.id) || []
+                              }
+                              isSaving={isSaving}
+                              onAddReminder={openAddReminder}
+                              onMarkReminderComplete={(reminder) =>
+                                void markReminderComplete(reminder)
+                              }
+                              onDeleteReminder={(reminder) =>
+                                void deleteReminder(reminder)
+                              }
+                              onFollowUpSent={(selectedItem) =>
+                                void markFollowUpSent(selectedItem)
+                              }
+                              onMoveNext={(selectedItem) =>
+                                void moveToNextStage(selectedItem)
+                              }
+                              onResolved={(selectedItem) =>
+                                void markResolved(selectedItem)
+                              }
+                            />
+                          ))
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border bg-background/70 p-4 text-sm text-muted-foreground">
+                            No invoices in this stage.
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </section>
+          </>
         )}
 
         <section className="grid gap-4 rounded-lg border border-teal-100 bg-teal-50 p-4 text-teal-950 md:grid-cols-[auto_1fr_auto] md:items-center">
@@ -1048,7 +1124,7 @@ export default function RecoveryPage() {
             </p>
           </div>
           <Button
-            className="bg-teal-700 hover:bg-teal-800"
+            className="w-full bg-teal-700 hover:bg-teal-800 md:w-auto"
             disabled={!hasRecoveryItems || isSaving}
             onClick={() => {
               const firstItem = recoveryItems.find(

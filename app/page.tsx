@@ -151,7 +151,7 @@ function SectionHeading({
       <Badge variant="outline" className="mb-4">
         {eyebrow}
       </Badge>
-      <h2 className="text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">
+      <h2 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">
         {title}
       </h2>
       <p className="mt-4 text-base leading-7 text-muted-foreground">
@@ -163,7 +163,7 @@ function SectionHeading({
 
 function DashboardPreview() {
   return (
-    <Card className="overflow-hidden border-zinc-200 shadow-xl">
+    <Card className="w-full max-w-full overflow-hidden border-zinc-200 shadow-xl">
       <div className="border-b border-border bg-background p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -172,7 +172,9 @@ function DashboardPreview() {
               Contractor dashboard preview
             </div>
           </div>
-          <Badge variant="success">$18,420 recovered this month</Badge>
+          <Badge variant="success" className="max-w-full">
+            $18,420 recovered this month
+          </Badge>
         </div>
       </div>
       <CardContent className="grid gap-4 p-4 sm:p-5">
@@ -219,7 +221,7 @@ function DashboardPreview() {
                     {row.invoice}
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                   <div className="text-sm font-semibold">{row.amount}</div>
                   <Badge variant={row.tone}>{row.status}</Badge>
                 </div>
@@ -242,7 +244,7 @@ function DashboardPreview() {
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-zinc-50 text-foreground">
+    <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex min-w-0 items-center gap-3">
@@ -266,26 +268,31 @@ export default function Home() {
 
       <section className="bg-background">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:px-8 lg:py-20">
-          <div className="flex flex-col justify-center">
+          <div className="min-w-0 flex flex-col justify-center">
             <Badge variant="outline" className="w-fit gap-1.5">
               <HardHat className="size-3.5" />
               Built for contractors
             </Badge>
-            <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-zinc-950 sm:text-5xl lg:text-6xl">
+            <h1 className="mt-5 max-w-3xl text-3xl font-semibold tracking-tight text-zinc-950 sm:text-5xl lg:text-6xl">
               Stop letting unpaid invoices disappear.
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+            <p className="mt-5 max-w-2xl break-words text-base leading-7 text-muted-foreground sm:text-lg">
               Track overdue invoices, follow up faster, and see exactly how much
               revenue is sitting unpaid.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="h-10">
+              <Button asChild size="lg" className="h-10 w-full sm:w-auto">
                 <Link href="/signup">
                   Start tracking invoices
                   <ArrowRight className="size-4" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-10">
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="h-10 w-full sm:w-auto"
+              >
                 <Link href="/dashboard">View how it works</Link>
               </Button>
             </div>
@@ -302,7 +309,7 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <div className="relative">
+          <div className="relative min-w-0">
             <DashboardPreview />
           </div>
         </div>
@@ -360,7 +367,7 @@ export default function Home() {
 
       <section className="border-y border-border bg-zinc-100/70 px-4 py-14 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-          <div>
+          <div className="min-w-0">
             <Badge variant="outline" className="mb-4">
               Dashboard preview
             </Badge>
@@ -373,18 +380,20 @@ export default function Home() {
               and move on with a clear next step.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Button asChild>
+              <Button asChild className="w-full sm:w-auto">
                 <Link href="/dashboard">
                   Open dashboard preview
                   <ArrowRight className="size-4" />
                 </Link>
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="w-full sm:w-auto">
                 <Link href="/signup">Start tracking invoices</Link>
               </Button>
             </div>
           </div>
-          <DashboardPreview />
+          <div className="min-w-0">
+            <DashboardPreview />
+          </div>
         </div>
       </section>
 
@@ -417,7 +426,7 @@ export default function Home() {
 
       <section className="border-y border-border bg-teal-950 px-4 py-14 text-white sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
-          <div>
+          <div className="min-w-0">
             <Badge className="mb-4 border-teal-700 bg-teal-900 text-teal-100">
               Pricing teaser
             </Badge>
@@ -429,7 +438,7 @@ export default function Home() {
               tracking, and recovery tools that help pay for themselves.
             </p>
           </div>
-          <Card className="border-teal-800 bg-white text-foreground">
+          <Card className="min-w-0 border-teal-800 bg-white text-foreground">
             <CardHeader>
               <CardTitle>Early access</CardTitle>
               <CardDescription>
@@ -486,14 +495,18 @@ export default function Home() {
             </h2>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="h-10 bg-white text-zinc-950 hover:bg-zinc-200">
+            <Button
+              asChild
+              size="lg"
+              className="h-10 w-full bg-white text-zinc-950 hover:bg-zinc-200 sm:w-auto"
+            >
               <Link href="/signup">Start tracking invoices</Link>
             </Button>
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="h-10 border-zinc-700 bg-transparent text-white hover:bg-zinc-900 hover:text-white"
+              className="h-10 w-full border-zinc-700 bg-transparent text-white hover:bg-zinc-900 hover:text-white sm:w-auto"
             >
               <Link href="/dashboard">View how it works</Link>
             </Button>

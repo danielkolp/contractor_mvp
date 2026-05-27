@@ -1037,7 +1037,7 @@ export default function DashboardPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-4">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <Badge variant="success">Paid</Badge>
                       <span className="text-sm font-semibold">
                         {dashboardStats.paidCount} invoices ·{" "}
@@ -1045,7 +1045,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <Progress value={dashboardStats.recoveryRate} />
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <Badge variant="warning">Unpaid</Badge>
                       <span className="text-sm font-semibold">
                         {dashboardStats.unpaidCount} invoices ·{" "}
@@ -1149,7 +1149,10 @@ export default function DashboardPage() {
                       : "Add invoices and reminders to start tracking recovery actions."}
                 </p>
               </div>
-              <Button className="bg-teal-700 hover:bg-teal-800" asChild>
+              <Button
+                className="w-full bg-teal-700 hover:bg-teal-800 sm:w-auto"
+                asChild
+              >
                 <a href="/dashboard/recovery">
                   Review recovery
                   <ArrowUpRight className="size-4" />
