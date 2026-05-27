@@ -12,6 +12,7 @@ import {
   Bell,
   Building2,
   CalendarDays,
+  CheckCircle2,
   Clock3,
   ClipboardCopy,
   FileText,
@@ -1166,6 +1167,30 @@ export default function InvoicesPage() {
                     ) : null}
                   </div>
                 </div>
+                {selectedInvoice.status !== "Paid" ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isSaving}
+                      onClick={() =>
+                        void updateInvoiceStatus(selectedInvoice.id, "Paid")
+                      }
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      Mark paid
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openAddReminder(selectedInvoice)}
+                    >
+                      <Bell className="size-3.5" />
+                      Add reminder
+                    </Button>
+                  </div>
+                ) : null}
               </SheetHeader>
 
               <div className="grid gap-5 p-4 sm:p-6">
@@ -1808,7 +1833,11 @@ export default function InvoicesPage() {
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
                 <div className="mx-auto grid size-12 place-items-center rounded-lg bg-background text-muted-foreground">
-                  <Search className="size-5" />
+                  {hasActiveFilters ? (
+                    <Search className="size-5" />
+                  ) : (
+                    <FileText className="size-5" />
+                  )}
                 </div>
                 <h3 className="mt-4 text-base font-semibold">
                   {hasActiveFilters

@@ -765,7 +765,11 @@ export default function ClientsPage() {
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
                 <div className="mx-auto grid size-12 place-items-center rounded-lg bg-background text-muted-foreground">
-                  <Search className="size-5" />
+                  {searchQuery.trim() ? (
+                    <Search className="size-5" />
+                  ) : (
+                    <Building2 className="size-5" />
+                  )}
                 </div>
                 <h3 className="mt-4 text-base font-semibold">
                   {searchQuery.trim()
