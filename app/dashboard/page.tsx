@@ -11,17 +11,18 @@ import {
   ArrowUpRight,
   Bell,
   CalendarClock,
-  CheckCircle2,
-  Circle,
   CircleDollarSign,
-  ClipboardCheck,
   FileWarning,
   Plus,
   RefreshCw,
-  UsersRound,
 } from "lucide-react"
 
+
 import { PageHeader } from "@/components/dashboard/page-header"
+import {
+  DashboardMainSkeleton,
+} from "@/components/dashboard/skeleton-loaders"
+import { ContentReveal } from "@/components/ui/content-reveal"
 import {
   getInitialReminderForm,
   ReminderDialog,
@@ -38,7 +39,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { seedDemoData } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -53,7 +53,6 @@ type ReminderUpdate = Database["public"]["Tables"]["reminders"]["Update"]
 type InvoiceStatus = Database["public"]["Enums"]["invoice_status"]
 type BadgeTone = "default" | "success" | "warning" | "muted" | "outline"
 
-const paidStatus: InvoiceStatus = "Paid"
 const unpaidStatuses: InvoiceStatus[] = [
   "Sent",
   "Overdue",
@@ -110,6 +109,19 @@ function getDaysOverdue(dueDate: string | null, status: InvoiceStatus) {
   return Math.max(0, Math.floor(diff / 86_400_000))
 }
 
+function getStatusDisplayLabel(status: InvoiceStatus): string {
+  const labels: Record<InvoiceStatus, string> = {
+    Draft: "Draft",
+    Sent: "Sent",
+    Overdue: "Overdue",
+    "Follow-up Sent": "Waiting on customer",
+    "Payment Plan": "Payment plan",
+    Paid: "Paid",
+    Escalated: "Needs approval",
+  }
+  return labels[status] ?? status
+}
+
 function isUnpaid(invoice: InvoiceRow) {
   return unpaidStatuses.includes(invoice.status)
 }
@@ -118,28 +130,6 @@ function isOverdue(invoice: InvoiceRow) {
   return (
     overdueStatuses.includes(invoice.status) ||
     getDaysOverdue(invoice.due_date, invoice.status) > 0
-  )
-}
-
-function normalize(value: string | null | undefined) {
-  return (value || "").trim().toLowerCase()
-}
-
-function invoiceMatchesClient(client: ClientRow, invoice: InvoiceRow) {
-  if (invoice.client_id === client.id) {
-    return true
-  }
-
-  if (invoice.client_id) {
-    return false
-  }
-
-  const invoiceClient = normalize(invoice.client_name)
-
-  return (
-    invoiceClient.length > 0 &&
-    (invoiceClient === normalize(client.company) ||
-      invoiceClient === normalize(client.name))
   )
 }
 
@@ -169,7 +159,6 @@ export default function DashboardPage() {
   )
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [isSeeding, setIsSeeding] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const loadDashboard = useCallback(async () => {
@@ -257,19 +246,7 @@ export default function DashboardPage() {
   const dashboardStats = useMemo(() => {
     const unpaidInvoices = invoices.filter(isUnpaid)
     const overdueInvoices = invoices.filter(isOverdue)
-    const paidInvoices = invoices.filter((invoice) => invoice.status === paidStatus)
-    const pendingActions = recoveryActions.filter(
-      (action) => action.status === "Pending"
-    )
-    const paidAmount = paidInvoices.reduce(
-      (sum, invoice) => sum + invoice.amount,
-      0
-    )
     const unpaidAmount = unpaidInvoices.reduce(
-      (sum, invoice) => sum + invoice.amount,
-      0
-    )
-    const overdueAmount = overdueInvoices.reduce(
       (sum, invoice) => sum + invoice.amount,
       0
     )
@@ -277,19 +254,10 @@ export default function DashboardPage() {
     return {
       unpaidInvoices,
       overdueInvoices,
-      paidInvoices,
-      pendingActions,
       totalUnpaidRevenue: unpaidAmount,
-      overdueAmount,
-      paidAmount,
-      paidCount: paidInvoices.length,
       unpaidCount: unpaidInvoices.length,
-      recoveryRate:
-        invoices.length > 0
-          ? Math.round((paidInvoices.length / invoices.length) * 100)
-          : 0,
     }
-  }, [invoices, recoveryActions])
+  }, [invoices])
 
   const recentOverdueInvoices = useMemo(
     () =>
@@ -304,24 +272,69 @@ export default function DashboardPage() {
     [dashboardStats.overdueInvoices]
   )
 
-  const upcomingReminders = useMemo(
+  const priorityUnpaidInvoices = useMemo(
     () =>
-      reminders
+      dashboardStats.unpaidInvoices
         .slice()
-        .sort(
-          (a, b) =>
-            Number(a.completed) - Number(b.completed) ||
-            new Date(`${a.reminder_date}T00:00:00`).getTime() -
-              new Date(`${b.reminder_date}T00:00:00`).getTime()
-        )
-        .slice(0, 4),
-    [reminders]
+        .sort((a, b) => {
+          const overdueDelta =
+            Number(isOverdue(b)) - Number(isOverdue(a)) ||
+            getDaysOverdue(b.due_date, b.status) -
+              getDaysOverdue(a.due_date, a.status)
+
+          if (overdueDelta !== 0) {
+            return overdueDelta
+          }
+
+          const aDue = a.due_date
+            ? new Date(`${a.due_date}T00:00:00`).getTime()
+            : Number.MAX_SAFE_INTEGER
+          const bDue = b.due_date
+            ? new Date(`${b.due_date}T00:00:00`).getTime()
+            : Number.MAX_SAFE_INTEGER
+
+          return aDue - bDue
+        })
+        .slice(0, 5),
+    [dashboardStats.unpaidInvoices]
   )
 
   const activeReminderCount = useMemo(
     () => reminders.filter((reminder) => !reminder.completed).length,
     [reminders]
   )
+
+  const dueReminders = useMemo(() => {
+    const today = new Date()
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    )
+
+    return reminders
+      .filter((reminder) => {
+        if (reminder.completed) {
+          return false
+        }
+
+        const reminderDate = new Date(`${reminder.reminder_date}T00:00:00`)
+        const startOfReminder = new Date(
+          reminderDate.getFullYear(),
+          reminderDate.getMonth(),
+          reminderDate.getDate()
+        )
+
+        return startOfReminder.getTime() <= startOfToday.getTime()
+      })
+      .sort(
+        (a, b) =>
+          new Date(`${a.reminder_date}T00:00:00`).getTime() -
+          new Date(`${b.reminder_date}T00:00:00`).getTime()
+      )
+  }, [reminders])
+
+  const remindersDueToday = dueReminders.length
 
   const nextOpenReminder = useMemo(
     () =>
@@ -335,60 +348,40 @@ export default function DashboardPage() {
     [reminders]
   )
 
-  const overdueClients = useMemo(() => {
-    return clients
-      .map((client) => {
-        const matchingInvoices = invoices.filter((invoice) =>
-          invoiceMatchesClient(client, invoice)
-        )
-        const overdueInvoices = matchingInvoices.filter(isOverdue)
-        const balance = overdueInvoices.reduce(
-          (sum, invoice) => sum + invoice.amount,
-          0
-        )
-
-        return {
-          client,
-          balance,
-          overdueCount: overdueInvoices.length,
-        }
-      })
-      .filter((item) => item.balance > 0 || item.overdueCount > 0)
-      .sort((a, b) => b.balance - a.balance)
-      .slice(0, 4)
-  }, [clients, invoices])
-
-  const statusBreakdown = useMemo(() => {
-    const statuses: InvoiceStatus[] = [
-      "Paid",
-      "Sent",
-      "Overdue",
-      "Follow-up Sent",
-      "Payment Plan",
-      "Escalated",
-    ]
-    const total = Math.max(invoices.length, 1)
-
-    return statuses
-      .map((status) => {
-        const statusInvoices = invoices.filter(
-          (invoice) => invoice.status === status
-        )
-
-        return {
-          label: status,
-          count: statusInvoices.length,
-          amount: statusInvoices.reduce((sum, invoice) => sum + invoice.amount, 0),
-          progress: Math.round((statusInvoices.length / total) * 100),
-        }
-      })
-      .filter((item) => item.count > 0)
-  }, [invoices])
-
   const invoiceById = useMemo(
     () => new Map(invoices.map((invoice) => [invoice.id, invoice])),
     [invoices]
   )
+
+  const nextActionContent = useMemo(() => {
+    if (recentOverdueInvoices.length > 0) {
+      const inv = recentOverdueInvoices[0]
+      const amount = moneyFormatter.format(inv.amount)
+      const client = inv.client_name || "a client"
+      const days = getDaysOverdue(inv.due_date, inv.status)
+      return {
+        heading: `Approve the ${amount} payment reminder for ${client}.`,
+        body:
+          days > 0
+            ? `This invoice is ${days} day${days === 1 ? "" : "s"} overdue. A draft message is ready for your review.`
+            : "This invoice is ready for a follow-up. Review the draft message before it goes out.",
+        cta: "Review message",
+        href: "/dashboard/recovery",
+      }
+    }
+    if (nextOpenReminder) {
+      const inv = invoiceById.get(nextOpenReminder.invoice_id ?? "")
+      return {
+        heading: "You have a scheduled follow-up.",
+        body: inv
+          ? `Reminder for ${inv.client_name || "a client"} — ${moneyFormatter.format(inv.amount)}.`
+          : "A follow-up reminder is due.",
+        cta: "Open reminders",
+        href: "/dashboard/reminders",
+      }
+    }
+    return null
+  }, [recentOverdueInvoices, nextOpenReminder, invoiceById])
 
   const invoiceOptions = useMemo(
     () =>
@@ -434,7 +427,7 @@ export default function DashboardPage() {
       {
         id: "client",
         label: "Add your first client",
-        description: "Create a client record to link invoices and balances.",
+        description: "Keep names, phone numbers, and balances in one place.",
         completed: clients.length > 0,
         actionLabel: "Add client",
         href: "/dashboard/clients",
@@ -453,13 +446,13 @@ export default function DashboardPage() {
         description:
           invoices.length === 0
             ? "Create an invoice so overdue items can appear."
-            : hasOverdueInvoices
-              ? "Open Recovery and log the next action."
+          : hasOverdueInvoices
+              ? "Open Follow-ups and log the next action."
               : "No overdue invoices yet. Keep tracking due dates.",
         completed:
           invoices.length > 0 &&
           (!hasOverdueInvoices || recoveryActions.length > 0),
-        actionLabel: "Review recovery",
+        actionLabel: "Review follow-ups",
         href: "/dashboard/recovery",
       },
       {
@@ -494,41 +487,25 @@ export default function DashboardPage() {
 
   const statCards = [
     {
-      label: "Total unpaid revenue",
+      label: "Total unpaid",
       value: moneyFormatter.format(dashboardStats.totalUnpaidRevenue),
-      detail: `${moneyFormatter.format(
-        dashboardStats.overdueAmount
-      )} is overdue or in recovery`,
+      detail: `${dashboardStats.unpaidCount} unpaid invoices`,
       icon: CircleDollarSign,
-      tone: "bg-teal-50 text-teal-700",
+      tone: "bg-green-50 text-green-700",
     },
     {
-      label: "Overdue invoices",
+      label: "Need follow-up",
       value: String(dashboardStats.overdueInvoices.length),
-      detail: `${dashboardStats.unpaidInvoices.length} unpaid invoices total`,
+      detail: "Overdue or needs attention",
       icon: FileWarning,
       tone: "bg-amber-50 text-amber-700",
     },
     {
-      label: "Total clients",
-      value: String(clients.length),
-      detail: `${overdueClients.length} clients have overdue balances`,
-      icon: UsersRound,
-      tone: "bg-sky-50 text-sky-700",
-    },
-    {
-      label: "Pending actions",
-      value: String(dashboardStats.pendingActions.length),
+      label: "Due today",
+      value: String(remindersDueToday),
       detail: `${activeReminderCount} open reminders`,
-      icon: ClipboardCheck,
-      tone: "bg-violet-50 text-violet-700",
-    },
-    {
-      label: "Recovery rate",
-      value: `${dashboardStats.recoveryRate}%`,
-      detail: `${dashboardStats.paidCount} paid vs ${dashboardStats.unpaidCount} unpaid`,
-      icon: CheckCircle2,
-      tone: "bg-emerald-50 text-emerald-700",
+      icon: Bell,
+      tone: "bg-sky-50 text-sky-700",
     },
   ]
 
@@ -537,19 +514,6 @@ export default function DashboardPage() {
     value: ReminderFormValues[Field]
   ) {
     setReminderForm((current) => ({ ...current, [field]: value }))
-  }
-
-  async function handleLoadDemoData() {
-    if (!userId) return
-    setIsSeeding(true)
-    setErrorMessage(null)
-    const { error } = await seedDemoData(supabase, userId)
-    if (error) {
-      setErrorMessage(error)
-    } else {
-      await loadDashboard()
-    }
-    setIsSeeding(false)
   }
 
   function openAddReminder() {
@@ -670,28 +634,22 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        description="Live overview of unpaid revenue, overdue invoices, clients, reminders, and recovery work."
+        title="Today's focus"
+        description="See who owes money, what needs a follow-up, and the next button to press."
       >
-        <Button
-          type="button"
-          variant="outline"
-          disabled={invoices.length === 0 || isSaving}
-          onClick={openAddReminder}
-        >
-          <Bell className="size-4" />
-          Add reminder
-        </Button>
-        <Button variant="outline" asChild>
-          <a href="/dashboard/invoices">
-            <Plus className="size-4" />
-            Add invoice
-          </a>
-        </Button>
         <Button asChild>
-          <a href="/dashboard/recovery">
-            Review actions
-            <ArrowUpRight className="size-4" />
+          <a href="/dashboard/invoices">
+            {invoices.length === 0 ? (
+              <>
+                <Plus className="size-4" />
+                Add invoice
+              </>
+            ) : (
+              <>
+                Review unpaid invoices
+                <ArrowUpRight className="size-4" />
+              </>
+            )}
           </a>
         </Button>
       </PageHeader>
@@ -717,50 +675,24 @@ export default function DashboardPage() {
         ) : null}
 
         {showChecklist ? (
-          <Card className="border-teal-100 bg-teal-50/40">
-            <CardHeader className="gap-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle>Onboarding checklist</CardTitle>
-                  <CardDescription>
-                    Complete these steps to start recovering revenue faster.
-                  </CardDescription>
+          <Card className="border-green-100 bg-green-50/40">
+            <CardContent className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base">Setup</CardTitle>
+                  <Badge variant="outline" className="w-fit">
+                    {completedCount} of {onboardingItems.length} done
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="w-fit">
-                  {completedCount} / {onboardingItems.length} complete
-                </Badge>
+                <Progress value={checklistProgress} className="mt-3" />
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {nextStep
+                    ? `Next: ${nextStep.label.toLowerCase()}.`
+                    : "Your workspace is ready."}
+                </p>
               </div>
-              <Progress value={checklistProgress} />
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {onboardingItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-start gap-3 rounded-lg border border-border bg-background/80 p-3"
-                >
-                  <div
-                    className={`mt-0.5 grid size-6 place-items-center rounded-full border ${
-                      item.completed
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-muted-foreground/30 text-muted-foreground"
-                    }`}
-                  >
-                    {item.completed ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : (
-                      <Circle className="size-3" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">{item.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.description}
-                    </div>
-                  </div>
-                </div>
-              ))}
               {nextStep ? (
-                <Button variant="outline" asChild className="w-fit">
+                <Button variant="outline" asChild className="w-full sm:w-auto">
                   <a href={nextStep.href}>{nextStep.actionLabel}</a>
                 </Button>
               ) : null}
@@ -768,140 +700,146 @@ export default function DashboardPage() {
           </Card>
         ) : null}
 
-        {isLoading ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-lg bg-muted text-muted-foreground">
-                <RefreshCw className="size-5 animate-spin" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold">
-                Loading dashboard
-              </h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Fetching your protected Supabase records.
-              </p>
-            </CardContent>
-          </Card>
-        ) : errorMessage && !hasAnyData ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <h3 className="text-base font-semibold">
-                Could not load dashboard data
-              </h3>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                Check your Supabase environment variables, auth session, and
-                database migration, then try again.
-              </p>
-              <Button
-                className="mt-5"
-                variant="outline"
-                onClick={() => {
-                  setIsLoading(true)
-                  setErrorMessage(null)
-                  void loadDashboard()
-                }}
-              >
-                <RefreshCw className="size-4" />
-                Retry
-              </Button>
-            </CardContent>
-          </Card>
-        ) : !hasAnyData ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-lg bg-teal-50 text-teal-700">
-                <CircleDollarSign className="size-5" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold">
-                Start tracking revenue recovery
-              </h3>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                Add clients and invoices to see unpaid revenue, overdue counts,
-                reminders, and recovery actions here. The checklist keeps setup
-                lightweight.
-              </p>
-              <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
-                <Button asChild>
-                  <a href="/dashboard/invoices">
-                    <Plus className="size-4" />
-                    Add invoice
-                  </a>
-                </Button>
-                <Button variant="outline" asChild>
-                  <a href="/dashboard/clients">Add client</a>
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={isSeeding || !userId}
-                  onClick={() => void handleLoadDemoData()}
-                >
-                  {isSeeding ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" />
-                      Loading demo…
-                    </>
-                  ) : (
-                    "Load demo data"
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-              {statCards.map((stat) => {
-                const Icon = stat.icon
+        <ContentReveal isLoading={isLoading} skeleton={<DashboardMainSkeleton />}>
+          <div className="grid gap-6">
+            {errorMessage && !hasAnyData ? (
+              <Card className="border-zinc-200">
+                <CardContent className="p-10 text-center">
+                  <h3 className="text-base font-semibold">
+                    Something didn&apos;t load
+                  </h3>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                    Your data is safe. Try refreshing, or check your connection.
+                  </p>
+                  <Button
+                    className="mt-5"
+                    variant="outline"
+                    onClick={() => {
+                      setIsLoading(true)
+                      setErrorMessage(null)
+                      void loadDashboard()
+                    }}
+                  >
+                    <RefreshCw className="size-4" />
+                    Try again
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : !hasAnyData ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700">
+                    <CircleDollarSign className="size-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold">
+                    Add your first invoice
+                  </h3>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                    Start with the balance that needs to get paid. You can add
+                    client details after that.
+                  </p>
+                  <div className="mt-5 flex justify-center">
+                    <Button asChild>
+                      <a href="/dashboard/invoices">
+                        <Plus className="size-4" />
+                        Add invoice
+                      </a>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {statCards.map((stat, i) => {
+                    const Icon = stat.icon
 
-                return (
-                  <Card key={stat.label}>
-                    <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
-                      <CardDescription>{stat.label}</CardDescription>
-                      <div className={`rounded-lg p-2 ${stat.tone}`}>
-                        <Icon className="size-4" />
+                    return (
+                      <Card
+                        key={stat.label}
+                        className="animate-[fade-slide-up_0.35s_ease-out_both] motion-reduce:animate-none"
+                        style={{ animationDelay: `${i * 60}ms` }}
+                      >
+                        <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
+                          <CardDescription>{stat.label}</CardDescription>
+                          <div className={`rounded-lg p-2 ${stat.tone}`}>
+                            <Icon className="size-4" />
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-semibold tracking-tight">
+                            {stat.value}
+                          </div>
+                          <p className="mt-2 text-sm leading-5 text-muted-foreground">
+                            {stat.detail}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </section>
+
+                {nextActionContent ? (
+                  <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50/60 to-white shadow-sm">
+                <CardContent className="p-5 sm:p-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-4">
+                      <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-green-700 text-white shadow-sm">
+                        <CalendarClock className="size-5" />
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-semibold tracking-tight">
-                        {stat.value}
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                          Next best action
+                        </div>
+                        <p className="mt-1 text-base font-semibold leading-snug text-foreground">
+                          {nextActionContent.heading}
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                          {nextActionContent.body}
+                        </p>
                       </div>
-                      <p className="mt-2 text-sm leading-5 text-muted-foreground">
-                        {stat.detail}
-                      </p>
-                    </CardContent>
+                    </div>
+                    <Button
+                      className="shrink-0 gap-2 bg-green-700 text-white hover:bg-green-800 sm:ml-4"
+                      asChild
+                    >
+                      <a href={nextActionContent.href}>
+                        {nextActionContent.cta}
+                        <ArrowUpRight className="size-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </CardContent>
                   </Card>
-                )
-              })}
-            </section>
+                ) : null}
 
-            <section className="grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
+                <section className="grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
               <Card>
                 <CardHeader className="gap-2">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <CardTitle>Recently overdue invoices</CardTitle>
+                      <CardTitle>Who owes me money?</CardTitle>
                       <CardDescription>
-                        Sorted by the largest number of days overdue.
+                        The most important unpaid invoices to review.
                       </CardDescription>
                     </div>
                     <Badge variant="warning" className="w-fit">
-                      {dashboardStats.overdueInvoices.length} overdue total
+                      {dashboardStats.unpaidCount} unpaid total
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {recentOverdueInvoices.length > 0 ? (
+                  {priorityUnpaidInvoices.length > 0 ? (
                     <div className="overflow-hidden rounded-lg border border-border">
-                      <div className="hidden grid-cols-[108px_1fr_120px_110px_110px_140px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground lg:grid">
+                      <div className="hidden grid-cols-[108px_1fr_110px_110px_120px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground lg:grid">
                         <div>Invoice</div>
-                        <div>Client / job</div>
-                        <div>Trade</div>
+                        <div>Client</div>
                         <div>Due</div>
                         <div>Amount</div>
                         <div>Status</div>
                       </div>
                       <div className="divide-y divide-border">
-                        {recentOverdueInvoices.map((invoice) => {
+                        {priorityUnpaidInvoices.map((invoice) => {
                           const daysOverdue = getDaysOverdue(
                             invoice.due_date,
                             invoice.status
@@ -910,41 +848,32 @@ export default function DashboardPage() {
                           return (
                             <div
                               key={invoice.id}
-                              className="grid gap-3 px-4 py-4 lg:grid-cols-[108px_1fr_120px_110px_110px_140px] lg:items-center"
+                              className="grid gap-3 px-4 py-3 lg:grid-cols-[108px_1fr_110px_110px_120px] lg:items-center"
                             >
                               <div>
                                 <div className="font-medium">
                                   {invoice.invoice_number}
-                                </div>
-                                <div className="text-xs text-muted-foreground lg:hidden">
-                                  {invoice.trade || "Trade not set"}
                                 </div>
                               </div>
                               <div className="min-w-0">
                                 <div className="font-medium">
                                   {invoice.client_name || "No client"}
                                 </div>
-                                <div className="mt-1 text-sm text-muted-foreground">
-                                  {invoice.project_name ||
-                                    invoice.notes ||
-                                    "No project note"}
-                                </div>
-                              </div>
-                              <div className="hidden text-sm text-muted-foreground lg:block">
-                                {invoice.trade || "Not set"}
                               </div>
                               <div className="text-sm">
                                 {formatDate(invoice.due_date)}
-                                <div className="text-xs text-muted-foreground">
-                                  {daysOverdue} days late
-                                </div>
+                                {daysOverdue > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {daysOverdue} day{daysOverdue === 1 ? "" : "s"} late
+                                  </div>
+                                )}
                               </div>
                               <div className="font-semibold">
                                 {moneyFormatter.format(invoice.amount)}
                               </div>
                               <div>
                                 <Badge variant={statusTone[invoice.status]}>
-                                  {invoice.status}
+                                  {getStatusDisplayLabel(invoice.status)}
                                 </Badge>
                               </div>
                             </div>
@@ -954,7 +883,7 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-sm text-muted-foreground">
-                      No overdue invoices right now.
+                      No unpaid invoices right now.
                     </div>
                   )}
                 </CardContent>
@@ -965,9 +894,9 @@ export default function DashboardPage() {
                   <CardHeader className="gap-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <CardTitle>Reminders</CardTitle>
+                        <CardTitle>Follow-ups due today</CardTitle>
                         <CardDescription>
-                          Invoice follow-ups saved in Supabase.
+                          The calls or emails that need attention now.
                         </CardDescription>
                       </div>
                       <Button
@@ -983,11 +912,11 @@ export default function DashboardPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {upcomingReminders.length > 0 ? (
+                    {dueReminders.length > 0 ? (
                       <ReminderList
-                        reminders={upcomingReminders}
+                        reminders={dueReminders.slice(0, 4)}
                         invoiceById={invoiceById}
-                        emptyText="No reminders scheduled yet."
+                        emptyText="No follow-ups due today."
                         isSaving={isSaving}
                         onMarkComplete={(reminder) =>
                           void markReminderComplete(reminder)
@@ -997,12 +926,12 @@ export default function DashboardPage() {
                     ) : (
                       <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
                         <div className="text-sm font-medium text-foreground">
-                          No reminders scheduled yet
+                          Nothing due today
                         </div>
                         <p className="mt-2 text-sm leading-6 text-muted-foreground">
                           {invoices.length === 0
                             ? "Add an invoice first so reminders can be linked to a balance."
-                            : "Schedule follow-ups to keep overdue balances from slipping."}
+                            : "You can schedule the next follow-up from an invoice or the follow-ups page."}
                         </p>
                         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                           {invoices.length === 0 ? (
@@ -1021,146 +950,19 @@ export default function DashboardPage() {
                             </Button>
                           )}
                           <Button variant="outline" asChild>
-                            <a href="/dashboard/recovery">Review recovery</a>
+                            <a href="/dashboard/recovery">Open follow-ups</a>
                           </Button>
                         </div>
                       </div>
                     )}
                   </CardContent>
                 </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Paid vs unpaid</CardTitle>
-                    <CardDescription>
-                      Paid invoices are excluded from unpaid revenue.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <Badge variant="success">Paid</Badge>
-                      <span className="text-sm font-semibold">
-                        {dashboardStats.paidCount} invoices ·{" "}
-                        {moneyFormatter.format(dashboardStats.paidAmount)}
-                      </span>
-                    </div>
-                    <Progress value={dashboardStats.recoveryRate} />
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <Badge variant="warning">Unpaid</Badge>
-                      <span className="text-sm font-semibold">
-                        {dashboardStats.unpaidCount} invoices ·{" "}
-                        {moneyFormatter.format(
-                          dashboardStats.totalUnpaidRevenue
-                        )}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
-            </section>
-
-            <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Clients with overdue balances</CardTitle>
-                  <CardDescription>
-                    Highest balances that need attention this week.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  {overdueClients.length > 0 ? (
-                    overdueClients.map(({ client, balance, overdueCount }) => (
-                      <div
-                        key={client.id}
-                        className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[1fr_auto] sm:items-center"
-                      >
-                        <div>
-                          <div className="font-medium">{client.company}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {client.trade || "Trade not set"} · {overdueCount}{" "}
-                            invoices
-                          </div>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <div className="font-semibold">
-                            {moneyFormatter.format(balance)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            overdue balance
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      No clients have overdue balances.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Simple status breakdown</CardTitle>
-                  <CardDescription>
-                    A quick read on where invoice recovery stands.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  {statusBreakdown.length > 0 ? (
-                    statusBreakdown.map((status) => (
-                      <div key={status.label} className="grid gap-2">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <Badge variant={statusTone[status.label]}>
-                              {status.label}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {status.count} invoices
-                            </span>
-                          </div>
-                          <span className="text-sm font-semibold">
-                            {moneyFormatter.format(status.amount)}
-                          </span>
-                        </div>
-                        <Progress value={status.progress} />
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      Add invoices to see a status breakdown.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </section>
-
-            <section className="grid gap-4 rounded-lg border border-teal-100 bg-teal-50 p-4 text-teal-950 sm:grid-cols-[auto_1fr_auto] sm:items-center">
-              <div className="grid size-10 place-items-center rounded-lg bg-white text-teal-700">
-                <CalendarClock className="size-5" />
-              </div>
-              <div>
-                <div className="font-medium">Next best action</div>
-                <p className="mt-1 text-sm leading-6 text-teal-800">
-                  {recentOverdueInvoices[0]
-                    ? `Review ${recentOverdueInvoices[0].invoice_number} for ${recentOverdueInvoices[0].client_name || "this client"}. It is ${getDaysOverdue(recentOverdueInvoices[0].due_date, recentOverdueInvoices[0].status)} days overdue.`
-                    : nextOpenReminder
-                      ? "Review the next scheduled reminder and confirm the message is ready."
-                      : "Add invoices and reminders to start tracking recovery actions."}
-                </p>
-              </div>
-              <Button
-                className="w-full bg-teal-700 hover:bg-teal-800 sm:w-auto"
-                asChild
-              >
-                <a href="/dashboard/recovery">
-                  Review recovery
-                  <ArrowUpRight className="size-4" />
-                </a>
-              </Button>
-            </section>
-          </>
-        )}
+                </section>
+              </>
+            )}
+          </div>
+        </ContentReveal>
       </div>
     </>
   )

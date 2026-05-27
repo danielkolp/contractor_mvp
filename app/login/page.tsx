@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Hammer } from "lucide-react"
+import { CheckCircle2, CircleDollarSign } from "lucide-react"
 
 import { LoginForm } from "@/components/auth/login-form"
 import {
@@ -19,6 +19,12 @@ type LoginPageProps = {
   }>
 }
 
+const trustPoints = [
+  "Nothing sent without your approval",
+  "Plain-English follow-ups",
+  "Built for trades owners",
+]
+
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   if (hasSupabaseEnv()) {
     const supabase = await createClient()
@@ -34,31 +40,32 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams
 
   return (
-    <main className="grid min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-6 sm:px-6 sm:py-8 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
-      <section className="mx-auto flex min-w-0 w-full max-w-md flex-col justify-center lg:px-8">
-        <Link href="/" className="mb-8 flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-lg bg-teal-700 text-sm font-semibold text-white">
+    <main className="grid min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
+      {/* Left: form */}
+      <section className="mx-auto flex min-w-0 w-full max-w-md flex-col justify-center lg:px-10">
+        <Link href="/" className="mb-10 flex items-center gap-3">
+          <div className="grid size-9 place-items-center rounded-lg bg-green-700 text-sm font-bold text-white shadow-sm">
             RR
           </div>
-          <span className="text-sm font-semibold tracking-tight">
+          <span className="text-sm font-semibold tracking-tight text-foreground">
             Revenue Recovery
           </span>
         </Link>
 
-        <Card className="min-w-0 overflow-hidden">
-          <CardHeader>
+        <Card className="min-w-0 overflow-hidden border-zinc-200 shadow-sm">
+          <CardHeader className="pb-4">
             <CardTitle className="text-xl">Welcome back</CardTitle>
             <CardDescription>
-              Sign in to review unpaid invoices and recovery tasks.
+              Sign in to review unpaid invoices and follow-ups.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <LoginForm message={params?.message} />
-            <p className="mt-5 text-center text-sm text-muted-foreground">
+            <p className="mt-6 text-center text-sm text-muted-foreground">
               New here?{" "}
               <Link
                 href="/signup"
-                className="font-medium text-teal-700 hover:underline"
+                className="font-medium text-green-700 hover:underline"
               >
                 Create an account
               </Link>
@@ -67,19 +74,28 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </Card>
       </section>
 
-      <section className="hidden border-l border-border bg-background lg:block">
-        <div className="flex h-full flex-col justify-center px-12">
-          <div className="max-w-xl">
-            <div className="mb-6 grid size-12 place-items-center rounded-lg bg-amber-100 text-amber-700">
-              <Hammer className="size-6" />
+      {/* Right: brand panel */}
+      <section className="hidden border-l border-border bg-white lg:flex lg:flex-col lg:justify-center">
+        <div className="flex h-full flex-col justify-center px-12 xl:px-16">
+          <div className="max-w-lg">
+            <div className="mb-6 grid size-14 place-items-center rounded-2xl bg-green-700 text-white shadow-lg shadow-green-900/20">
+              <CircleDollarSign className="size-7" />
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight">
-              Keep payment follow-up clear, polite, and on schedule.
+            <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 xl:text-4xl">
+              Recover revenue that slipped through the cracks.
             </h1>
-            <p className="mt-4 text-base leading-7 text-muted-foreground">
-              Sign in with Supabase Auth to review overdue invoices, client
-              balances, and recovery tasks.
+            <p className="mt-4 text-base leading-7 text-zinc-600">
+              See who owes money, what needs a follow-up today, and the next
+              practical step — all in one clean dashboard.
             </p>
+            <div className="mt-8 grid gap-3">
+              {trustPoints.map((point) => (
+                <div key={point} className="flex items-center gap-3">
+                  <CheckCircle2 className="size-5 shrink-0 text-green-600" />
+                  <span className="text-sm text-zinc-700">{point}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

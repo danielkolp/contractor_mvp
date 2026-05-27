@@ -10,18 +10,17 @@ import {
 } from "react"
 import {
   Building2,
-  Mail,
   Pencil,
-  Phone,
   Plus,
   RefreshCw,
   Search,
   Trash2,
   UserRound,
-  WalletCards,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/dashboard/page-header"
+import { ClientListSkeleton } from "@/components/dashboard/skeleton-loaders"
+import { ContentReveal } from "@/components/ui/content-reveal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -332,24 +331,6 @@ export default function ClientsPage() {
     )
   }, [clients, searchQuery])
 
-  const totals = useMemo(() => {
-    const stats = clients.map((client) =>
-      getClientInvoiceStats(client, invoices)
-    )
-
-    return {
-      totalBilled: stats.reduce((sum, stat) => sum + stat.totalBilled, 0),
-      unpaidBalance: stats.reduce((sum, stat) => sum + stat.unpaidBalance, 0),
-      overdueInvoices: stats.reduce(
-        (sum, stat) => sum + stat.overdueInvoiceCount,
-        0
-      ),
-      highRiskClients: clients.filter(
-        (client) => client.payment_reliability === "High risk"
-      ).length,
-    }
-  }, [clients, invoices])
-
   function updateForm<Field extends keyof ClientForm>(
     field: Field,
     value: ClientForm[Field]
@@ -552,50 +533,13 @@ export default function ClientsPage() {
       </PageHeader>
 
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Card>
-            <CardHeader>
-              <CardDescription>Total billed</CardDescription>
-              <CardTitle className="text-2xl">
-                {moneyFormatter.format(totals.totalBilled)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Unpaid balance</CardDescription>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <WalletCards className="size-5 text-teal-700" />
-                {moneyFormatter.format(totals.unpaidBalance)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Overdue invoices</CardDescription>
-              <CardTitle className="text-2xl">
-                {totals.overdueInvoices}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>High risk clients</CardDescription>
-              <CardTitle className="text-2xl">
-                {totals.highRiskClients}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </section>
-
         <Card>
           <CardHeader className="gap-4">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <CardTitle>Client directory</CardTitle>
+                <CardTitle>Clients</CardTitle>
                 <CardDescription>
-                  Clients and balances stay connected to invoices where
-                  possible.
+                  See who owes money and how reliable they have been.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="w-fit">
@@ -620,27 +564,14 @@ export default function ClientsPage() {
               </div>
             ) : null}
 
-            {isLoading ? (
-              <div className="rounded-lg border border-border p-8 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-muted text-muted-foreground">
-                  <RefreshCw className="size-5 animate-spin" />
-                </div>
-                <h3 className="mt-4 text-base font-semibold">
-                  Loading clients
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Fetching your protected client and invoice records from
-                  Supabase.
-                </p>
-              </div>
-            ) : errorMessage && clients.length === 0 ? (
+            <ContentReveal isLoading={isLoading} skeleton={<ClientListSkeleton rows={4} />}>
+              {errorMessage && clients.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
                 <h3 className="text-base font-semibold">
-                  Could not load clients
+                  Something didn&apos;t load
                 </h3>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                  Check your Supabase environment variables, auth session, and
-                  database migration, then try again.
+                  Your data is safe. Try refreshing, or check your connection.
                 </p>
                 <Button
                   className="mt-5"
@@ -652,18 +583,19 @@ export default function ClientsPage() {
                   }}
                 >
                   <RefreshCw className="size-4" />
-                  Retry
+                  Try again
                 </Button>
               </div>
             ) : filteredClients.length > 0 ? (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {filteredClients.map((client) => {
+              <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                {filteredClients.map((client, i) => {
                   const stats = getClientInvoiceStats(client, invoices)
 
                   return (
                     <div
                       key={client.id}
-                      className="rounded-lg border border-border bg-background p-4"
+                      className="rounded-lg border border-border bg-background p-4 animate-[fade-slide-up_0.35s_ease-out_both] motion-reduce:animate-none"
+                      style={{ animationDelay: `${Math.min(i, 5) * 60}ms` }}
                     >
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex min-w-0 gap-3">
@@ -683,28 +615,7 @@ export default function ClientsPage() {
                         <ReliabilityBadge label={client.payment_reliability} />
                       </div>
 
-                      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                        <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
-                          <Mail className="size-4 shrink-0" />
-                          <span className="truncate">
-                            {client.email || "No email"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Phone className="size-4 shrink-0" />
-                          <span>{client.phone || "No phone"}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-3">
-                        <div>
-                          <div className="text-xs text-muted-foreground">
-                            Total billed
-                          </div>
-                          <div className="font-semibold">
-                            {moneyFormatter.format(stats.totalBilled)}
-                          </div>
-                        </div>
+                      <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
                         <div>
                           <div className="text-xs text-muted-foreground">
                             Unpaid
@@ -723,13 +634,15 @@ export default function ClientsPage() {
                         </div>
                       </div>
 
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        {stats.invoiceCount === 0
-                          ? "No invoices connected yet"
-                          : `${stats.invoiceCount} invoice${
-                              stats.invoiceCount === 1 ? "" : "s"
-                            } connected`}
-                      </div>
+                      {stats.invoiceCount > 0 ? (
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          {stats.invoiceCount} invoice{stats.invoiceCount === 1 ? "" : "s"} connected
+                        </div>
+                      ) : stats.unpaidBalance === 0 && stats.overdueInvoiceCount === 0 ? (
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          No invoices linked yet
+                        </div>
+                      ) : null}
 
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-sm text-muted-foreground">
@@ -808,6 +721,7 @@ export default function ClientsPage() {
                 </div>
               </div>
             )}
+            </ContentReveal>
           </CardContent>
         </Card>
       </div>
@@ -820,8 +734,8 @@ export default function ClientsPage() {
             </DialogTitle>
             <DialogDescription>
               {editingClient
-                ? "Update this client in Supabase."
-                : "Create a Supabase client record for the logged-in user."}
+                ? "Update the client details."
+                : "Add a client you invoice or follow up with."}
             </DialogDescription>
           </DialogHeader>
 

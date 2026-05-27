@@ -9,21 +9,19 @@ import {
 } from "react"
 import {
   Bell,
-  CalendarClock,
-  CheckCircle2,
-  Circle,
   Plus,
-  RefreshCw,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/dashboard/page-header"
+import { RemindersListSkeleton } from "@/components/dashboard/skeleton-loaders"
 import {
   getInitialReminderForm,
   ReminderDialog,
   ReminderList,
   type ReminderFormValues,
 } from "@/components/dashboard/reminder-tools"
+import { ContentReveal } from "@/components/ui/content-reveal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,7 +39,7 @@ type ReminderRow = Database["public"]["Tables"]["reminders"]["Row"]
 type ReminderInsert = Database["public"]["Tables"]["reminders"]["Insert"]
 type ReminderUpdate = Database["public"]["Tables"]["reminders"]["Update"]
 
-type FilterTab = "upcoming" | "completed" | "all"
+type FilterTab = "today" | "upcoming" | "completed"
 
 function toReminderTimestamp(date: string) {
   return new Date(`${date}T09:00:00`).toISOString()
@@ -73,7 +71,7 @@ export default function RemindersPage() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [reminders, setReminders] = useState<ReminderRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<FilterTab>("upcoming")
+  const [activeTab, setActiveTab] = useState<FilterTab>("today")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<ReminderFormValues>(getInitialReminderForm())
   const [isLoading, setIsLoading] = useState(true)
@@ -143,17 +141,35 @@ export default function RemindersPage() {
   )
 
   const stats = useMemo(() => {
-    const active = reminders.filter((r) => !r.completed)
     const completed = reminders.filter((r) => r.completed)
     const overdue = reminders.filter((r) => getReminderStatus(r) === "overdue")
     const today = reminders.filter((r) => getReminderStatus(r) === "today")
-    return { total: reminders.length, active: active.length, completed: completed.length, overdue: overdue.length, today: today.length }
+    const upcoming = reminders.filter(
+      (r) => getReminderStatus(r) === "upcoming"
+    )
+
+    return {
+      total: reminders.length,
+      completed: completed.length,
+      dueNow: overdue.length + today.length,
+      overdue: overdue.length,
+      upcoming: upcoming.length,
+    }
   }, [reminders])
 
   const filteredReminders = useMemo(() => {
-    if (activeTab === "upcoming") return reminders.filter((r) => !r.completed)
-    if (activeTab === "completed") return reminders.filter((r) => r.completed)
-    return reminders
+    if (activeTab === "today") {
+      return reminders.filter((r) => {
+        const status = getReminderStatus(r)
+        return status === "overdue" || status === "today"
+      })
+    }
+
+    if (activeTab === "upcoming") {
+      return reminders.filter((r) => getReminderStatus(r) === "upcoming")
+    }
+
+    return reminders.filter((r) => r.completed)
   }, [reminders, activeTab])
 
   function updateForm<Field extends keyof ReminderFormValues>(
@@ -262,16 +278,16 @@ export default function RemindersPage() {
   }
 
   const tabs: { id: FilterTab; label: string; count: number }[] = [
-    { id: "upcoming", label: "Upcoming", count: stats.active },
+    { id: "today", label: "Due today", count: stats.dueNow },
+    { id: "upcoming", label: "Upcoming", count: stats.upcoming },
     { id: "completed", label: "Completed", count: stats.completed },
-    { id: "all", label: "All", count: stats.total },
   ]
 
   return (
     <>
       <PageHeader
         title="Reminders"
-        description="Schedule follow-ups for overdue invoices and track them until resolved."
+        description="See what needs a follow-up today and what is coming next."
       >
         <Button
           onClick={openDialog}
@@ -302,83 +318,14 @@ export default function RemindersPage() {
           </div>
         ) : null}
 
-        {/* Stats row */}
-        {!isLoading && stats.total > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
-                <CardDescription>Active reminders</CardDescription>
-                <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
-                  <Bell className="size-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold">{stats.active}</div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {stats.total} total scheduled
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
-                <CardDescription>Due today</CardDescription>
-                <div className="rounded-lg bg-amber-50 p-2 text-amber-700">
-                  <CalendarClock className="size-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold">{stats.today}</div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {stats.overdue} overdue
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
-                <CardDescription>Completed</CardDescription>
-                <div className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
-                  <CheckCircle2 className="size-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold">{stats.completed}</div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {stats.total > 0
-                    ? `${Math.round((stats.completed / stats.total) * 100)}% completion rate`
-                    : "No reminders yet"}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
-                <CardDescription>Invoices tracked</CardDescription>
-                <div className="rounded-lg bg-sky-50 p-2 text-sky-700">
-                  <Circle className="size-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold">
-                  {new Set(reminders.map((r) => r.invoice_id)).size}
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  invoices with reminders
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        ) : null}
-
         <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle>Scheduled reminders</CardTitle>
+                <CardTitle>Follow-up reminders</CardTitle>
                 <CardDescription>
-                  Follow-ups linked to invoices. Mark complete once you have
-                  contacted the client.
+                  Mark a reminder complete after you call, text, or email the
+                  client.
                 </CardDescription>
               </div>
               {stats.overdue > 0 ? (
@@ -417,14 +364,10 @@ export default function RemindersPage() {
           </CardHeader>
 
           <CardContent>
-            {isLoading ? (
-              <div className="flex items-center gap-3 py-8 text-muted-foreground">
-                <RefreshCw className="size-4 animate-spin" />
-                <span className="text-sm">Loading reminders…</span>
-              </div>
-            ) : reminders.length === 0 ? (
+            <ContentReveal isLoading={isLoading} skeleton={<RemindersListSkeleton />}>
+              {reminders.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-teal-50 text-teal-700">
+                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700">
                   <Bell className="size-5" />
                 </div>
                 <h3 className="mt-4 text-base font-semibold">
@@ -451,11 +394,26 @@ export default function RemindersPage() {
                 )}
               </div>
             ) : filteredReminders.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                {activeTab === "completed"
-                  ? "No completed reminders yet. Mark follow-ups complete after contacting clients."
-                  : "All reminders are complete. Add new ones to keep tracking."}
-              </div>
+              activeTab === "today" ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
+                  <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700">
+                    <Bell className="size-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold">No reminders due today</h3>
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                    You&rsquo;re clear for now. You can still review unpaid invoices or schedule a future reminder.
+                  </p>
+                  <Button className="mt-5 bg-green-700 text-white hover:bg-green-800" asChild>
+                    <a href="/dashboard/recovery">Open Recoveries</a>
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                  {activeTab === "upcoming"
+                    ? "No upcoming reminders scheduled."
+                    : "No completed reminders yet. Mark follow-ups complete after contacting clients."}
+                </div>
+              )
             ) : (
               <ReminderList
                 reminders={filteredReminders}
@@ -466,6 +424,7 @@ export default function RemindersPage() {
                 onDelete={(r) => void deleteReminder(r)}
               />
             )}
+            </ContentReveal>
           </CardContent>
         </Card>
       </div>

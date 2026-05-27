@@ -5,26 +5,27 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import {
   ArrowRight,
   Bell,
-  CheckCircle2,
   ClipboardCheck,
   Clock3,
   Mail,
-  MessageSquareText,
-  Phone,
+  Pencil,
   RefreshCw,
-  ShieldAlert,
+  ShieldCheck,
+  X,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/dashboard/page-header"
+import { RecoveryQueuePageSkeleton } from "@/components/dashboard/skeleton-loaders"
+import { ContentReveal } from "@/components/ui/content-reveal"
 import {
   getInitialReminderForm,
   ReminderDialog,
-  ReminderList,
   type ReminderFormValues,
 } from "@/components/dashboard/reminder-tools"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +37,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -48,7 +50,6 @@ type RecoveryActionInsert =
   Database["public"]["Tables"]["recovery_actions"]["Insert"]
 type ReminderRow = Database["public"]["Tables"]["reminders"]["Row"]
 type ReminderInsert = Database["public"]["Tables"]["reminders"]["Insert"]
-type ReminderUpdate = Database["public"]["Tables"]["reminders"]["Update"]
 type InvoiceStatus = Database["public"]["Enums"]["invoice_status"]
 type RecoveryStage = Database["public"]["Enums"]["recovery_stage"]
 type RecoveryActionStatus =
@@ -78,15 +79,6 @@ const stages: RecoveryStage[] = [
   "resolved",
 ]
 
-const stageLabels: Record<RecoveryStage, string> = {
-  newly_overdue: "Newly Overdue",
-  first_follow_up: "First Follow-up",
-  second_follow_up: "Second Follow-up",
-  final_notice: "Final Notice",
-  escalated: "Escalated",
-  resolved: "Resolved",
-}
-
 const moneyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -102,29 +94,20 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
 
 const stageStyle: Record<RecoveryStage, string> = {
   newly_overdue: "border-sky-200 bg-sky-50 text-sky-800",
-  first_follow_up: "border-teal-200 bg-teal-50 text-teal-800",
+  first_follow_up: "border-amber-200 bg-amber-50 text-amber-800",
   second_follow_up: "border-amber-200 bg-amber-50 text-amber-800",
   final_notice: "border-orange-200 bg-orange-50 text-orange-800",
   escalated: "border-red-200 bg-red-50 text-red-800",
   resolved: "border-emerald-200 bg-emerald-50 text-emerald-800",
 }
 
-const stageSummary: Record<RecoveryStage, string> = {
-  newly_overdue: "Just crossed due date",
-  first_follow_up: "Friendly reminder sent",
-  second_follow_up: "Needs firmer ask",
-  final_notice: "Owner review before final message",
-  escalated: "Sensitive balances",
-  resolved: "Paid or closed",
-}
-
 const recommendedActionByStage: Record<RecoveryStage, string> = {
-  newly_overdue: "Send a friendly reminder with the payment details.",
-  first_follow_up: "Follow up by phone and confirm payment timing.",
-  second_follow_up: "Send a firmer reminder and ask for a payment date.",
-  final_notice: "Send final notice before escalation.",
-  escalated: "Review documents and decide on the escalation path.",
-  resolved: "No action needed. Payment or closure has been recorded.",
+  newly_overdue: "Send a friendly payment reminder.",
+  first_follow_up: "Send a firmer follow-up.",
+  second_follow_up: "Ask for a firm payment date.",
+  final_notice: "Send the final notice.",
+  escalated: "Send a firm payment reminder.",
+  resolved: "No action needed.",
 }
 
 const followUpActionByStage: Record<RecoveryStage, string> = {
@@ -136,27 +119,13 @@ const followUpActionByStage: Record<RecoveryStage, string> = {
   resolved: "No follow-up needed. Invoice is resolved.",
 }
 
-const actionStatusTone: Record<
-  RecoveryActionStatus,
-  "default" | "success" | "warning" | "muted" | "outline"
-> = {
-  Pending: "warning",
-  Completed: "success",
-  Skipped: "muted",
-  Cancelled: "outline",
-}
-
 function formatTimestamp(value: string | null) {
-  if (!value) {
-    return "No date"
-  }
-
+  if (!value) return "No date"
   return dateTimeFormatter.format(new Date(value))
 }
 
 function nullableText(value: string) {
   const trimmed = value.trim()
-
   return trimmed.length > 0 ? trimmed : null
 }
 
@@ -165,23 +134,16 @@ function toReminderTimestamp(date: string) {
 }
 
 function getOverdueDays(dueDate: string | null, status: InvoiceStatus) {
-  if (!dueDate || status === "Paid" || status === "Draft") {
-    return 0
-  }
-
+  if (!dueDate || status === "Paid" || status === "Draft") return 0
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const due = new Date(`${dueDate}T00:00:00`)
   const diff = today.getTime() - due.getTime()
-
   return Math.max(0, Math.floor(diff / 86_400_000))
 }
 
 function isRecoverableInvoice(invoice: InvoiceRow) {
-  if (invoice.status === "Paid" || invoice.status === "Draft") {
-    return false
-  }
-
+  if (invoice.status === "Paid" || invoice.status === "Draft") return false
   return (
     invoice.status === "Overdue" ||
     invoice.status === "Follow-up Sent" ||
@@ -193,230 +155,273 @@ function isRecoverableInvoice(invoice: InvoiceRow) {
 
 function getNextStage(stage: RecoveryStage): RecoveryStage {
   const index = stages.indexOf(stage)
-
-  if (index < 0 || index >= stages.length - 1) {
-    return stage
-  }
-
+  if (index < 0 || index >= stages.length - 1) return stage
   return stages[index + 1]
 }
 
 function getInvoiceStatusForStage(stage: RecoveryStage): InvoiceStatus {
-  if (stage === "resolved") {
-    return "Paid"
-  }
-
-  if (stage === "escalated") {
-    return "Escalated"
-  }
-
-  if (stage === "newly_overdue") {
-    return "Overdue"
-  }
-
+  if (stage === "resolved") return "Paid"
+  if (stage === "escalated") return "Escalated"
+  if (stage === "newly_overdue") return "Overdue"
   return "Follow-up Sent"
 }
 
 function getDefaultStage(invoice: InvoiceRow): RecoveryStage {
-  if (invoice.status === "Escalated") {
-    return "escalated"
-  }
-
-  if (invoice.status === "Paid") {
-    return "resolved"
-  }
-
+  if (invoice.status === "Escalated") return "escalated"
+  if (invoice.status === "Paid") return "resolved"
   return "newly_overdue"
 }
 
 function getMoveStatus(stage: RecoveryStage) {
-  if (stage === "resolved") {
-    return "Paid and closed"
+  if (stage === "resolved") return "Paid and closed"
+  const labels: Record<RecoveryStage, string> = {
+    newly_overdue: "Newly Overdue",
+    first_follow_up: "First Follow-up",
+    second_follow_up: "Second Follow-up",
+    final_notice: "Final Notice",
+    escalated: "Escalated",
+    resolved: "Resolved",
   }
-
-  return `Moved to ${stageLabels[getNextStage(stage)]}`
+  return `Moved to ${labels[getNextStage(stage)]}`
 }
 
 function sortActions(actions: RecoveryActionRow[]) {
   return [...actions].sort(
-    (first, second) =>
-      new Date(first.created_at).getTime() -
-      new Date(second.created_at).getTime()
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 }
 
-function ContactMethodIcon({ method }: { method: ContactMethod }) {
-  if (method === "Phone") {
-    return <Phone className="size-3.5" />
+function getReadableStatus(stage: RecoveryStage): string {
+  const map: Record<RecoveryStage, string> = {
+    newly_overdue: "Needs approval",
+    first_follow_up: "Waiting on customer",
+    second_follow_up: "Waiting on customer",
+    final_notice: "Needs approval",
+    escalated: "Needs approval",
+    resolved: "Recovered",
   }
-
-  if (method === "Text") {
-    return <MessageSquareText className="size-3.5" />
-  }
-
-  return <Mail className="size-3.5" />
+  return map[stage]
 }
 
-function RecoveryCard({
+function getRecommendedSubtext(stage: RecoveryStage): string {
+  if (stage === "newly_overdue") {
+    return "This invoice is ready for a follow-up. Review the message below before it goes out."
+  }
+  if (stage === "first_follow_up") {
+    return "Your first message was sent. We drafted another follow-up for your approval."
+  }
+  if (stage === "second_follow_up") {
+    return "This invoice is still unpaid. We drafted a firmer follow-up for your approval."
+  }
+  if (stage === "final_notice") {
+    return "Time for a firmer message. Review and approve the final notice below."
+  }
+  if (stage === "escalated") {
+    return "This invoice is still unpaid. We drafted a firm follow-up for your approval."
+  }
+  return "Review the draft message below before it goes out."
+}
+
+function generateDraftMessage(item: RecoveryItem): string {
+  const amount = moneyFormatter.format(item.amount)
+  const inv = item.invoiceNumber
+  const name = item.clientName
+  const isFirmer =
+    item.stage === "second_follow_up" ||
+    item.stage === "final_notice" ||
+    item.stage === "escalated"
+
+  if (isFirmer) {
+    return `Hi ${name}, following up again on invoice ${inv} for ${amount}. This still appears unpaid on our end. Please let me know when we can expect payment or if there's anything holding this up.`
+  }
+
+  if (item.daysOverdue > 0) {
+    return `Hi ${name}, following up on invoice ${inv} for ${amount}. It looks like this invoice is now overdue. Could you let me know when payment will be sent? Thanks.`
+  }
+
+  return `Hi ${name}, just following up on invoice ${inv} for ${amount}. Could you let me know when payment will be sent? Thanks.`
+}
+
+function FeaturedCard({
   item,
-  invoiceById,
-  reminders,
   isSaving,
   onAddReminder,
-  onMarkReminderComplete,
-  onDeleteReminder,
   onFollowUpSent,
-  onMoveNext,
   onResolved,
 }: {
   item: RecoveryItem
-  invoiceById: Map<string, InvoiceRow>
-  reminders: ReminderRow[]
   isSaving: boolean
   onAddReminder: (item: RecoveryItem) => void
-  onMarkReminderComplete: (reminder: ReminderRow) => void
-  onDeleteReminder: (reminder: ReminderRow) => void
   onFollowUpSent: (item: RecoveryItem) => void
-  onMoveNext: (item: RecoveryItem) => void
   onResolved: (item: RecoveryItem) => void
 }) {
+  const [isEditingMessage, setIsEditingMessage] = useState(false)
+  const [customMessage, setCustomMessage] = useState(() =>
+    generateDraftMessage(item)
+  )
   const isResolved = item.stage === "resolved"
-  const latestHistory = item.history.slice(0, 3)
+  const amount = moneyFormatter.format(item.amount)
 
   return (
-    <div className="rounded-lg border border-border bg-background p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{item.clientName}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {item.invoiceNumber}
+    <Card className="border-2 border-green-100 shadow-sm">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <Badge
+              variant="outline"
+              className={cn("mb-3", stageStyle[item.stage])}
+            >
+              {getReadableStatus(item.stage)}
+            </Badge>
+            <CardTitle className="text-xl leading-tight">
+              {item.clientName}
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Invoice {item.invoiceNumber}
+              {item.invoice.due_date &&
+                ` · Due ${new Date(
+                  item.invoice.due_date + "T00:00:00"
+                ).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}`}
+            </CardDescription>
+          </div>
+          <div className="shrink-0 sm:text-right">
+            <div className="text-3xl font-bold tabular-nums">{amount}</div>
+            {item.daysOverdue > 0 && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "mt-1.5",
+                  item.daysOverdue > 60
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-orange-200 bg-orange-50 text-orange-700"
+                )}
+              >
+                {item.daysOverdue} days overdue
+              </Badge>
+            )}
           </div>
         </div>
-        <Badge variant={isResolved ? "success" : "warning"} className="shrink-0">
-          {item.daysOverdue} days
-        </Badge>
-      </div>
+      </CardHeader>
 
-      <div className="mt-4 grid gap-2 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">Amount</span>
-          <span className="font-semibold">{moneyFormatter.format(item.amount)}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">Contact</span>
-          <span className="inline-flex items-center gap-1.5 font-medium">
-            <ContactMethodIcon method={item.contactMethod} />
-            {item.contactMethod}
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-lg bg-muted/50 p-3">
-        <div className="text-xs font-medium uppercase text-muted-foreground">
-          Recommended next action
-        </div>
-        <p className="mt-1 text-sm leading-5">{item.recommendedNextAction}</p>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Badge
-          variant="outline"
-          className={cn("max-w-full truncate", stageStyle[item.stage])}
-        >
-          {item.status}
-        </Badge>
-        <Badge variant="outline">{item.invoice.status}</Badge>
-      </div>
-
-      <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-medium uppercase text-muted-foreground">
-            Reminders
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={isSaving}
-            onClick={() => onAddReminder(item)}
-          >
-            <Bell className="size-3.5" />
-            Add
-          </Button>
-        </div>
-        <div className="mt-3">
-          <ReminderList
-            reminders={reminders}
-            invoiceById={invoiceById}
-            emptyText="No reminders yet. Add one to schedule the next follow-up."
-            showInvoice={false}
-            isSaving={isSaving}
-            onMarkComplete={onMarkReminderComplete}
-            onDelete={onDeleteReminder}
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
-          <Clock3 className="size-3.5" />
-          Recovery history
-        </div>
-        {latestHistory.length > 0 ? (
-          <div className="mt-3 grid gap-2">
-            {latestHistory.map((action) => (
-              <div key={action.id} className="grid gap-1 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 break-words font-medium">
-                    {action.action_type}
-                  </span>
-                  <Badge variant={actionStatusTone[action.status]}>
-                    {action.status}
-                  </Badge>
-                </div>
-                <div className="text-muted-foreground">
-                  {stageLabels[action.stage]} - {formatTimestamp(action.created_at)}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            No recovery actions logged yet.
+      <CardContent className="space-y-5">
+        {/* Recommended next step */}
+        <div className="rounded-xl border border-green-100 bg-green-50 p-4">
+          <p className="text-sm font-semibold text-green-800">
+            {item.recommendedNextAction}
           </p>
-        )}
-      </div>
+          <p className="mt-1 text-xs leading-5 text-green-700">
+            {getRecommendedSubtext(item.stage)}
+          </p>
+        </div>
 
-      <div className="mt-4 grid gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isResolved || isSaving}
-          onClick={() => onFollowUpSent(item)}
-        >
-          <Mail className="size-3.5" />
-          Mark follow-up sent
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={isResolved || isSaving}
-          onClick={() => onMoveNext(item)}
-        >
-          <ArrowRight className="size-3.5" />
-          Move to next stage
-        </Button>
-        <Button
-          size="sm"
-          variant={isResolved ? "outline" : "default"}
-          disabled={isResolved || isSaving}
-          onClick={() => onResolved(item)}
-        >
-          <CheckCircle2 className="size-3.5" />
-          Mark resolved
-        </Button>
-      </div>
-    </div>
+        {/* Message draft */}
+        <div>
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                Message draft
+              </span>
+              <span className="inline-flex items-center rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-xs text-muted-foreground">
+                AI suggested
+              </span>
+            </div>
+          </div>
+
+          {isEditingMessage ? (
+            <div className="space-y-2">
+              <Textarea
+                value={customMessage}
+                onChange={(e) => setCustomMessage(e.target.value)}
+                className="min-h-28 text-sm leading-6"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-muted-foreground"
+                onClick={() => setIsEditingMessage(false)}
+              >
+                <X className="size-3" />
+                Done editing
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-muted/20 px-4 py-3.5 text-sm leading-6 text-foreground">
+              <span className="select-none text-muted-foreground">
+                &ldquo;
+              </span>
+              {customMessage}
+              <span className="select-none text-muted-foreground">
+                &rdquo;
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Last action */}
+        {item.history.length > 0 && (
+          <div className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Clock3 className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              Last: {item.history[0].action_type} ·{" "}
+              {formatTimestamp(item.history[0].created_at)}
+            </span>
+          </div>
+        )}
+
+        {/* Action area */}
+        <div className="space-y-4 border-t border-border pt-5">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ShieldCheck className="size-4 shrink-0 text-green-600" />
+            Nothing sends automatically. You approve every message first.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              className="gap-2 bg-green-700 text-white hover:bg-green-800"
+              disabled={isResolved || isSaving}
+              onClick={() => onFollowUpSent(item)}
+            >
+              <Mail className="size-4" />
+              Approve &amp; send
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2"
+              disabled={isResolved}
+              onClick={() => setIsEditingMessage((v) => !v)}
+            >
+              <Pencil className="size-4" />
+              Edit message
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2"
+              disabled={isSaving}
+              onClick={() => onAddReminder(item)}
+            >
+              <Bell className="size-4" />
+              Remind me later
+            </Button>
+            {!isResolved && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="gap-2 text-muted-foreground hover:text-foreground"
+                disabled={isSaving}
+                onClick={() => onResolved(item)}
+              >
+                Mark as resolved
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -424,7 +429,7 @@ export default function RecoveryPage() {
   const supabase = useMemo(() => createClient(), [])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [actions, setActions] = useState<RecoveryActionRow[]>([])
-  const [reminders, setReminders] = useState<ReminderRow[]>([])
+  const [, setReminders] = useState<ReminderRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
   const [reminderForm, setReminderForm] = useState<ReminderFormValues>(
@@ -433,6 +438,8 @@ export default function RecoveryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const featuredRef = useRef<HTMLElement>(null)
 
   const loadRecovery = useCallback(async () => {
     setIsLoading(true)
@@ -478,7 +485,7 @@ export default function RecoveryPage() {
         invoiceResult.error?.message ||
           actionResult.error?.message ||
           reminderResult.error?.message ||
-          "Could not load recovery data."
+          "Could not load follow-ups."
       )
       setInvoices([])
       setActions([])
@@ -496,14 +503,8 @@ export default function RecoveryPage() {
     const timeoutId = window.setTimeout(() => {
       void loadRecovery()
     }, 0)
-
     return () => window.clearTimeout(timeoutId)
   }, [loadRecovery])
-
-  const invoiceById = useMemo(
-    () => new Map(invoices.map((invoice) => [invoice.id, invoice])),
-    [invoices]
-  )
 
   const invoiceOptions = useMemo(
     () =>
@@ -515,18 +516,6 @@ export default function RecoveryPage() {
       })),
     [invoices]
   )
-
-  const remindersByInvoice = useMemo(() => {
-    const groupedReminders = new Map<string, ReminderRow[]>()
-
-    for (const reminder of reminders) {
-      const invoiceReminders = groupedReminders.get(reminder.invoice_id) || []
-      invoiceReminders.push(reminder)
-      groupedReminders.set(reminder.invoice_id, invoiceReminders)
-    }
-
-    return groupedReminders
-  }, [reminders])
 
   const recoveryItems = useMemo<RecoveryItem[]>(() => {
     const actionsByInvoice = new Map<string, RecoveryActionRow[]>()
@@ -549,9 +538,8 @@ export default function RecoveryPage() {
         const latestAction = invoiceActions[invoiceActions.length - 1]
         const stage = latestAction?.stage || getDefaultStage(invoice)
         const history = [...invoiceActions].sort(
-          (first, second) =>
-            new Date(second.created_at).getTime() -
-            new Date(first.created_at).getTime()
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
 
         return {
@@ -577,18 +565,62 @@ export default function RecoveryPage() {
       .filter((item): item is RecoveryItem => item !== null)
   }, [actions, invoices])
 
-  const totals = useMemo(() => {
-    const activeItems = recoveryItems.filter((item) => item.stage !== "resolved")
+  const activeItems = useMemo(
+    () =>
+      recoveryItems
+        .filter((item) => item.stage !== "resolved")
+        .sort((a, b) => b.daysOverdue - a.daysOverdue),
+    [recoveryItems]
+  )
 
-    return {
+  const featuredItem = useMemo(
+    () =>
+      (selectedItemId
+        ? activeItems.find((i) => i.id === selectedItemId)
+        : undefined) ?? activeItems[0],
+    [activeItems, selectedItemId]
+  )
+
+  const queueItems = useMemo(
+    () => activeItems.filter((i) => i.id !== featuredItem?.id),
+    [activeItems, featuredItem]
+  )
+
+  const statusCounts = useMemo(() => {
+    const needsApproval = activeItems.filter((i) =>
+      (
+        ["newly_overdue", "final_notice", "escalated"] as RecoveryStage[]
+      ).includes(i.stage)
+    ).length
+
+    const waitingOnCustomer = activeItems.filter((i) =>
+      (
+        ["first_follow_up", "second_follow_up"] as RecoveryStage[]
+      ).includes(i.stage)
+    ).length
+
+    const now = new Date()
+    const recoveredAmount = recoveryItems
+      .filter((i) => {
+        if (i.stage !== "resolved" || !i.invoice.paid_at) return false
+        const paidDate = new Date(i.invoice.paid_at)
+        return (
+          paidDate.getMonth() === now.getMonth() &&
+          paidDate.getFullYear() === now.getFullYear()
+        )
+      })
+      .reduce((sum, i) => sum + i.amount, 0)
+
+    return { needsApproval, waitingOnCustomer, recoveredAmount }
+  }, [activeItems, recoveryItems])
+
+  const totals = useMemo(
+    () => ({
       activeCount: activeItems.length,
       activeAmount: activeItems.reduce((sum, item) => sum + item.amount, 0),
-      escalatedCount: recoveryItems.filter((item) => item.stage === "escalated")
-        .length,
-      resolvedCount: recoveryItems.filter((item) => item.stage === "resolved")
-        .length,
-    }
-  }, [recoveryItems])
+    }),
+    [activeItems]
+  )
 
   function updateReminderForm<Field extends keyof ReminderFormValues>(
     field: Field,
@@ -604,10 +636,7 @@ export default function RecoveryPage() {
 
   function closeReminderDialog(open: boolean) {
     setReminderDialogOpen(open)
-
-    if (!open) {
-      setReminderForm(getInitialReminderForm())
-    }
+    if (!open) setReminderForm(getInitialReminderForm())
   }
 
   async function createReminder(event: FormEvent<HTMLFormElement>) {
@@ -627,8 +656,7 @@ export default function RecoveryPage() {
       invoice_id: reminderForm.invoiceId,
       reminder_date: reminderForm.reminderDate,
       scheduled_for: toReminderTimestamp(reminderForm.reminderDate),
-      reminder_type:
-        reminderForm.reminderType.trim() || "Payment follow-up",
+      reminder_type: reminderForm.reminderType.trim() || "Payment follow-up",
       contact_method: "Email",
       status: reminderForm.completed ? "Sent" : "Scheduled",
       sent_at: completedAt,
@@ -647,66 +675,6 @@ export default function RecoveryPage() {
     } else {
       setReminders((current) => [...current, data])
       closeReminderDialog(false)
-    }
-
-    setIsSaving(false)
-  }
-
-  async function markReminderComplete(reminder: ReminderRow) {
-    if (!userId) {
-      setErrorMessage("You must be logged in to update reminders.")
-      return
-    }
-
-    setIsSaving(true)
-    setErrorMessage(null)
-
-    const payload: ReminderUpdate = {
-      completed: true,
-      status: "Sent",
-      sent_at: new Date().toISOString(),
-    }
-
-    const { data, error } = await supabase
-      .from("reminders")
-      .update(payload)
-      .eq("id", reminder.id)
-      .eq("user_id", userId)
-      .select()
-      .single()
-
-    if (error) {
-      setErrorMessage(error.message)
-    } else {
-      setReminders((current) =>
-        current.map((item) => (item.id === reminder.id ? data : item))
-      )
-    }
-
-    setIsSaving(false)
-  }
-
-  async function deleteReminder(reminder: ReminderRow) {
-    if (!userId) {
-      setErrorMessage("You must be logged in to delete reminders.")
-      return
-    }
-
-    setIsSaving(true)
-    setErrorMessage(null)
-
-    const { error } = await supabase
-      .from("reminders")
-      .delete()
-      .eq("id", reminder.id)
-      .eq("user_id", userId)
-
-    if (error) {
-      setErrorMessage(error.message)
-    } else {
-      setReminders((current) =>
-        current.filter((item) => item.id !== reminder.id)
-      )
     }
 
     setIsSaving(false)
@@ -750,7 +718,7 @@ export default function RecoveryPage() {
     }
   ) {
     if (!userId) {
-      setErrorMessage("You must be logged in to save recovery actions.")
+      setErrorMessage("You must be logged in to save follow-up actions.")
       return null
     }
 
@@ -796,11 +764,7 @@ export default function RecoveryPage() {
     if (action && item.stage !== "resolved") {
       const status =
         item.stage === "escalated" ? "Escalated" : "Follow-up Sent"
-
-      await updateInvoice(item.invoice.id, {
-        status,
-        paid_at: null,
-      })
+      await updateInvoice(item.invoice.id, { status, paid_at: null })
     }
 
     setIsSaving(false)
@@ -808,7 +772,6 @@ export default function RecoveryPage() {
 
   async function moveToNextStage(item: RecoveryItem) {
     const nextStage = getNextStage(item.stage)
-
     setIsSaving(true)
     setErrorMessage(null)
 
@@ -841,7 +804,7 @@ export default function RecoveryPage() {
       status: "Completed",
       recommendedNextAction: recommendedActionByStage.resolved,
       completedAt: new Date().toISOString(),
-      notes: "Marked resolved from the recovery pipeline.",
+      notes: "Marked paid from the recovery queue.",
     })
 
     if (action) {
@@ -854,13 +817,16 @@ export default function RecoveryPage() {
     setIsSaving(false)
   }
 
-  const hasRecoveryItems = recoveryItems.length > 0
+  // Available for programmatic stage advancement
+  void moveToNextStage
+
+  const hasActiveItems = activeItems.length > 0
 
   return (
     <>
       <PageHeader
-        title="Recovery"
-        description="See which overdue invoices need a reminder, a firmer follow-up, or owner review."
+        title="Money to Recover"
+        description="Review missed invoices, old estimates, and quiet customers before a follow-up goes out."
       >
         <Button
           type="button"
@@ -869,7 +835,7 @@ export default function RecoveryPage() {
           onClick={() => openAddReminder()}
         >
           <Bell className="size-4" />
-          Add reminder
+          Set reminder
         </Button>
         <Button
           variant="outline"
@@ -887,7 +853,7 @@ export default function RecoveryPage() {
         open={reminderDialogOpen}
         onOpenChange={closeReminderDialog}
         title="Create reminder"
-        description="Add a reminder connected to an invoice in recovery."
+        description="Add a reminder connected to an invoice."
         form={reminderForm}
         onFormChange={updateReminderForm}
         onSubmit={createReminder}
@@ -897,76 +863,32 @@ export default function RecoveryPage() {
 
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
         {errorMessage ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-            <div className="font-medium">Recovery sync error</div>
-            <p className="mt-1 leading-6">{errorMessage}</p>
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-5">
+            <div className="font-medium text-destructive">
+              Couldn&rsquo;t load your recovery queue
+            </div>
+            <p className="mt-1 text-sm leading-6 text-destructive/80">
+              Refresh the page or try again in a moment. Your data is safe.
+            </p>
           </div>
         ) : null}
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <ContentReveal isLoading={isLoading} skeleton={<RecoveryQueuePageSkeleton />}>
+          <div className="grid gap-6">
+          {!hasActiveItems ? (
           <Card>
-            <CardHeader>
-              <CardDescription>Active recovery</CardDescription>
-              <CardTitle className="text-2xl">{totals.activeCount}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Open recovery amount</CardDescription>
-              <CardTitle className="text-2xl">
-                {moneyFormatter.format(totals.activeAmount)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Escalated invoices</CardDescription>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <ShieldAlert className="size-5 text-red-700" />
-                {totals.escalatedCount}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardDescription>Resolved</CardDescription>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <CheckCircle2 className="size-5 text-emerald-700" />
-                {totals.resolvedCount}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </section>
-
-        {isLoading ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-lg bg-muted text-muted-foreground">
-                <RefreshCw className="size-5 animate-spin" />
+            <CardContent className="p-10 text-center">
+              <div className="mx-auto grid size-14 place-items-center rounded-xl bg-green-50 text-green-700">
+                <ClipboardCheck className="size-6" />
               </div>
-              <h3 className="mt-4 text-base font-semibold">
-                Loading recovery pipeline
+              <h3 className="mt-4 text-lg font-semibold">
+                No follow-ups waiting
               </h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Fetching invoices and recovery history from Supabase.
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                You&rsquo;re caught up. New overdue invoices, stale estimates,
+                and quiet customers will appear here automatically.
               </p>
-            </CardContent>
-          </Card>
-        ) : !hasRecoveryItems ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-lg bg-muted text-muted-foreground">
-                <ClipboardCheck className="size-5" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold">
-                No overdue invoices in recovery
-              </h3>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                Overdue invoices from Supabase will appear here automatically.
-                Once you move a card or mark a follow-up sent, the action is
-                saved in recovery history.
-              </p>
-              <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+              <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
                 <Button asChild>
                   <a href="/dashboard/invoices">Add invoice</a>
                 </Button>
@@ -978,168 +900,205 @@ export default function RecoveryPage() {
           </Card>
         ) : (
           <>
-            <section className="grid gap-4 2xl:hidden">
-              {stages
-                .filter((stage) =>
-                  recoveryItems.some((item) => item.stage === stage)
-                )
-                .map((stage) => {
-                  const stageItems = recoveryItems.filter(
-                    (item) => item.stage === stage
-                  )
+            {/* Hero summary card */}
+            <Card
+              className="animate-[fade-slide-up_0.45s_ease_both] border-2 border-green-100 bg-gradient-to-br from-white to-green-50/40 motion-reduce:animate-none"
+              style={{ animationDelay: "0ms" }}
+            >
+              <CardContent className="p-5 sm:p-6">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-4">
+                    {/* Context chips */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-green-700">
+                        Waiting to recover
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-800">
+                        Overdue invoice
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-800">
+                        Draft ready
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                        Approval required
+                      </span>
+                    </div>
 
-                  return (
-                    <Card key={`mobile-${stage}`}>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <CardTitle className="text-base">
-                              {stageLabels[stage]}
-                            </CardTitle>
-                            <CardDescription>
-                              {stageSummary[stage]}
-                            </CardDescription>
+                    {/* Amount */}
+                    <div>
+                      <div className="text-4xl font-bold tabular-nums text-foreground sm:text-5xl">
+                        {moneyFormatter.format(totals.activeAmount)}
+                      </div>
+                      <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
+                        {totals.activeCount === 1
+                          ? "1 unpaid invoice needs your approval before we follow up."
+                          : `${totals.activeCount} unpaid invoices need your approval before we follow up.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* CTA */}
+                  <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end sm:pt-1">
+                    <Button
+                      size="lg"
+                      className="gap-2 bg-green-700 text-white hover:bg-green-800"
+                      onClick={() =>
+                        featuredRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        })
+                      }
+                    >
+                      Review message
+                      <ArrowRight className="size-4" />
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Nothing is sent without your approval.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Status summary mini-cards */}
+            <div
+              className="animate-[fade-slide-up_0.45s_ease_both] grid grid-cols-3 gap-3 motion-reduce:animate-none"
+              style={{ animationDelay: "80ms" }}
+            >
+              <Card className="transition-shadow hover:shadow-sm">
+                <CardContent className="p-4">
+                  <p className="truncate text-xs text-muted-foreground">
+                    Needs approval
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-sky-700">
+                    {statusCounts.needsApproval}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="transition-shadow hover:shadow-sm">
+                <CardContent className="p-4">
+                  <p className="truncate text-xs text-muted-foreground">
+                    Waiting on customer
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-amber-700">
+                    {statusCounts.waitingOnCustomer}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="transition-shadow hover:shadow-sm">
+                <CardContent className="p-4">
+                  <p className="truncate text-xs text-muted-foreground">
+                    Recovered this month
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-green-700">
+                    {moneyFormatter.format(statusCounts.recoveredAmount)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Main featured follow-up */}
+            {featuredItem && (
+              <section
+                ref={featuredRef}
+                className="animate-[fade-slide-up_0.45s_ease_both] scroll-mt-4 motion-reduce:animate-none"
+                style={{ animationDelay: "160ms" }}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-base font-semibold text-foreground">
+                    Next message to approve
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Start with the oldest unpaid invoice.
+                  </p>
+                </div>
+                <FeaturedCard
+                  key={featuredItem.id}
+                  item={featuredItem}
+                  isSaving={isSaving}
+                  onAddReminder={openAddReminder}
+                  onFollowUpSent={(item) => void markFollowUpSent(item)}
+                  onResolved={(item) => void markResolved(item)}
+                />
+              </section>
+            )}
+
+            {/* Queue list */}
+            {queueItems.length > 0 ? (
+              <section
+                className="animate-[fade-slide-up_0.45s_ease_both] motion-reduce:animate-none"
+                style={{ animationDelay: "240ms" }}
+              >
+                <h2 className="mb-3 text-base font-semibold">
+                  Other follow-ups
+                </h2>
+                <div className="space-y-3">
+                  {queueItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4 transition-shadow hover:shadow-sm sm:flex-row sm:items-center"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">
+                          {item.clientName}
+                        </div>
+                        <div className="mt-0.5 text-sm text-muted-foreground">
+                          {item.invoiceNumber}
+                          {item.daysOverdue > 0 &&
+                            ` · ${item.daysOverdue} days overdue`}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 sm:contents">
+                        <div className="shrink-0 sm:text-right">
+                          <div className="font-semibold">
+                            {moneyFormatter.format(item.amount)}
                           </div>
                           <Badge
                             variant="outline"
-                            className={stageStyle[stage]}
+                            className={cn("mt-1", stageStyle[item.stage])}
                           >
-                            {stageItems.length}
+                            {getReadableStatus(item.stage)}
                           </Badge>
                         </div>
-                      </CardHeader>
-                      <CardContent className="grid gap-3">
-                        {stageItems.map((item) => (
-                          <RecoveryCard
-                            key={item.id}
-                            item={item}
-                            invoiceById={invoiceById}
-                            reminders={
-                              remindersByInvoice.get(item.invoice.id) || []
-                            }
-                            isSaving={isSaving}
-                            onAddReminder={openAddReminder}
-                            onMarkReminderComplete={(reminder) =>
-                              void markReminderComplete(reminder)
-                            }
-                            onDeleteReminder={(reminder) =>
-                              void deleteReminder(reminder)
-                            }
-                            onFollowUpSent={(selectedItem) =>
-                              void markFollowUpSent(selectedItem)
-                            }
-                            onMoveNext={(selectedItem) =>
-                              void moveToNextStage(selectedItem)
-                            }
-                            onResolved={(selectedItem) =>
-                              void markResolved(selectedItem)
-                            }
-                          />
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-            </section>
-
-            <section className="hidden pb-2 2xl:block">
-              <div className="grid grid-cols-6 gap-4">
-                {stages.map((stage) => {
-                  const stageItems = recoveryItems.filter(
-                    (item) => item.stage === stage
-                  )
-
-                  return (
-                    <Card key={stage} className="min-h-[480px] bg-muted/20">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <CardTitle className="text-base">
-                              {stageLabels[stage]}
-                            </CardTitle>
-                            <CardDescription>
-                              {stageSummary[stage]}
-                            </CardDescription>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={stageStyle[stage]}
-                          >
-                            {stageItems.length}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="grid gap-3">
-                        {stageItems.length > 0 ? (
-                          stageItems.map((item) => (
-                            <RecoveryCard
-                              key={item.id}
-                              item={item}
-                              invoiceById={invoiceById}
-                              reminders={
-                                remindersByInvoice.get(item.invoice.id) || []
-                              }
-                              isSaving={isSaving}
-                              onAddReminder={openAddReminder}
-                              onMarkReminderComplete={(reminder) =>
-                                void markReminderComplete(reminder)
-                              }
-                              onDeleteReminder={(reminder) =>
-                                void deleteReminder(reminder)
-                              }
-                              onFollowUpSent={(selectedItem) =>
-                                void markFollowUpSent(selectedItem)
-                              }
-                              onMoveNext={(selectedItem) =>
-                                void moveToNextStage(selectedItem)
-                              }
-                              onResolved={(selectedItem) =>
-                                void markResolved(selectedItem)
-                              }
-                            />
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-dashed border-border bg-background/70 p-4 text-sm text-muted-foreground">
-                            No invoices in this stage.
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => {
+                            setSelectedItemId(item.id)
+                            setTimeout(() => {
+                              featuredRef.current?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "start",
+                              })
+                            }, 50)
+                          }}
+                        >
+                          Review
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <div
+                className="animate-[fade-slide-up_0.45s_ease_both] rounded-xl border border-dashed border-green-200 bg-green-50/50 p-6 text-center motion-reduce:animate-none"
+                style={{ animationDelay: "240ms" }}
+              >
+                <p className="text-sm font-semibold text-green-800">
+                  Handle this follow-up and you&rsquo;re caught up.
+                </p>
+                <p className="mt-1.5 text-xs leading-5 text-green-700">
+                  New overdue invoices, stale estimates, and quiet customers
+                  will appear here automatically.
+                </p>
               </div>
-            </section>
+            )}
           </>
         )}
-
-        <section className="grid gap-4 rounded-lg border border-teal-100 bg-teal-50 p-4 text-teal-950 md:grid-cols-[auto_1fr_auto] md:items-center">
-          <div className="grid size-10 place-items-center rounded-lg bg-white text-teal-700">
-            <ClipboardCheck className="size-5" />
           </div>
-          <div>
-            <div className="font-medium">Recommended next action</div>
-            <p className="mt-1 text-sm leading-6 text-teal-800">
-              Work left to right. Each follow-up, stage move, and resolved
-              invoice creates a Supabase history record for the invoice.
-            </p>
-          </div>
-          <Button
-            className="w-full bg-teal-700 hover:bg-teal-800 md:w-auto"
-            disabled={!hasRecoveryItems || isSaving}
-            onClick={() => {
-              const firstItem = recoveryItems.find(
-                (item) => item.stage !== "resolved"
-              )
-
-              if (firstItem) {
-                void markFollowUpSent(firstItem)
-              }
-            }}
-          >
-            Start with next invoice
-            <ArrowRight className="size-4" />
-          </Button>
-        </section>
+        </ContentReveal>
       </div>
     </>
   )

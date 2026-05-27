@@ -1,10 +1,12 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { RefreshCw, Save } from "lucide-react"
+import { Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/dashboard/page-header"
+import { SettingsSkeleton } from "@/components/dashboard/skeleton-loaders"
+import { ContentReveal } from "@/components/ui/content-reveal"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -382,21 +384,6 @@ export default function SettingsPage() {
     setIsSavingSettings(false)
   }
 
-  if (isLoading) {
-    return (
-      <>
-        <PageHeader
-          title="Settings"
-          description="Business profile, invoice defaults, and follow-up preferences."
-        />
-        <div className="flex items-center gap-3 p-8 text-muted-foreground">
-          <RefreshCw className="size-4 animate-spin" />
-          <span className="text-sm">Loading settings…</span>
-        </div>
-      </>
-    )
-  }
-
   return (
     <>
       <PageHeader
@@ -404,7 +391,9 @@ export default function SettingsPage() {
         description="Business profile, invoice defaults, and follow-up preferences."
       />
 
-      <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
+      <ContentReveal isLoading={isLoading} skeleton={<SettingsSkeleton />} minDisplayMs={300}>
+        <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-3xl grid gap-6">
         {errorMessage ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             <div className="font-medium">Error loading settings</div>
@@ -639,33 +628,23 @@ export default function SettingsPage() {
           </Card>
         </form>
 
-        {/* ── Notification placeholder ── */}
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle className="text-base">Notification preferences</CardTitle>
-            <CardDescription>
-              Email and SMS delivery for automated reminders. Coming in a future
-              update — configure follow-up timing above for now.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
         {/* ── Account ── */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Account</CardTitle>
             <CardDescription>
-              Your login email and account details managed through Supabase Auth.
+              Your login email and password are managed by the sign-in system.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              To change your email or password, use the Supabase Auth dashboard
-              or contact support.
+              To change your email or password, contact support.
             </p>
           </CardContent>
         </Card>
-      </div>
+          </div>
+        </div>
+      </ContentReveal>
     </>
   )
 }

@@ -7,7 +7,6 @@ import {
   Bell,
   ChevronDown,
   ClipboardCheck,
-  CreditCard,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -57,7 +56,7 @@ const navigation = [
     icon: UsersRound,
   },
   {
-    name: "Recovery",
+    name: "Recoveries",
     href: "/dashboard/recovery",
     icon: ClipboardCheck,
   },
@@ -84,7 +83,7 @@ function isActivePath(pathname: string, href: string) {
 function BrandMark() {
   return (
     <Link href="/dashboard" className="flex items-center gap-3">
-      <div className="grid size-9 place-items-center rounded-lg bg-teal-700 text-sm font-semibold text-white shadow-sm">
+      <div className="grid size-9 place-items-center rounded-lg bg-green-700 text-sm font-bold text-white shadow-sm">
         RR
       </div>
       <div className="min-w-0">
@@ -103,7 +102,7 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname()
 
   return (
-    <nav className="flex flex-1 flex-col gap-1 px-3">
+    <nav className="flex flex-1 flex-col gap-0.5 px-3">
       {navigation.map((item) => {
         const active = isActivePath(pathname, item.href)
         const Icon = item.icon
@@ -113,11 +112,11 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
             className={cn(
               "flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
               active
-                ? "bg-teal-50 text-teal-800 ring-1 ring-teal-100 dark:bg-teal-950/40 dark:text-teal-200 dark:ring-teal-900/60"
+                ? "bg-green-50 text-green-800 ring-1 ring-green-100 dark:bg-green-950/40 dark:text-green-200 dark:ring-green-900/60"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <Icon className="size-4" />
+            <Icon className={cn("size-4", active && "text-green-700")} />
             <span>{item.name}</span>
           </Link>
         )
@@ -136,19 +135,20 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
 
 function Sidebar() {
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-background lg:flex lg:flex-col">
+    <aside className="hidden w-64 shrink-0 border-r border-border bg-white lg:flex lg:flex-col">
       <div className="flex h-16 items-center px-5">
         <BrandMark />
       </div>
       <SidebarNav />
-      <div className="px-3 pb-4">
-        <div className="rounded-lg border border-teal-100 bg-teal-50 p-3 text-teal-950 dark:border-teal-900/60 dark:bg-teal-950/30 dark:text-teal-100">
+      <div className="px-3 pb-4 pt-2">
+        <div className="rounded-xl border border-green-100 bg-green-50 p-4 text-green-950 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <ShieldCheck className="size-4" />
-            Recovery mode
+            <ShieldCheck className="size-4 text-green-700" />
+            You stay in control
           </div>
-          <p className="mt-1 text-xs leading-5 text-teal-800 dark:text-teal-200">
-            Keep reminders friendly before balances become hard to collect.
+          <p className="mt-1.5 text-xs leading-5 text-green-800 dark:text-green-200">
+            Every follow-up is drafted for your review. Nothing sends without
+            your approval.
           </p>
         </div>
       </div>
@@ -167,7 +167,7 @@ function MobileSidebar() {
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="flex w-[min(20rem,calc(100vw-1rem))] p-0"
+        className="flex w-[min(20rem,calc(100vw-1rem))] bg-white p-0"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation</SheetTitle>
@@ -205,20 +205,9 @@ function TopBar({ userEmail }: { userEmail?: string }) {
   const initials = getInitials(userEmail)
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-6 lg:px-8">
       <MobileSidebar />
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-        <Button
-          asChild
-          variant="outline"
-          size="sm"
-          className="hidden gap-2 sm:flex"
-        >
-          <Link href="/dashboard/invoices">
-            <CreditCard className="size-4" />
-            New invoice
-          </Link>
-        </Button>
         <Button variant="ghost" size="icon" aria-label="Notifications">
           <Bell className="size-4" />
         </Button>
@@ -227,7 +216,9 @@ function TopBar({ userEmail }: { userEmail?: string }) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
               <Avatar className="size-7">
-                <AvatarFallback>{initials}</AvatarFallback>
+                <AvatarFallback className="bg-green-100 text-green-800 text-xs font-medium">
+                  {initials}
+                </AvatarFallback>
               </Avatar>
               <span className="hidden text-sm font-medium sm:inline">
                 {displayName}
@@ -235,7 +226,7 @@ function TopBar({ userEmail }: { userEmail?: string }) {
               <ChevronDown className="hidden size-4 text-muted-foreground sm:block" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent align="end" className="min-w-52">
             <DropdownMenuLabel>
               <div className="text-sm font-medium">Owner workspace</div>
               <div className="text-xs font-normal text-muted-foreground">
@@ -243,8 +234,9 @@ function TopBar({ userEmail }: { userEmail?: string }) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Account profile</DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/settings">Account settings</Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"

@@ -26,6 +26,8 @@ import {
 } from "lucide-react"
 
 import { PageHeader } from "@/components/dashboard/page-header"
+import { InvoiceListSkeleton } from "@/components/dashboard/skeleton-loaders"
+import { ContentReveal } from "@/components/ui/content-reveal"
 import {
   getInitialReminderForm,
   ReminderDialog,
@@ -131,6 +133,19 @@ const statusTone: Record<
   Escalated: "warning",
 }
 
+function getStatusDisplayLabel(status: InvoiceStatus): string {
+  const labels: Record<InvoiceStatus, string> = {
+    Draft: "Draft",
+    Sent: "Sent",
+    Overdue: "Overdue",
+    "Follow-up Sent": "Waiting on customer",
+    "Payment Plan": "Payment plan",
+    Paid: "Paid",
+    Escalated: "Needs approval",
+  }
+  return labels[status] ?? status
+}
+
 const stageLabels: Record<RecoveryStage, string> = {
   newly_overdue: "Newly Overdue",
   first_follow_up: "First Follow-up",
@@ -142,7 +157,7 @@ const stageLabels: Record<RecoveryStage, string> = {
 
 const stageTone: Record<RecoveryStage, string> = {
   newly_overdue: "border-sky-200 bg-sky-50 text-sky-800",
-  first_follow_up: "border-teal-200 bg-teal-50 text-teal-800",
+  first_follow_up: "border-green-200 bg-green-50 text-green-800",
   second_follow_up: "border-amber-200 bg-amber-50 text-amber-800",
   final_notice: "border-orange-200 bg-orange-50 text-orange-800",
   escalated: "border-red-200 bg-red-50 text-red-800",
@@ -987,17 +1002,8 @@ export default function InvoicesPage() {
     <>
       <PageHeader
         title="Invoices"
-        description="Search, filter, and track invoices by client, due date, recovery status, and overdue days."
+        description="Find unpaid invoices and open the details when you need notes, reminders, or follow-up text."
       >
-        <Button
-          type="button"
-          variant="outline"
-          disabled={invoices.length === 0}
-          onClick={() => openAddReminder()}
-        >
-          <Bell className="size-4" />
-          Add reminder
-        </Button>
         <Dialog open={dialogOpen} onOpenChange={closeInvoiceDialog}>
           <Button onClick={openAddInvoice}>
             <Plus className="size-4" />
@@ -1010,8 +1016,8 @@ export default function InvoicesPage() {
               </DialogTitle>
               <DialogDescription>
                 {editingInvoice
-                  ? "Update this invoice in Supabase."
-                  : "Create an invoice in Supabase for the logged-in user."}
+                  ? "Update this invoice."
+                  : "Add an invoice you need to track."}
               </DialogDescription>
             </DialogHeader>
 
@@ -1415,7 +1421,7 @@ export default function InvoicesPage() {
                 <section className="grid gap-3 rounded-lg border border-border p-4">
                   <div className="flex items-center gap-2">
                     <Clock3 className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Recovery history</h3>
+                    <h3 className="text-sm font-semibold">Follow-up history</h3>
                   </div>
                   {selectedRecoveryHistory.length > 0 ? (
                     <div className="grid gap-3">
@@ -1453,7 +1459,7 @@ export default function InvoicesPage() {
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      No recovery actions have been logged for this invoice.
+                      No follow-ups have been logged for this invoice.
                     </div>
                   )}
                 </section>
@@ -1549,8 +1555,7 @@ export default function InvoicesPage() {
               <div>
                 <CardTitle>Invoice worklist</CardTitle>
                 <CardDescription>
-                  Invoices are loaded from Supabase and protected by row-level
-                  security.
+                  Compact rows for scanning 20 or more invoices.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="w-fit">
@@ -1614,26 +1619,14 @@ export default function InvoicesPage() {
               </div>
             ) : null}
 
-            {isLoading ? (
-              <div className="rounded-lg border border-border p-8 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-muted text-muted-foreground">
-                  <RefreshCw className="size-5 animate-spin" />
-                </div>
-                <h3 className="mt-4 text-base font-semibold">
-                  Loading invoices
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Fetching your protected invoice records from Supabase.
-                </p>
-              </div>
-            ) : errorMessage && invoices.length === 0 ? (
+            <ContentReveal isLoading={isLoading} skeleton={<InvoiceListSkeleton rows={6} />}>
+              {errorMessage && invoices.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
                 <h3 className="text-base font-semibold">
-                  Could not load invoices
+                  Something didn&apos;t load
                 </h3>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                  Check your Supabase environment variables, auth session, and
-                  database migration, then try again.
+                  Your data is safe. Try refreshing, or check your connection.
                 </p>
                 <Button
                   className="mt-5"
@@ -1645,15 +1638,14 @@ export default function InvoicesPage() {
                   }}
                 >
                   <RefreshCw className="size-4" />
-                  Retry
+                  Try again
                 </Button>
               </div>
             ) : filteredInvoices.length > 0 ? (
               <div className="overflow-hidden rounded-lg border border-border">
-                <div className="hidden grid-cols-[120px_1fr_112px_112px_112px_132px_48px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
+                <div className="hidden grid-cols-[120px_1fr_112px_112px_120px_56px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
                   <div>Invoice</div>
                   <div>Client</div>
-                  <div>Issued</div>
                   <div>Due</div>
                   <div>Amount</div>
                   <div>Status</div>
@@ -1665,15 +1657,12 @@ export default function InvoicesPage() {
                       invoice.due_date,
                       invoice.status
                     )
-                    const reminderCount =
-                      remindersByInvoice.get(invoice.id)?.length || 0
-
                     return (
                       <div key={invoice.id} className="min-w-0 px-4 py-3">
                         <div
                           role="button"
                           tabIndex={0}
-                          className="grid min-w-0 cursor-pointer gap-3 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 xl:grid-cols-[120px_1fr_112px_112px_112px_132px_48px] xl:items-center"
+                          className="grid min-w-0 cursor-pointer gap-3 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 xl:grid-cols-[120px_1fr_112px_112px_120px_56px] xl:items-center"
                           onClick={() => openInvoiceDetails(invoice)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -1686,24 +1675,10 @@ export default function InvoicesPage() {
                             <div className="truncate font-medium">
                               {invoice.invoice_number}
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {invoice.trade || "Trade not set"}
-                            </div>
                           </div>
                           <div className="min-w-0">
-                            <div className="break-words font-medium">
+                            <div className="truncate font-medium">
                               {invoice.client_name || "No client"}
-                            </div>
-                            <div className="mt-1 truncate text-sm text-muted-foreground">
-                              {invoice.notes || "No notes added"}
-                            </div>
-                          </div>
-                          <div className="text-sm">
-                            <div className="flex items-center gap-2 xl:block">
-                              <span className="text-xs font-medium uppercase text-muted-foreground xl:hidden">
-                                Issued
-                              </span>
-                              <span>{formatDate(invoice.issue_date)}</span>
                             </div>
                           </div>
                           <div className="text-sm">
@@ -1724,30 +1699,34 @@ export default function InvoicesPage() {
                           </div>
                           <div>
                             <Badge variant={statusTone[invoice.status]}>
-                              {invoice.status}
+                              {getStatusDisplayLabel(invoice.status)}
                             </Badge>
-                            {reminderCount > 0 ? (
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {reminderCount} reminder
-                                {reminderCount === 1 ? "" : "s"}
-                              </div>
-                            ) : null}
                           </div>
                           <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
-                            {isOverdueInvoice(invoice) ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-full sm:w-auto"
-                                onClick={(event) => {
-                                  event.stopPropagation()
+                            <Button
+                              size="sm"
+                              variant={
+                                isOverdueInvoice(invoice) ? "default" : "outline"
+                              }
+                              className="w-full sm:w-auto"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                if (isOverdueInvoice(invoice)) {
                                   openFollowUp(invoice)
-                                }}
-                              >
-                                <Send className="size-3.5" />
-                                Generate follow-up
-                              </Button>
-                            ) : null}
+                                } else {
+                                  openInvoiceDetails(invoice)
+                                }
+                              }}
+                            >
+                              {isOverdueInvoice(invoice) ? (
+                                <>
+                                  <Send className="size-3.5" />
+                                  Follow up
+                                </>
+                              ) : (
+                                "View"
+                              )}
+                            </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
@@ -1859,6 +1838,7 @@ export default function InvoicesPage() {
                 </div>
               </div>
             )}
+            </ContentReveal>
           </CardContent>
         </Card>
       </div>
@@ -1876,7 +1856,7 @@ export default function InvoicesPage() {
           <DialogHeader>
             <DialogTitle>Generated follow-up</DialogTitle>
             <DialogDescription>
-              Local template message. No AI API is used.
+              Copy this message into email or text.
             </DialogDescription>
           </DialogHeader>
 
