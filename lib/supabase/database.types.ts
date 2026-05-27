@@ -198,6 +198,60 @@ export type Database = {
         }
         Relationships: []
       }
+      recovery_drafts: {
+        Row: {
+          id: string
+          user_id: string
+          client_id: string | null
+          invoice_id: string
+          channel: string
+          message_body: string
+          status: string
+          recommended_action: string | null
+          days_overdue: number
+          provider_message_id: string | null
+          created_at: string
+          updated_at: string
+          approved_at: string | null
+          sent_at: string | null
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          client_id?: string | null
+          invoice_id: string
+          channel?: string
+          message_body: string
+          status?: string
+          recommended_action?: string | null
+          days_overdue?: number
+          provider_message_id?: string | null
+          created_at?: string
+          updated_at?: string
+          approved_at?: string | null
+          sent_at?: string | null
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          client_id?: string | null
+          invoice_id?: string
+          channel?: string
+          message_body?: string
+          status?: string
+          recommended_action?: string | null
+          days_overdue?: number
+          provider_message_id?: string | null
+          created_at?: string
+          updated_at?: string
+          approved_at?: string | null
+          sent_at?: string | null
+          resolved_at?: string | null
+        }
+        Relationships: []
+      }
       recovery_actions: {
         Row: {
           id: string

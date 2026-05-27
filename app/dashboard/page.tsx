@@ -47,6 +47,8 @@ type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type RecoveryActionRow =
   Database["public"]["Tables"]["recovery_actions"]["Row"]
+type RecoveryDraftRow =
+  Database["public"]["Tables"]["recovery_drafts"]["Row"]
 type ReminderRow = Database["public"]["Tables"]["reminders"]["Row"]
 type ReminderInsert = Database["public"]["Tables"]["reminders"]["Insert"]
 type ReminderUpdate = Database["public"]["Tables"]["reminders"]["Update"]
@@ -66,6 +68,9 @@ const overdueStatuses: InvoiceStatus[] = [
   "Payment Plan",
   "Escalated",
 ]
+const draftApprovalStatuses = ["needs_approval", "draft", "approved"]
+const draftWaitingStatuses = ["sent", "waiting_on_customer"]
+const draftFinalStatuses = ["resolved", "cancelled"]
 
 const statusTone: Record<InvoiceStatus, BadgeTone> = {
   Draft: "muted",
@@ -133,6 +138,31 @@ function isOverdue(invoice: InvoiceRow) {
   )
 }
 
+function normalizeDraftStatus(status: string) {
+  return status.trim().toLowerCase()
+}
+
+function isDraftNeedingApproval(draft: RecoveryDraftRow) {
+  return draftApprovalStatuses.includes(normalizeDraftStatus(draft.status))
+}
+
+function isDraftWaitingOnCustomer(draft: RecoveryDraftRow) {
+  return draftWaitingStatuses.includes(normalizeDraftStatus(draft.status))
+}
+
+function isDraftFinal(draft: RecoveryDraftRow) {
+  return draftFinalStatuses.includes(normalizeDraftStatus(draft.status))
+}
+
+function getDraftPriority(draft: RecoveryDraftRow) {
+  const status = normalizeDraftStatus(draft.status)
+  if (status === "needs_approval") return 0
+  if (status === "draft") return 1
+  if (status === "approved") return 2
+  if (status === "sent" || status === "waiting_on_customer") return 3
+  return 4
+}
+
 function nullableText(value: string) {
   const trimmed = value.trim()
 
@@ -151,6 +181,7 @@ export default function DashboardPage() {
   const [recoveryActions, setRecoveryActions] = useState<RecoveryActionRow[]>(
     []
   )
+  const [recoveryDrafts, setRecoveryDrafts] = useState<RecoveryDraftRow[]>([])
   const [reminders, setReminders] = useState<ReminderRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
@@ -176,6 +207,7 @@ export default function DashboardPage() {
       setInvoices([])
       setProfile(null)
       setRecoveryActions([])
+      setRecoveryDrafts([])
       setReminders([])
       setUserId(null)
       setIsLoading(false)
@@ -189,6 +221,7 @@ export default function DashboardPage() {
       clientsResult,
       invoicesResult,
       actionsResult,
+      draftsResult,
       remindersResult,
     ] = await Promise.all([
       supabase
@@ -208,6 +241,11 @@ export default function DashboardPage() {
         .eq("user_id", user.id)
         .order("scheduled_for", { ascending: true, nullsFirst: false }),
       supabase
+        .from("recovery_drafts")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+      supabase
         .from("reminders")
         .select("*")
         .eq("user_id", user.id)
@@ -219,6 +257,7 @@ export default function DashboardPage() {
       clientsResult.error ||
       invoicesResult.error ||
       actionsResult.error ||
+      draftsResult.error ||
       remindersResult.error
 
     if (firstError) {
@@ -231,6 +270,7 @@ export default function DashboardPage() {
     setClients(clientsResult.data || [])
     setInvoices(invoicesResult.data || [])
     setRecoveryActions(actionsResult.data || [])
+    setRecoveryDrafts(draftsResult.data || [])
     setReminders(remindersResult.data || [])
     setIsLoading(false)
   }, [supabase])
@@ -258,19 +298,6 @@ export default function DashboardPage() {
       unpaidCount: unpaidInvoices.length,
     }
   }, [invoices])
-
-  const recentOverdueInvoices = useMemo(
-    () =>
-      dashboardStats.overdueInvoices
-        .slice()
-        .sort(
-          (a, b) =>
-            getDaysOverdue(b.due_date, b.status) -
-            getDaysOverdue(a.due_date, a.status)
-        )
-        .slice(0, 5),
-    [dashboardStats.overdueInvoices]
-  )
 
   const priorityUnpaidInvoices = useMemo(
     () =>
@@ -336,41 +363,72 @@ export default function DashboardPage() {
 
   const remindersDueToday = dueReminders.length
 
-  const nextOpenReminder = useMemo(
-    () =>
-      reminders
-        .filter((reminder) => !reminder.completed)
-        .sort(
-          (a, b) =>
-            new Date(`${a.reminder_date}T00:00:00`).getTime() -
-            new Date(`${b.reminder_date}T00:00:00`).getTime()
-        )[0],
-    [reminders]
-  )
-
   const invoiceById = useMemo(
     () => new Map(invoices.map((invoice) => [invoice.id, invoice])),
     [invoices]
   )
 
+  const activeRecoveryDrafts = useMemo(
+    () =>
+      recoveryDrafts.filter((draft) => {
+        if (isDraftFinal(draft)) {
+          return false
+        }
+
+        const invoice = invoiceById.get(draft.invoice_id)
+        return invoice ? invoice.status !== "Paid" : false
+      }),
+    [invoiceById, recoveryDrafts]
+  )
+
+  const recoveryDraftStats = useMemo(() => {
+    const needsApproval = activeRecoveryDrafts.filter(isDraftNeedingApproval)
+    const waitingOnCustomer = activeRecoveryDrafts.filter(isDraftWaitingOnCustomer)
+
+    return {
+      needsApproval,
+      waitingOnCustomer,
+    }
+  }, [activeRecoveryDrafts])
+
+  const nextRecoveryDraft = useMemo(
+    () =>
+      recoveryDraftStats.needsApproval
+        .slice()
+        .sort((first, second) => {
+          const priority = getDraftPriority(first) - getDraftPriority(second)
+          if (priority !== 0) return priority
+          return second.days_overdue - first.days_overdue
+        })[0],
+    [recoveryDraftStats.needsApproval]
+  )
+
   const nextActionContent = useMemo(() => {
-    if (recentOverdueInvoices.length > 0) {
-      const inv = recentOverdueInvoices[0]
-      const amount = moneyFormatter.format(inv.amount)
-      const client = inv.client_name || "a client"
-      const days = getDaysOverdue(inv.due_date, inv.status)
-      return {
-        heading: `Approve the ${amount} payment reminder for ${client}.`,
-        body:
-          days > 0
-            ? `This invoice is ${days} day${days === 1 ? "" : "s"} overdue. A draft message is ready for your review.`
-            : "This invoice is ready for a follow-up. Review the draft message before it goes out.",
-        cta: "Review message",
-        href: "/dashboard/recovery",
+    if (nextRecoveryDraft) {
+      const invoice = invoiceById.get(nextRecoveryDraft.invoice_id)
+
+      if (invoice) {
+        const amount = moneyFormatter.format(invoice.amount)
+        const client = invoice.client_name || "a client"
+        const days = Math.max(
+          nextRecoveryDraft.days_overdue,
+          getDaysOverdue(invoice.due_date, invoice.status)
+        )
+
+        return {
+          heading: `Approve the ${amount} payment reminder for ${client}.`,
+          body:
+            days > 0
+              ? `This invoice is ${days} day${days === 1 ? "" : "s"} overdue. A draft message is ready for your review.`
+              : "A draft payment reminder is ready for your review.",
+          cta: "Review message",
+          href: "/dashboard/recovery",
+        }
       }
     }
-    if (nextOpenReminder) {
-      const inv = invoiceById.get(nextOpenReminder.invoice_id ?? "")
+    const dueReminder = dueReminders[0]
+    if (dueReminder) {
+      const inv = invoiceById.get(dueReminder.invoice_id)
       return {
         heading: "You have a scheduled follow-up.",
         body: inv
@@ -380,8 +438,23 @@ export default function DashboardPage() {
         href: "/dashboard/reminders",
       }
     }
+    if (activeRecoveryDrafts.length === 0 && activeReminderCount === 0) {
+      return {
+        heading: "You're caught up.",
+        body: "No messages or reminders need attention right now.",
+        cta: "Review invoices",
+        href: "/dashboard/invoices",
+      }
+    }
+
     return null
-  }, [recentOverdueInvoices, nextOpenReminder, invoiceById])
+  }, [
+    activeRecoveryDrafts.length,
+    activeReminderCount,
+    dueReminders,
+    invoiceById,
+    nextRecoveryDraft,
+  ])
 
   const invoiceOptions = useMemo(
     () =>
@@ -398,6 +471,7 @@ export default function DashboardPage() {
     clients.length > 0 ||
     invoices.length > 0 ||
     recoveryActions.length > 0 ||
+    recoveryDrafts.length > 0 ||
     reminders.length > 0
 
   const hasBusinessInfo = Boolean(
@@ -407,11 +481,12 @@ export default function DashboardPage() {
   const hasFollowUp = useMemo(
     () =>
       reminders.length > 0 ||
+      recoveryDrafts.length > 0 ||
       invoices.some((invoice) => invoice.status === "Follow-up Sent") ||
       recoveryActions.some((action) =>
         action.action_type.toLowerCase().includes("follow-up")
       ),
-    [invoices, recoveryActions, reminders]
+    [invoices, recoveryActions, recoveryDrafts.length, reminders]
   )
 
   const onboardingItems = useMemo(
@@ -494,9 +569,9 @@ export default function DashboardPage() {
       tone: "bg-green-50 text-green-700",
     },
     {
-      label: "Need follow-up",
-      value: String(dashboardStats.overdueInvoices.length),
-      detail: "Overdue or needs attention",
+      label: "Need approval",
+      value: String(recoveryDraftStats.needsApproval.length),
+      detail: `${recoveryDraftStats.waitingOnCustomer.length} waiting on customer`,
       icon: FileWarning,
       tone: "bg-amber-50 text-amber-700",
     },

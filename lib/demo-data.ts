@@ -3,6 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/database.types"
 
 type DB = Database
+type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
+type InvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"]
+type InvoiceUpdate = Database["public"]["Tables"]["invoices"]["Update"]
+type RecoveryDraftInsert =
+  Database["public"]["Tables"]["recovery_drafts"]["Insert"]
 
 const today = new Date()
 
@@ -252,6 +257,152 @@ export async function seedDemoData(
 
   if (reminderError) {
     return { error: reminderError.message }
+  }
+
+  const demoClientPayload: ClientInsert = {
+    user_id: userId,
+    name: "Avery Chen",
+    company: "Demo Roofing Customer",
+    trade: "Roofing",
+    email: "avery@demoroofingcustomer.com",
+    phone: "(604) 555-0324",
+    payment_reliability: "Slow payer",
+    notes: "Demo customer with one overdue invoice ready for approval.",
+  }
+
+  const { data: existingDemoClients, error: existingClientError } =
+    await supabase
+      .from("clients")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("company", demoClientPayload.company)
+      .limit(1)
+
+  if (existingClientError) {
+    return { error: existingClientError.message }
+  }
+
+  let demoClientId = existingDemoClients?.[0]?.id
+
+  if (!demoClientId) {
+    const { data: demoClient, error: demoClientError } = await supabase
+      .from("clients")
+      .insert(demoClientPayload)
+      .select("id")
+      .single()
+
+    if (demoClientError || !demoClient) {
+      return {
+        error:
+          demoClientError?.message ?? "Failed to create demo recovery client",
+      }
+    }
+
+    demoClientId = demoClient.id
+  }
+
+  const demoInvoicePayload: InvoiceInsert = {
+    user_id: userId,
+    client_id: demoClientId,
+    client_name: "Demo Roofing Customer",
+    invoice_number: "INV-3241",
+    project_name: "Roof repair follow-up",
+    trade: "Roofing",
+    amount: 4000,
+    issue_date: daysAgo(35),
+    due_date: daysAgo(14),
+    status: "Overdue",
+    paid_at: null,
+    notes: "Demo overdue invoice with a recovery draft awaiting approval.",
+  }
+
+  const { data: existingDemoInvoices, error: existingInvoiceError } =
+    await supabase
+      .from("invoices")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("invoice_number", demoInvoicePayload.invoice_number)
+      .limit(1)
+
+  if (existingInvoiceError) {
+    return { error: existingInvoiceError.message }
+  }
+
+  let demoInvoiceId = existingDemoInvoices?.[0]?.id
+
+  if (demoInvoiceId) {
+    const invoiceUpdate: InvoiceUpdate = {
+      client_id: demoClientId,
+      client_name: demoInvoicePayload.client_name,
+      project_name: demoInvoicePayload.project_name,
+      trade: demoInvoicePayload.trade,
+      amount: demoInvoicePayload.amount,
+      issue_date: demoInvoicePayload.issue_date,
+      due_date: demoInvoicePayload.due_date,
+      status: "Overdue",
+      paid_at: null,
+      notes: demoInvoicePayload.notes,
+    }
+
+    const { error: demoInvoiceUpdateError } = await supabase
+      .from("invoices")
+      .update(invoiceUpdate)
+      .eq("id", demoInvoiceId)
+      .eq("user_id", userId)
+
+    if (demoInvoiceUpdateError) {
+      return { error: demoInvoiceUpdateError.message }
+    }
+  } else {
+    const { data: demoInvoice, error: demoInvoiceError } = await supabase
+      .from("invoices")
+      .insert(demoInvoicePayload)
+      .select("id")
+      .single()
+
+    if (demoInvoiceError || !demoInvoice) {
+      return {
+        error:
+          demoInvoiceError?.message ?? "Failed to create demo recovery invoice",
+      }
+    }
+
+    demoInvoiceId = demoInvoice.id
+  }
+
+  const { data: existingDemoDrafts, error: existingDraftError } =
+    await supabase
+      .from("recovery_drafts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("invoice_id", demoInvoiceId)
+      .not("status", "in", "(resolved,cancelled)")
+      .limit(1)
+
+  if (existingDraftError) {
+    return { error: existingDraftError.message }
+  }
+
+  if (!existingDemoDrafts?.[0]) {
+    const draftPayload: RecoveryDraftInsert = {
+      user_id: userId,
+      client_id: demoClientId,
+      invoice_id: demoInvoiceId,
+      channel: "email",
+      message_body:
+        "Hi Demo Roofing Customer, following up again on invoice INV-3241 for $4,000. This still appears unpaid on our end. Please let me know when we can expect payment or if there's anything holding this up.",
+      status: "needs_approval",
+      recommended_action: "Send a firm payment reminder.",
+      days_overdue: 14,
+    }
+
+    const { error: draftError } = await supabase
+      .from("recovery_drafts")
+      .insert(draftPayload)
+
+    if (draftError) {
+      return { error: draftError.message }
+    }
   }
 
   return { error: null }
