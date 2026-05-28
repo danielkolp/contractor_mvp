@@ -26,7 +26,6 @@ import { ContentReveal } from "@/components/ui/content-reveal"
 import {
   getInitialReminderForm,
   ReminderDialog,
-  ReminderList,
   type ReminderFormValues,
 } from "@/components/dashboard/reminder-tools"
 import { Badge } from "@/components/ui/badge"
@@ -39,10 +38,15 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import {
+  buildFollowUpQueue,
+  type FollowUpQueueItem,
+} from "@/lib/recovery-queue"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
+type EstimateRow = Database["public"]["Tables"]["estimates"]["Row"]
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type RecoveryActionRow =
@@ -68,7 +72,13 @@ const overdueStatuses: InvoiceStatus[] = [
   "Payment Plan",
   "Escalated",
 ]
-const draftApprovalStatuses = ["needs_approval", "draft", "approved"]
+const openEstimateStatuses = new Set([
+  "Sent",
+  "Follow-up Needed",
+  "Follow-up Sent",
+  "Interested",
+])
+const draftApprovalStatuses = ["needs_approval", "draft"]
 const draftWaitingStatuses = ["sent", "waiting_on_customer"]
 const draftFinalStatuses = ["resolved", "cancelled"]
 
@@ -117,12 +127,12 @@ function getDaysOverdue(dueDate: string | null, status: InvoiceStatus) {
 function getStatusDisplayLabel(status: InvoiceStatus): string {
   const labels: Record<InvoiceStatus, string> = {
     Draft: "Draft",
-    Sent: "Sent",
+    Sent: "Unpaid",
     Overdue: "Overdue",
-    "Follow-up Sent": "Waiting on customer",
+    "Follow-up Sent": "Reminder sent",
     "Payment Plan": "Payment plan",
     Paid: "Paid",
-    Escalated: "Needs approval",
+    Escalated: "Escalated",
   }
   return labels[status] ?? status
 }
@@ -173,9 +183,46 @@ function toReminderTimestamp(date: string) {
   return new Date(`${date}T09:00:00`).toISOString()
 }
 
+function getQueueNextAction(item: FollowUpQueueItem) {
+  if (item.kind === "estimate") {
+    return {
+      heading: `Follow up with ${item.clientName} about their estimate.`,
+      body: `${item.estimateNumber} was sent ${item.daysSinceSent} day${
+        item.daysSinceSent === 1 ? "" : "s"
+      } ago for ${moneyFormatter.format(
+        item.amount
+      )}. Ask if they want to move forward.`,
+      cta: "Open follow-ups",
+      href: "/dashboard/recovery",
+    }
+  }
+
+  const days = Math.max(0, item.daysOverdue)
+  const heading =
+    item.state === "needs_approval"
+      ? `Review the payment reminder for ${item.clientName}.`
+      : `Check payment for ${item.invoiceNumber}.`
+  const body =
+    days > 0
+      ? `${item.invoiceNumber} is ${days} day${
+          days === 1 ? "" : "s"
+        } overdue for ${moneyFormatter.format(item.amount)}.`
+      : `${item.invoiceNumber} is due for ${moneyFormatter.format(
+          item.amount
+        )}.`
+
+  return {
+    heading,
+    body,
+    cta: item.draft ? "Review message" : "Open follow-ups",
+    href: "/dashboard/recovery",
+  }
+}
+
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
   const [clients, setClients] = useState<ClientRow[]>([])
+  const [estimates, setEstimates] = useState<EstimateRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [recoveryActions, setRecoveryActions] = useState<RecoveryActionRow[]>(
@@ -204,6 +251,7 @@ export default function DashboardPage() {
     if (userError || !user) {
       setErrorMessage(userError?.message || "You must be logged in.")
       setClients([])
+      setEstimates([])
       setInvoices([])
       setProfile(null)
       setRecoveryActions([])
@@ -219,6 +267,7 @@ export default function DashboardPage() {
     const [
       profileResult,
       clientsResult,
+      estimatesResult,
       invoicesResult,
       actionsResult,
       draftsResult,
@@ -230,6 +279,11 @@ export default function DashboardPage() {
         .eq("user_id", user.id)
         .maybeSingle(),
       supabase.from("clients").select("*").eq("user_id", user.id),
+      supabase
+        .from("estimates")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("follow_up_date", { ascending: true, nullsFirst: false }),
       supabase
         .from("invoices")
         .select("*")
@@ -255,19 +309,25 @@ export default function DashboardPage() {
     const firstError =
       profileResult.error ||
       clientsResult.error ||
+      estimatesResult.error ||
       invoicesResult.error ||
       actionsResult.error ||
       draftsResult.error ||
       remindersResult.error
 
     if (firstError) {
-      setErrorMessage(firstError.message)
+      setErrorMessage(
+        firstError.message.includes("estimates")
+          ? "The estimates table is not available yet. Apply supabase/apply_estimates.sql in Supabase, then refresh."
+          : firstError.message
+      )
     } else {
       setErrorMessage(null)
     }
 
     setProfile(profileResult.data || null)
     setClients(clientsResult.data || [])
+    setEstimates(estimatesResult.data || [])
     setInvoices(invoicesResult.data || [])
     setRecoveryActions(actionsResult.data || [])
     setRecoveryDrafts(draftsResult.data || [])
@@ -326,11 +386,6 @@ export default function DashboardPage() {
     [dashboardStats.unpaidInvoices]
   )
 
-  const activeReminderCount = useMemo(
-    () => reminders.filter((reminder) => !reminder.completed).length,
-    [reminders]
-  )
-
   const dueReminders = useMemo(() => {
     const today = new Date()
     const startOfToday = new Date(
@@ -361,7 +416,23 @@ export default function DashboardPage() {
       )
   }, [reminders])
 
-  const remindersDueToday = dueReminders.length
+  const followUpQueue = useMemo(
+    () =>
+      buildFollowUpQueue({
+        estimates,
+        invoices,
+        clients,
+        recoveryDrafts,
+        reminders,
+      }),
+    [clients, estimates, invoices, recoveryDrafts, reminders]
+  )
+
+  const openEstimates = useMemo(
+    () =>
+      estimates.filter((estimate) => openEstimateStatuses.has(estimate.status)),
+    [estimates]
+  )
 
   const invoiceById = useMemo(
     () => new Map(invoices.map((invoice) => [invoice.id, invoice])),
@@ -404,6 +475,12 @@ export default function DashboardPage() {
   )
 
   const nextActionContent = useMemo(() => {
+    const queueItem = followUpQueue[0]
+    if (queueItem) {
+      return getQueueNextAction(queueItem)
+    }
+
+    // 1. A recovery draft needs the user's approval.
     if (nextRecoveryDraft) {
       const invoice = invoiceById.get(nextRecoveryDraft.invoice_id)
 
@@ -421,11 +498,42 @@ export default function DashboardPage() {
             days > 0
               ? `This invoice is ${days} day${days === 1 ? "" : "s"} overdue. A draft message is ready for your review.`
               : "A draft payment reminder is ready for your review.",
-          cta: "Review message",
+          cta: "Review recovery messages",
           href: "/dashboard/recovery",
         }
       }
     }
+
+    // 2. An overdue invoice needs a follow-up (even if no draft exists yet).
+    const mostUrgentOverdue = dashboardStats.overdueInvoices
+      .slice()
+      .sort(
+        (a, b) =>
+          getDaysOverdue(b.due_date, b.status) -
+          getDaysOverdue(a.due_date, a.status)
+      )[0]
+
+    if (mostUrgentOverdue) {
+      const days = getDaysOverdue(
+        mostUrgentOverdue.due_date,
+        mostUrgentOverdue.status
+      )
+      const client = mostUrgentOverdue.client_name || "a client"
+      const amount = moneyFormatter.format(mostUrgentOverdue.amount)
+      const hasDraft = recoveryDrafts.some(
+        (d) =>
+          d.invoice_id === mostUrgentOverdue.id &&
+          !["resolved", "cancelled"].includes(d.status.trim().toLowerCase())
+      )
+      return {
+        heading: `Follow up with ${client} today.`,
+        body: `${mostUrgentOverdue.invoice_number} is ${days} day${days === 1 ? "" : "s"} overdue for ${amount}.`,
+        cta: hasDraft ? "Review message" : "Generate follow-up",
+        href: "/dashboard/recovery",
+      }
+    }
+
+    // 3. A reminder is overdue or due today.
     const dueReminder = dueReminders[0]
     if (dueReminder) {
       const inv = invoiceById.get(dueReminder.invoice_id)
@@ -434,26 +542,47 @@ export default function DashboardPage() {
         body: inv
           ? `Reminder for ${inv.client_name || "a client"} — ${moneyFormatter.format(inv.amount)}.`
           : "A follow-up reminder is due.",
-        cta: "Open reminders",
+        cta: "Review follow-ups",
         href: "/dashboard/reminders",
       }
     }
-    if (activeRecoveryDrafts.length === 0 && activeReminderCount === 0) {
+
+    // 4. Unpaid invoices tracked but nothing requires action right now.
+    const unpaid = dashboardStats.unpaidCount
+    if (unpaid > 0 || openEstimates.length > 0) {
       return {
-        heading: "You're caught up.",
-        body: "No messages or reminders need attention right now.",
-        cta: "Review invoices",
-        href: "/dashboard/invoices",
+        heading: "Open work is being tracked.",
+        body:
+          openEstimates.length > 0
+            ? `${openEstimates.length} open estimate${
+                openEstimates.length === 1 ? "" : "s"
+              } and ${unpaid} unpaid invoice${
+                unpaid === 1 ? "" : "s"
+              } are being tracked. No follow-up is due right now.`
+            : `${unpaid} unpaid invoice${unpaid === 1 ? "" : "s"} ${
+                unpaid === 1 ? "is" : "are"
+              } being tracked. No follow-up is due right now.`,
+        cta: openEstimates.length > 0 ? "View estimates" : "View unpaid invoices",
+        href: openEstimates.length > 0 ? "/dashboard/estimates" : "/dashboard/invoices",
       }
     }
 
-    return null
+    // 4. Genuinely caught up — no unpaid invoices, no drafts, no reminders.
+    return {
+      heading: "You’re all caught up.",
+    body: "No unpaid invoices, open reminders, or pending messages.",
+      cta: "Add estimate",
+      href: "/dashboard/estimates",
+    }
   }, [
-    activeRecoveryDrafts.length,
-    activeReminderCount,
+    dashboardStats.overdueInvoices,
+    dashboardStats.unpaidCount,
     dueReminders,
+    followUpQueue,
     invoiceById,
     nextRecoveryDraft,
+    openEstimates.length,
+    recoveryDrafts,
   ])
 
   const invoiceOptions = useMemo(
@@ -469,6 +598,7 @@ export default function DashboardPage() {
 
   const hasAnyData =
     clients.length > 0 ||
+    estimates.length > 0 ||
     invoices.length > 0 ||
     recoveryActions.length > 0 ||
     recoveryDrafts.length > 0 ||
@@ -477,16 +607,16 @@ export default function DashboardPage() {
   const hasBusinessInfo = Boolean(
     profile?.company_name?.trim() || profile?.trade?.trim()
   )
-  const hasOverdueInvoices = dashboardStats.overdueInvoices.length > 0
   const hasFollowUp = useMemo(
     () =>
       reminders.length > 0 ||
+      followUpQueue.length > 0 ||
       recoveryDrafts.length > 0 ||
       invoices.some((invoice) => invoice.status === "Follow-up Sent") ||
       recoveryActions.some((action) =>
         action.action_type.toLowerCase().includes("follow-up")
       ),
-    [invoices, recoveryActions, recoveryDrafts.length, reminders]
+    [followUpQueue.length, invoices, recoveryActions, recoveryDrafts.length, reminders]
   )
 
   const onboardingItems = useMemo(
@@ -509,24 +639,24 @@ export default function DashboardPage() {
       },
       {
         id: "invoice",
-        label: "Add your first invoice",
-        description: "Track due dates and unpaid revenue in one place.",
-        completed: invoices.length > 0,
-        actionLabel: "Add invoice",
-        href: "/dashboard/invoices",
+        label: "Add your first estimate or invoice",
+        description: "Track quotes and unpaid balances in one place.",
+        completed: estimates.length > 0 || invoices.length > 0,
+        actionLabel: "Add estimate",
+        href: "/dashboard/estimates",
       },
       {
         id: "review",
-        label: "Review overdue invoices",
+        label: "Review follow-ups",
         description:
-          invoices.length === 0
-            ? "Create an invoice so overdue items can appear."
-          : hasOverdueInvoices
+          estimates.length === 0 && invoices.length === 0
+            ? "Create an estimate or invoice so follow-ups can appear."
+          : followUpQueue.length > 0
               ? "Open Follow-ups and log the next action."
-              : "No overdue invoices yet. Keep tracking due dates.",
+              : "No follow-ups due yet. Keep tracking sent dates and due dates.",
         completed:
-          invoices.length > 0 &&
-          (!hasOverdueInvoices || recoveryActions.length > 0),
+          estimates.length + invoices.length > 0 &&
+          (followUpQueue.length === 0 || recoveryActions.length > 0),
         actionLabel: "Review follow-ups",
         href: "/dashboard/recovery",
       },
@@ -544,9 +674,10 @@ export default function DashboardPage() {
     ],
     [
       clients.length,
+      estimates.length,
+      followUpQueue.length,
       hasBusinessInfo,
       hasFollowUp,
-      hasOverdueInvoices,
       invoices.length,
       recoveryActions.length,
     ]
@@ -562,25 +693,32 @@ export default function DashboardPage() {
 
   const statCards = [
     {
-      label: "Total unpaid",
-      value: moneyFormatter.format(dashboardStats.totalUnpaidRevenue),
-      detail: `${dashboardStats.unpaidCount} unpaid invoices`,
-      icon: CircleDollarSign,
-      tone: "bg-green-50 text-green-700",
-    },
-    {
-      label: "Need approval",
-      value: String(recoveryDraftStats.needsApproval.length),
-      detail: `${recoveryDraftStats.waitingOnCustomer.length} waiting on customer`,
-      icon: FileWarning,
+      label: "Today's follow-ups",
+      value: String(followUpQueue.length),
+      detail:
+        followUpQueue.length === 0
+          ? "No follow-ups due"
+          : `${followUpQueue.filter((item) => item.kind === "estimate").length} estimate and ${followUpQueue.filter((item) => item.kind === "invoice").length} invoice follow-ups`,
+      icon: CalendarClock,
       tone: "bg-amber-50 text-amber-700",
     },
     {
-      label: "Due today",
-      value: String(remindersDueToday),
-      detail: `${activeReminderCount} open reminders`,
-      icon: Bell,
+      label: "Open estimates",
+      value: String(openEstimates.length),
+      detail: `${openEstimates.length} quote${
+        openEstimates.length === 1 ? "" : "s"
+      } still in play`,
+      icon: FileWarning,
       tone: "bg-sky-50 text-sky-700",
+    },
+    {
+      label: "Unpaid invoices",
+      value: moneyFormatter.format(dashboardStats.totalUnpaidRevenue),
+      detail: `${dashboardStats.unpaidCount} unpaid invoice${
+        dashboardStats.unpaidCount === 1 ? "" : "s"
+      }`,
+      icon: CircleDollarSign,
+      tone: "bg-green-50 text-green-700",
     },
   ]
 
@@ -709,19 +847,19 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Today's focus"
-        description="See who owes money, what needs a follow-up, and the next button to press."
+        title="Today's follow-ups"
+        description="See who needs a quote follow-up, who owes payment, and what to say next."
       >
         <Button asChild>
-          <a href="/dashboard/invoices">
-            {invoices.length === 0 ? (
+          <a href={followUpQueue.length > 0 ? "/dashboard/recovery" : "/dashboard/estimates"}>
+            {estimates.length === 0 && invoices.length === 0 ? (
               <>
                 <Plus className="size-4" />
-                Add invoice
+                Add estimate
               </>
             ) : (
               <>
-                Review unpaid invoices
+                Open follow-ups
                 <ArrowUpRight className="size-4" />
               </>
             )}
@@ -807,17 +945,17 @@ export default function DashboardPage() {
                     <CircleDollarSign className="size-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">
-                    Add your first invoice
+                    Add your first estimate
                   </h3>
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                    Start with the balance that needs to get paid. You can add
-                    client details after that.
+                    Start with a quote you sent or an unpaid invoice. The app
+                    will turn it into a follow-up worklist.
                   </p>
                   <div className="mt-5 flex justify-center">
                     <Button asChild>
-                      <a href="/dashboard/invoices">
+                      <a href="/dashboard/estimates">
                         <Plus className="size-4" />
-                        Add invoice
+                        Add estimate
                       </a>
                     </Button>
                   </div>
@@ -969,9 +1107,9 @@ export default function DashboardPage() {
                   <CardHeader className="gap-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <CardTitle>Follow-ups due today</CardTitle>
+                        <CardTitle>Today's follow-up inbox</CardTitle>
                         <CardDescription>
-                          The calls or emails that need attention now.
+                          Estimates and invoices that need attention now.
                         </CardDescription>
                       </div>
                       <Button
@@ -987,31 +1125,59 @@ export default function DashboardPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {dueReminders.length > 0 ? (
-                      <ReminderList
-                        reminders={dueReminders.slice(0, 4)}
-                        invoiceById={invoiceById}
-                        emptyText="No follow-ups due today."
-                        isSaving={isSaving}
-                        onMarkComplete={(reminder) =>
-                          void markReminderComplete(reminder)
-                        }
-                        onDelete={(reminder) => void deleteReminder(reminder)}
-                      />
+                    {followUpQueue.length > 0 ? (
+                      <div className="grid gap-3">
+                        {followUpQueue.slice(0, 5).map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded-lg border border-border p-3"
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <Badge
+                                  variant={
+                                    item.kind === "estimate"
+                                      ? "warning"
+                                      : "outline"
+                                  }
+                                >
+                                  {item.kind === "estimate"
+                                    ? "Estimate"
+                                    : "Invoice"}
+                                </Badge>
+                                <div className="mt-2 break-words text-sm font-medium">
+                                  {item.kind === "estimate"
+                                    ? `Follow up with ${item.clientName}`
+                                    : `Check payment for ${item.clientName}`}
+                                </div>
+                                <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                                  {item.explanation}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-sm font-semibold sm:text-right">
+                                {moneyFormatter.format(item.amount)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <Button variant="outline" asChild>
+                          <a href="/dashboard/recovery">Open follow-ups</a>
+                        </Button>
+                      </div>
                     ) : (
                       <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
                         <div className="text-sm font-medium text-foreground">
-                          Nothing due today
+                          No follow-ups due today
                         </div>
                         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                          {invoices.length === 0
-                            ? "Add an invoice first so reminders can be linked to a balance."
-                            : "You can schedule the next follow-up from an invoice or the follow-ups page."}
+                          {estimates.length === 0 && invoices.length === 0
+                            ? "Add an estimate or invoice first so the worklist has something to track."
+                            : "Open estimates and unpaid invoices are being tracked. Nothing needs action right now."}
                         </p>
                         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                          {invoices.length === 0 ? (
+                          {estimates.length === 0 && invoices.length === 0 ? (
                             <Button asChild>
-                              <a href="/dashboard/invoices">Add invoice</a>
+                              <a href="/dashboard/estimates">Add estimate</a>
                             </Button>
                           ) : (
                             <Button

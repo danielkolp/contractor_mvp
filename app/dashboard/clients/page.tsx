@@ -129,6 +129,27 @@ function nullableDate(value: string) {
   return value || null
 }
 
+function getClientLabel(client: Pick<ClientRow, "company" | "name">) {
+  if (client.company) {
+    return client.name && client.name !== client.company
+      ? `${client.company} - ${client.name}`
+      : client.company
+  }
+
+  return client.name || "Unnamed client"
+}
+
+function isMissingEstimatesTableError(message: string) {
+  const normalized = message.toLowerCase()
+
+  return (
+    normalized.includes("estimates") &&
+    (normalized.includes("schema cache") ||
+      normalized.includes("does not exist") ||
+      normalized.includes("could not find"))
+  )
+}
+
 function normalize(value: string | null | undefined) {
   return (value || "").trim().toLowerCase()
 }
@@ -376,7 +397,7 @@ export default function ClientsPage() {
 
     const { data, error } = await supabase
       .from("invoices")
-      .update({ client_id: client.id })
+      .update({ client_id: client.id, client_name: getClientLabel(client) })
       .eq("user_id", userId)
       .in("id", matchingIds)
       .select()
@@ -390,6 +411,50 @@ export default function ClientsPage() {
     setInvoices((current) =>
       current.map((invoice) => updatedById.get(invoice.id) || invoice)
     )
+  }
+
+  async function syncLinkedClientReferences(client: ClientRow) {
+    if (!userId) {
+      return false
+    }
+
+    const clientName = getClientLabel(client)
+
+    const [invoiceResult, estimateResult] = await Promise.all([
+      supabase
+        .from("invoices")
+        .update({ client_name: clientName })
+        .eq("user_id", userId)
+        .eq("client_id", client.id)
+        .select(),
+      supabase
+        .from("estimates")
+        .update({ client_name: clientName })
+        .eq("user_id", userId)
+        .eq("client_id", client.id),
+    ])
+
+    if (invoiceResult.error) {
+      setErrorMessage(invoiceResult.error.message)
+      return false
+    }
+
+    if (
+      estimateResult.error &&
+      !isMissingEstimatesTableError(estimateResult.error.message)
+    ) {
+      setErrorMessage(estimateResult.error.message)
+      return false
+    }
+
+    const updatedById = new Map(
+      (invoiceResult.data || []).map((invoice) => [invoice.id, invoice])
+    )
+    setInvoices((current) =>
+      current.map((invoice) => updatedById.get(invoice.id) || invoice)
+    )
+
+    return true
   }
 
   async function handleAddOrUpdateClient(event: FormEvent<HTMLFormElement>) {
@@ -437,8 +502,11 @@ export default function ClientsPage() {
         setSelectedClient((current) =>
           current?.id === data.id ? data : current
         )
-        await linkMatchingInvoices(data)
-        closeClientDialog(false)
+        const synced = await syncLinkedClientReferences(data)
+        if (synced) {
+          await linkMatchingInvoices(data)
+          closeClientDialog(false)
+        }
       }
     } else {
       const payload: ClientInsert = {

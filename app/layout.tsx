@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
+import { Manrope, Geist } from "next/font/google";
 
 import "./globals.css";
 
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "Revenue Recovery",
@@ -24,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn(manrope.variable, "h-full antialiased")}>
+    <html lang="en" className={cn( "h-full antialiased", "font-sans", geist.variable)}>
       <body className="flex min-h-full flex-col bg-background text-foreground">
         {children}
         <Toaster richColors position="top-right" />

@@ -117,6 +117,51 @@ export type Database = {
         }
         Relationships: []
       }
+      estimates: {
+        Row: {
+          id: string
+          user_id: string
+          client_id: string | null
+          client_name: string | null
+          estimate_number: string
+          amount: number
+          status: Database["public"]["Enums"]["estimate_status"]
+          sent_date: string
+          follow_up_date: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          client_id?: string | null
+          client_name?: string | null
+          estimate_number: string
+          amount: number
+          status?: Database["public"]["Enums"]["estimate_status"]
+          sent_date?: string
+          follow_up_date?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          client_id?: string | null
+          client_name?: string | null
+          estimate_number?: string
+          amount?: number
+          status?: Database["public"]["Enums"]["estimate_status"]
+          sent_date?: string
+          follow_up_date?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           id: string
@@ -353,6 +398,15 @@ export type Database = {
     Functions: Record<string, never>
     Enums: {
       contact_method: "Email" | "Phone" | "Text"
+      estimate_status:
+        | "Draft"
+        | "Sent"
+        | "Follow-up Needed"
+        | "Follow-up Sent"
+        | "Interested"
+        | "Won"
+        | "Lost"
+        | "Archived"
       invoice_status:
         | "Draft"
         | "Sent"

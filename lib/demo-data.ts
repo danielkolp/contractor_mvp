@@ -4,6 +4,8 @@ import type { Database } from "@/lib/supabase/database.types"
 
 type DB = Database
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
+type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
+type EstimateUpdate = Database["public"]["Tables"]["estimates"]["Update"]
 type InvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"]
 type InvoiceUpdate = Database["public"]["Tables"]["invoices"]["Update"]
 type RecoveryDraftInsert =
@@ -259,6 +261,51 @@ export async function seedDemoData(
     return { error: reminderError.message }
   }
 
+  // ── recovery drafts (bulk invoices) ──────────────────────────
+  const { error: draftBulkError } = await supabase
+    .from("recovery_drafts")
+    .insert([
+      {
+        user_id: userId,
+        client_id: byCompany["North Shore Landscaping"],
+        invoice_id: byNumber["INV-1048"],
+        channel: "email",
+        message_body:
+          "Hi North Shore Landscaping, I wanted to check in again on invoice INV-1048 for $3,200, which is now 10 days overdue. Could you let me know when payment will be sent? I'd appreciate an update by end of this week.",
+        status: "needs_approval",
+        recommended_action: "Send a firm payment reminder.",
+        days_overdue: 10,
+      },
+      {
+        user_id: userId,
+        client_id: byCompany["Peak Renovations"],
+        invoice_id: byNumber["INV-1042"],
+        channel: "email",
+        message_body:
+          "Hi Peak Renovations, following up on invoice INV-1042 for $8,750, which remains outstanding. If a payment plan would help, I'm open to discussing terms. Please reach out as soon as possible.",
+        status: "waiting_on_customer",
+        recommended_action: "Confirm payment plan or escalate.",
+        days_overdue: 25,
+        sent_at: new Date(today.getTime() - 7 * 86_400_000).toISOString(),
+      },
+      {
+        user_id: userId,
+        client_id: byCompany["Cedarline Electrical"],
+        invoice_id: byNumber["INV-1037"],
+        channel: "email",
+        message_body:
+          "Hi Cedarline Electrical, I need to address the outstanding balance on invoice INV-1037 for $12,600, now 45 days past due. We've had several prior discussions without resolution. Please respond within 5 business days or this matter may be referred to collections.",
+        status: "needs_approval",
+        recommended_action:
+          "Send final notice. Consider involving a collections agency.",
+        days_overdue: 45,
+      },
+    ] satisfies RecoveryDraftInsert[])
+
+  if (draftBulkError) {
+    return { error: draftBulkError.message }
+  }
+
   const demoClientPayload: ClientInsert = {
     user_id: userId,
     name: "Avery Chen",
@@ -299,6 +346,62 @@ export async function seedDemoData(
     }
 
     demoClientId = demoClient.id
+  }
+
+  const demoEstimatePayload: EstimateInsert = {
+    user_id: userId,
+    client_id: demoClientId,
+    client_name: "Demo Roofing Customer",
+    estimate_number: "EST-2207",
+    amount: 6800,
+    sent_date: daysAgo(5),
+    follow_up_date: daysAgo(1),
+    status: "Follow-up Needed",
+    notes: "Demo estimate ready for a quote follow-up.",
+  }
+
+  const { data: existingDemoEstimates, error: existingEstimateError } =
+    await supabase
+      .from("estimates")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("estimate_number", demoEstimatePayload.estimate_number)
+      .limit(1)
+
+  if (existingEstimateError) {
+    return { error: existingEstimateError.message }
+  }
+
+  const demoEstimateId = existingDemoEstimates?.[0]?.id
+
+  if (demoEstimateId) {
+    const estimateUpdate: EstimateUpdate = {
+      client_id: demoClientId,
+      client_name: demoEstimatePayload.client_name,
+      amount: demoEstimatePayload.amount,
+      sent_date: demoEstimatePayload.sent_date,
+      follow_up_date: demoEstimatePayload.follow_up_date,
+      status: demoEstimatePayload.status,
+      notes: demoEstimatePayload.notes,
+    }
+
+    const { error: estimateUpdateError } = await supabase
+      .from("estimates")
+      .update(estimateUpdate)
+      .eq("id", demoEstimateId)
+      .eq("user_id", userId)
+
+    if (estimateUpdateError) {
+      return { error: estimateUpdateError.message }
+    }
+  } else {
+    const { error: estimateInsertError } = await supabase
+      .from("estimates")
+      .insert(demoEstimatePayload)
+
+    if (estimateInsertError) {
+      return { error: estimateInsertError.message }
+    }
   }
 
   const demoInvoicePayload: InvoiceInsert = {

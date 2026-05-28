@@ -7,6 +7,7 @@ import {
   Bell,
   ChevronDown,
   ClipboardCheck,
+  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -51,12 +52,17 @@ const navigation = [
     icon: ReceiptText,
   },
   {
+    name: "Estimates",
+    href: "/dashboard/estimates",
+    icon: FileText,
+  },
+  {
     name: "Clients",
     href: "/dashboard/clients",
     icon: UsersRound,
   },
   {
-    name: "Recoveries",
+    name: "Follow-ups",
     href: "/dashboard/recovery",
     icon: ClipboardCheck,
   },

@@ -404,7 +404,7 @@ export default function RemindersPage() {
                     You&rsquo;re clear for now. You can still review unpaid invoices or schedule a future reminder.
                   </p>
                   <Button className="mt-5 bg-green-700 text-white hover:bg-green-800" asChild>
-                    <a href="/dashboard/recovery">Open Recoveries</a>
+                    <a href="/dashboard/recovery">Open Follow-ups</a>
                   </Button>
                 </div>
               ) : (

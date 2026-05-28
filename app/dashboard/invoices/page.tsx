@@ -8,13 +8,10 @@ import {
   useMemo,
   useState,
 } from "react"
+import { useRouter } from "next/navigation"
 import {
   Bell,
-  Building2,
   CalendarDays,
-  CheckCircle2,
-  Clock3,
-  ClipboardCopy,
   FileText,
   MoreHorizontal,
   Pencil,
@@ -23,6 +20,7 @@ import {
   Search,
   Send,
   Trash2,
+  X,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -31,7 +29,6 @@ import { ContentReveal } from "@/components/ui/content-reveal"
 import {
   getInitialReminderForm,
   ReminderDialog,
-  ReminderList,
   type ReminderFormValues,
 } from "@/components/dashboard/reminder-tools"
 import { Badge } from "@/components/ui/badge"
@@ -62,13 +59,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { toast } from "sonner"
+
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  generateFollowUpMessage as generateRecoveryMessage,
+  getOverdueStage,
+  getRecommendedAction,
+} from "@/lib/recovery-engine"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -77,16 +74,17 @@ type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type InvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"]
 type InvoiceUpdate = Database["public"]["Tables"]["invoices"]["Update"]
-type RecoveryActionRow =
-  Database["public"]["Tables"]["recovery_actions"]["Row"]
 type ReminderRow = Database["public"]["Tables"]["reminders"]["Row"]
 type ReminderInsert = Database["public"]["Tables"]["reminders"]["Insert"]
 type ReminderUpdate = Database["public"]["Tables"]["reminders"]["Update"]
+type RecoveryDraftRow =
+  Database["public"]["Tables"]["recovery_drafts"]["Row"]
+type RecoveryDraftInsert =
+  Database["public"]["Tables"]["recovery_drafts"]["Insert"]
 type InvoiceStatus = Database["public"]["Enums"]["invoice_status"]
-type RecoveryStage = Database["public"]["Enums"]["recovery_stage"]
-type FollowUpTone = "friendly" | "firm" | "final notice"
 
 type InvoiceForm = {
+  clientId: string | null
   clientName: string
   invoiceNumber: string
   amount: string
@@ -98,8 +96,6 @@ type InvoiceForm = {
 
 type FilterValue = "all"
 
-const followUpTones: FollowUpTone[] = ["friendly", "firm", "final notice"]
-
 const invoiceStatuses: InvoiceStatus[] = [
   "Draft",
   "Sent",
@@ -110,7 +106,11 @@ const invoiceStatuses: InvoiceStatus[] = [
   "Escalated",
 ]
 
+const finalRecoveryDraftStatuses = new Set(["resolved", "cancelled"])
+const waitingRecoveryDraftStatuses = new Set(["sent", "waiting_on_customer"])
+
 const initialForm: InvoiceForm = {
+  clientId: null,
   clientName: "",
   invoiceNumber: "",
   amount: "",
@@ -136,33 +136,16 @@ const statusTone: Record<
 function getStatusDisplayLabel(status: InvoiceStatus): string {
   const labels: Record<InvoiceStatus, string> = {
     Draft: "Draft",
-    Sent: "Sent",
+    Sent: "Unpaid",
     Overdue: "Overdue",
-    "Follow-up Sent": "Waiting on customer",
+    "Follow-up Sent": "Reminder sent",
     "Payment Plan": "Payment plan",
     Paid: "Paid",
-    Escalated: "Needs approval",
+    Escalated: "Escalated",
   }
   return labels[status] ?? status
 }
 
-const stageLabels: Record<RecoveryStage, string> = {
-  newly_overdue: "Newly Overdue",
-  first_follow_up: "First Follow-up",
-  second_follow_up: "Second Follow-up",
-  final_notice: "Final Notice",
-  escalated: "Escalated",
-  resolved: "Resolved",
-}
-
-const stageTone: Record<RecoveryStage, string> = {
-  newly_overdue: "border-sky-200 bg-sky-50 text-sky-800",
-  first_follow_up: "border-green-200 bg-green-50 text-green-800",
-  second_follow_up: "border-amber-200 bg-amber-50 text-amber-800",
-  final_notice: "border-orange-200 bg-orange-50 text-orange-800",
-  escalated: "border-red-200 bg-red-50 text-red-800",
-  resolved: "border-emerald-200 bg-emerald-50 text-emerald-800",
-}
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -204,6 +187,26 @@ function normalize(value: string | null | undefined) {
   return (value || "").trim().toLowerCase()
 }
 
+function getClientLabel(client: ClientRow): string {
+  if (client.company) {
+    return client.name && client.name !== client.company
+      ? `${client.company} - ${client.name}`
+      : client.company
+  }
+  return client.name || "Unnamed client"
+}
+
+function isDueToday(dueDate: string | null): boolean {
+  if (!dueDate) return false
+  const now = new Date()
+  const todayStr = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-")
+  return dueDate === todayStr
+}
+
 function invoiceMatchesClient(client: ClientRow, invoice: InvoiceRow) {
   if (invoice.client_id === client.id) {
     return true
@@ -222,17 +225,6 @@ function invoiceMatchesClient(client: ClientRow, invoice: InvoiceRow) {
   )
 }
 
-function getDefaultRecoveryStage(invoice: InvoiceRow): RecoveryStage {
-  if (invoice.status === "Paid") {
-    return "resolved"
-  }
-
-  if (invoice.status === "Escalated") {
-    return "escalated"
-  }
-
-  return "newly_overdue"
-}
 
 function inferTrade(clientName: string) {
   const normalized = clientName.toLowerCase()
@@ -308,6 +300,7 @@ function SelectField({
 
 function formFromInvoice(invoice: InvoiceRow): InvoiceForm {
   return {
+    clientId: invoice.client_id || null,
     clientName: invoice.client_name || "",
     invoiceNumber: invoice.invoice_number,
     amount: String(invoice.amount ?? ""),
@@ -318,30 +311,264 @@ function formFromInvoice(invoice: InvoiceRow): InvoiceForm {
   }
 }
 
-function generateFollowUpMessage(invoice: InvoiceRow, tone: FollowUpTone) {
-  const clientName = invoice.client_name || "there"
-  const amount = moneyFormatter.format(invoice.amount)
+function normalizeDraftStatus(status: string) {
+  return status.trim().toLowerCase()
+}
+
+function isFinalRecoveryDraft(draft: RecoveryDraftRow) {
+  return finalRecoveryDraftStatuses.has(normalizeDraftStatus(draft.status))
+}
+
+function isWaitingRecoveryDraft(draft: RecoveryDraftRow) {
+  return waitingRecoveryDraftStatuses.has(normalizeDraftStatus(draft.status))
+}
+
+function buildRecoveryDraftPayload(
+  invoice: InvoiceRow,
+  userId: string
+): RecoveryDraftInsert {
   const daysOverdue = getOverdueDays(invoice.due_date, invoice.status)
-  const invoiceNumber = invoice.invoice_number
+  const overdueStage = getOverdueStage(daysOverdue)
 
-  if (tone === "firm") {
-    return `Hi ${clientName}, I am following up on invoice ${invoiceNumber} for ${amount}, which is now ${daysOverdue} days overdue. Please send payment or reply today with a clear payment date so we can keep the account current.`
+  return {
+    user_id: userId,
+    client_id: invoice.client_id ?? null,
+    invoice_id: invoice.id,
+    channel: "email",
+    message_body: generateRecoveryMessage({
+      clientName: invoice.client_name || "there",
+      invoiceNumber: invoice.invoice_number,
+      amount: invoice.amount,
+      daysOverdue,
+      overdueStage,
+    }),
+    status: "needs_approval",
+    recommended_action: getRecommendedAction(overdueStage),
+    days_overdue: daysOverdue,
+  }
+}
+
+function getRecoveryDraftErrorMessage(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    if (
+      error.message.includes("recovery_drafts") &&
+      error.message.includes("schema cache")
+    ) {
+      return "Recovery drafts are not available yet. Apply supabase/apply_recovery_drafts.sql in Supabase, then refresh."
+    }
+
+    return error.message
   }
 
-  if (tone === "final notice") {
-    return `Hi ${clientName}, this is a final notice for invoice ${invoiceNumber} in the amount of ${amount}. The invoice is ${daysOverdue} days overdue. Please make payment immediately or contact us today to resolve the balance before the account is escalated.`
+  return "Could not prepare the follow-up draft."
+}
+
+function ClientCombobox({
+  clients,
+  value,
+  onChange,
+  onCreateClient,
+  disabled = false,
+}: {
+  clients: ClientRow[]
+  value: string | null
+  onChange: (clientId: string | null, clientName: string) => void
+  onCreateClient: (
+    company: string,
+    name: string,
+    email: string
+  ) => Promise<ClientRow | null>
+  disabled?: boolean
+}) {
+  const [query, setQuery] = useState("")
+  const [isOpen, setIsOpen] = useState(false)
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newCompany, setNewCompany] = useState("")
+  const [newName, setNewName] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
+
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === value) ?? null,
+    [clients, value]
+  )
+
+  const filteredClients = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return clients
+    return clients.filter(
+      (c) =>
+        c.company.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q)
+    )
+  }, [clients, query])
+
+  function handleBlur() {
+    window.setTimeout(() => setIsOpen(false), 150)
   }
 
-  return `Hi ${clientName}, I wanted to send a friendly reminder about invoice ${invoiceNumber} for ${amount}. It looks like it is ${daysOverdue} days overdue. When you have a moment, please send payment or let me know when we should expect it. Thank you.`
+  function selectClient(client: ClientRow) {
+    onChange(client.id, getClientLabel(client))
+    setQuery("")
+    setIsOpen(false)
+  }
+
+  function clearSelection() {
+    onChange(null, "")
+    setQuery("")
+  }
+
+  async function handleCreate() {
+    const company = newCompany.trim()
+    if (!company || isCreating) return
+    setIsCreating(true)
+    const created = await onCreateClient(company, newName.trim(), newEmail.trim())
+    if (created) {
+      selectClient(created)
+      setShowNewForm(false)
+      setNewCompany("")
+      setNewName("")
+      setNewEmail("")
+    }
+    setIsCreating(false)
+  }
+
+  return (
+    <div className="relative">
+      {value && selectedClient ? (
+        <div className="flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm">
+          <span className="min-w-0 flex-1 truncate">
+            {getClientLabel(selectedClient)}
+          </span>
+          <button
+            type="button"
+            disabled={disabled}
+            className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
+            onClick={clearSelection}
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      ) : (
+        <Input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setIsOpen(true)
+          }}
+          onFocus={() => setIsOpen(true)}
+          onBlur={handleBlur}
+          placeholder="Search clients…"
+          disabled={disabled}
+          autoComplete="off"
+        />
+      )}
+
+      {isOpen && !showNewForm && !selectedClient ? (
+        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-background shadow-md">
+          {filteredClients.length > 0 ? (
+            filteredClients.map((client) => (
+              <button
+                key={client.id}
+                type="button"
+                className="flex w-full px-3 py-2 text-left text-sm hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  selectClient(client)
+                }}
+              >
+                <span className="truncate">{getClientLabel(client)}</span>
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              {query ? `No clients match "${query}"` : "No clients yet"}
+            </div>
+          )}
+          <div className="border-t border-border">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-green-700 hover:bg-muted/60 focus-visible:outline-none"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                setNewCompany(query)
+                setShowNewForm(true)
+                setIsOpen(false)
+              }}
+            >
+              <Plus className="size-3.5 shrink-0" />
+              Add new client
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {showNewForm ? (
+        <div className="mt-2 grid gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-xs font-semibold text-muted-foreground">
+            New client
+          </p>
+          <Input
+            placeholder="Company name *"
+            value={newCompany}
+            onChange={(e) => setNewCompany(e.target.value)}
+            disabled={isCreating}
+          />
+          <Input
+            placeholder="Contact name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            disabled={isCreating}
+          />
+          <Input
+            type="email"
+            placeholder="Email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            disabled={isCreating}
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="flex-1"
+              disabled={!newCompany.trim() || isCreating}
+              onClick={() => void handleCreate()}
+            >
+              {isCreating ? "Creating…" : "Create & select"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={isCreating}
+              onClick={() => {
+                setShowNewForm(false)
+                setNewCompany("")
+                setNewName("")
+                setNewEmail("")
+              }}
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export default function InvoicesPage() {
   const supabase = useMemo(() => createClient(), [])
+  const router = useRouter()
   const [clients, setClients] = useState<ClientRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
-  const [recoveryActions, setRecoveryActions] = useState<RecoveryActionRow[]>(
-    []
-  )
+
   const [reminders, setReminders] = useState<ReminderRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -350,22 +577,9 @@ export default function InvoicesPage() {
   )
   const [clientFilter, setClientFilter] = useState<string | FilterValue>("all")
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [detailSheetOpen, setDetailSheetOpen] = useState(false)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
   const [editingInvoice, setEditingInvoice] = useState<InvoiceRow | null>(null)
-  const [followUpInvoice, setFollowUpInvoice] = useState<InvoiceRow | null>(null)
-  const [followUpTone, setFollowUpTone] = useState<FollowUpTone>("friendly")
-  const [detailFollowUpTone, setDetailFollowUpTone] =
-    useState<FollowUpTone>("friendly")
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle"
-  )
-  const [detailCopyState, setDetailCopyState] = useState<
-    "idle" | "copied" | "failed"
-  >("idle")
   const [form, setForm] = useState<InvoiceForm>(initialForm)
-  const [detailForm, setDetailForm] = useState<InvoiceForm>(initialForm)
   const [reminderForm, setReminderForm] = useState<ReminderFormValues>(
     getInitialReminderForm()
   )
@@ -383,7 +597,6 @@ export default function InvoicesPage() {
       setErrorMessage(userError?.message || "You must be logged in.")
       setClients([])
       setInvoices([])
-      setRecoveryActions([])
       setReminders([])
       setUserId(null)
       setIsLoading(false)
@@ -392,7 +605,7 @@ export default function InvoicesPage() {
 
     setUserId(user.id)
 
-    const [clientResult, invoiceResult, actionResult, reminderResult] =
+    const [clientResult, invoiceResult, reminderResult] =
       await Promise.all([
         supabase
           .from("clients")
@@ -405,11 +618,6 @@ export default function InvoicesPage() {
           .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
-          .from("recovery_actions")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: true }),
-        supabase
           .from("reminders")
           .select("*")
           .eq("user_id", user.id)
@@ -419,19 +627,16 @@ export default function InvoicesPage() {
     const firstError =
       clientResult.error ||
       invoiceResult.error ||
-      actionResult.error ||
       reminderResult.error
 
     if (firstError) {
       setErrorMessage(firstError.message)
       setClients([])
       setInvoices([])
-      setRecoveryActions([])
       setReminders([])
     } else {
       setClients(clientResult.data || [])
       setInvoices(invoiceResult.data || [])
-      setRecoveryActions(actionResult.data || [])
       setReminders(reminderResult.data || [])
     }
 
@@ -446,16 +651,12 @@ export default function InvoicesPage() {
     return () => window.clearTimeout(timeoutId)
   }, [loadInvoices])
 
-  const clientOptions = useMemo(
+  const clientsWithInvoices = useMemo(
     () =>
-      Array.from(
-        new Set(
-          invoices
-            .map((invoice) => invoice.client_name)
-            .filter((client): client is string => Boolean(client))
-        )
-      ).sort(),
-    [invoices]
+      clients.filter((client) =>
+        invoices.some((invoice) => invoiceMatchesClient(client, invoice))
+      ),
+    [clients, invoices]
   )
 
   const filteredInvoices = useMemo(() => {
@@ -470,16 +671,22 @@ export default function InvoicesPage() {
       const matchesStatus =
         statusFilter === "all" || invoice.status === statusFilter
       const matchesClient =
-        clientFilter === "all" || clientName === clientFilter
+        clientFilter === "all" ||
+        invoice.client_id === clientFilter ||
+        (!invoice.client_id &&
+          (() => {
+            const fc = clients.find((c) => c.id === clientFilter)
+            if (!fc) return false
+            const n = normalize(invoice.client_name)
+            return (
+              n.length > 0 &&
+              (n === normalize(fc.company) || n === normalize(fc.name))
+            )
+          })())
 
       return matchesSearch && matchesStatus && matchesClient
     })
-  }, [clientFilter, invoices, searchQuery, statusFilter])
-
-  const invoiceById = useMemo(
-    () => new Map(invoices.map((invoice) => [invoice.id, invoice])),
-    [invoices]
-  )
+  }, [clientFilter, clients, invoices, searchQuery, statusFilter])
 
   const invoiceOptions = useMemo(
     () =>
@@ -492,90 +699,10 @@ export default function InvoicesPage() {
     [invoices]
   )
 
-  const remindersByInvoice = useMemo(() => {
-    const groupedReminders = new Map<string, ReminderRow[]>()
-
-    for (const reminder of reminders) {
-      const invoiceReminders = groupedReminders.get(reminder.invoice_id) || []
-      invoiceReminders.push(reminder)
-      groupedReminders.set(reminder.invoice_id, invoiceReminders)
-    }
-
-    return groupedReminders
-  }, [reminders])
-
-  const recoveryActionsByInvoice = useMemo(() => {
-    const groupedActions = new Map<string, RecoveryActionRow[]>()
-
-    for (const action of recoveryActions) {
-      if (!action.invoice_id) continue
-      const invoiceActions = groupedActions.get(action.invoice_id) || []
-      invoiceActions.push(action)
-      groupedActions.set(action.invoice_id, invoiceActions)
-    }
-
-    return groupedActions
-  }, [recoveryActions])
-
-  const selectedInvoice = useMemo(
-    () =>
-      selectedInvoiceId
-        ? invoices.find((invoice) => invoice.id === selectedInvoiceId) || null
-        : null,
-    [invoices, selectedInvoiceId]
-  )
-
-  const selectedClient = useMemo(() => {
-    if (!selectedInvoice) {
-      return null
-    }
-
-    return (
-      clients.find((client) => invoiceMatchesClient(client, selectedInvoice)) ||
-      null
-    )
-  }, [clients, selectedInvoice])
-
-  const selectedRecoveryHistory = useMemo(() => {
-    if (!selectedInvoice) {
-      return []
-    }
-
-    return (recoveryActionsByInvoice.get(selectedInvoice.id) || [])
-      .slice()
-      .sort(
-        (first, second) =>
-          new Date(second.created_at).getTime() -
-          new Date(first.created_at).getTime()
-      )
-  }, [recoveryActionsByInvoice, selectedInvoice])
-
-  const selectedRecoveryStage =
-    selectedRecoveryHistory[0]?.stage ||
-    (selectedInvoice &&
-    (selectedInvoice.status === "Overdue" ||
-      selectedInvoice.status === "Follow-up Sent" ||
-      selectedInvoice.status === "Payment Plan" ||
-      selectedInvoice.status === "Escalated" ||
-      selectedInvoice.status === "Paid" ||
-      isOverdueInvoice(selectedInvoice))
-      ? getDefaultRecoveryStage(selectedInvoice)
-      : null)
-
-  const selectedReminders = selectedInvoice
-    ? remindersByInvoice.get(selectedInvoice.id) || []
-    : []
-
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
     statusFilter !== "all" ||
     clientFilter !== "all"
-  const followUpMessage = followUpInvoice
-    ? generateFollowUpMessage(followUpInvoice, followUpTone)
-    : ""
-  const detailFollowUpMessage = selectedInvoice
-    ? generateFollowUpMessage(selectedInvoice, detailFollowUpTone)
-    : ""
 
   function resetFilters() {
     setSearchQuery("")
@@ -588,13 +715,6 @@ export default function InvoicesPage() {
     value: InvoiceForm[Field]
   ) {
     setForm((current) => ({ ...current, [field]: value }))
-  }
-
-  function updateDetailForm<Field extends keyof InvoiceForm>(
-    field: Field,
-    value: InvoiceForm[Field]
-  ) {
-    setDetailForm((current) => ({ ...current, [field]: value }))
   }
 
   function updateReminderForm<Field extends keyof ReminderFormValues>(
@@ -616,23 +736,9 @@ export default function InvoicesPage() {
     setDialogOpen(true)
   }
 
-  function openInvoiceDetails(invoice: InvoiceRow) {
-    setSelectedInvoiceId(invoice.id)
-    setDetailForm(formFromInvoice(invoice))
-    setDetailFollowUpTone("friendly")
-    setDetailCopyState("idle")
-    setDetailSheetOpen(true)
-  }
-
   function openAddReminder(invoice?: InvoiceRow) {
     setReminderForm(getInitialReminderForm(invoice?.id || ""))
     setReminderDialogOpen(true)
-  }
-
-  function openFollowUp(invoice: InvoiceRow) {
-    setFollowUpInvoice(invoice)
-    setFollowUpTone("friendly")
-    setCopyState("idle")
   }
 
   function closeInvoiceDialog(open: boolean) {
@@ -649,16 +755,6 @@ export default function InvoicesPage() {
 
     if (!open) {
       setReminderForm(getInitialReminderForm())
-    }
-  }
-
-  function closeDetailSheet(open: boolean) {
-    setDetailSheetOpen(open)
-
-    if (!open) {
-      setSelectedInvoiceId(null)
-      setDetailForm(initialForm)
-      setDetailCopyState("idle")
     }
   }
 
@@ -680,12 +776,21 @@ export default function InvoicesPage() {
       form.status === "Paid"
         ? editingInvoice?.paid_at || new Date().toISOString()
         : null
+    const linkedClient = form.clientId
+      ? clients.find((c) => c.id === form.clientId) ?? null
+      : null
+    const resolvedClientName = linkedClient
+      ? getClientLabel(linkedClient)
+      : nullableText(form.clientName)
+    const resolvedTrade =
+      linkedClient?.trade || inferTrade(form.clientName)
 
     if (editingInvoice) {
       const payload: InvoiceUpdate = {
         invoice_number: invoiceNumber,
-        client_name: nullableText(form.clientName),
-        trade: inferTrade(form.clientName),
+        client_id: form.clientId ?? null,
+        client_name: resolvedClientName,
+        trade: resolvedTrade,
         amount,
         issue_date: nullableDate(form.issueDate),
         due_date: nullableDate(form.dueDate),
@@ -711,13 +816,15 @@ export default function InvoicesPage() {
           )
         )
         closeInvoiceDialog(false)
+        toast.success("Invoice saved")
       }
     } else {
       const payload: InvoiceInsert = {
         user_id: userId,
         invoice_number: invoiceNumber,
-        client_name: nullableText(form.clientName),
-        trade: inferTrade(form.clientName),
+        client_id: form.clientId ?? null,
+        client_name: resolvedClientName,
+        trade: resolvedTrade,
         amount,
         issue_date: nullableDate(form.issueDate),
         due_date: nullableDate(form.dueDate),
@@ -737,61 +844,8 @@ export default function InvoicesPage() {
       } else {
         setInvoices((current) => [data, ...current])
         closeInvoiceDialog(false)
+        toast.success("Invoice added")
       }
-    }
-
-    setIsSaving(false)
-  }
-
-  async function saveInvoiceDetails(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!userId || !selectedInvoice) {
-      setErrorMessage("You must be logged in to update invoices.")
-      return
-    }
-
-    setIsSaving(true)
-    setErrorMessage(null)
-
-    const invoiceNumber =
-      detailForm.invoiceNumber.trim() ||
-      selectedInvoice.invoice_number ||
-      `INV-${Date.now().toString().slice(-6)}`
-    const amount = parseAmount(detailForm.amount)
-    const paidAt =
-      detailForm.status === "Paid"
-        ? selectedInvoice.paid_at || new Date().toISOString()
-        : null
-    const payload: InvoiceUpdate = {
-      invoice_number: invoiceNumber,
-      client_name: nullableText(detailForm.clientName),
-      trade: inferTrade(detailForm.clientName),
-      amount,
-      issue_date: nullableDate(detailForm.issueDate),
-      due_date: nullableDate(detailForm.dueDate),
-      status: detailForm.status,
-      notes: nullableText(detailForm.notes),
-      paid_at: paidAt,
-    }
-
-    const { data, error } = await supabase
-      .from("invoices")
-      .update(payload)
-      .eq("id", selectedInvoice.id)
-      .eq("user_id", userId)
-      .select()
-      .single()
-
-    if (error) {
-      setErrorMessage(error.message)
-    } else {
-      setInvoices((current) =>
-        current.map((invoice) =>
-          invoice.id === selectedInvoice.id ? data : invoice
-        )
-      )
-      setDetailForm(formFromInvoice(data))
     }
 
     setIsSaving(false)
@@ -828,13 +882,100 @@ export default function InvoicesPage() {
       setInvoices((current) =>
         current.map((invoice) => (invoice.id === invoiceId ? data : invoice))
       )
-
-      if (selectedInvoiceId === invoiceId) {
-        setDetailForm(formFromInvoice(data))
-      }
+      toast.success(`Invoice marked ${getStatusDisplayLabel(status).toLowerCase()}`)
     }
 
     setIsSaving(false)
+  }
+
+  async function prepareRecoveryDraft(invoice: InvoiceRow) {
+    if (isSaving) {
+      return
+    }
+
+    if (!userId) {
+      const message = "You must be logged in to create follow-up drafts."
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
+    const daysOverdue = getOverdueDays(invoice.due_date, invoice.status)
+    if (daysOverdue <= 0) {
+      toast.message("This invoice is not overdue yet.")
+      openEditInvoice(invoice)
+      return
+    }
+
+    setIsSaving(true)
+    setErrorMessage(null)
+
+    try {
+      const { data: existingDrafts, error: existingError } = await supabase
+        .from("recovery_drafts")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("invoice_id", invoice.id)
+        .order("created_at", { ascending: false })
+
+      if (existingError) {
+        throw existingError
+      }
+
+      const activeDraft = (existingDrafts ?? []).find(
+        (draft) => !isFinalRecoveryDraft(draft)
+      )
+
+      if (activeDraft) {
+        toast.success(
+          isWaitingRecoveryDraft(activeDraft)
+            ? "Follow-up already sent. Opening Follow-ups."
+            : "Follow-up draft ready to review."
+        )
+        router.push("/dashboard/recovery")
+        return
+      }
+
+      const payload = buildRecoveryDraftPayload(invoice, userId)
+      const { error: insertError } = await supabase
+        .from("recovery_drafts")
+        .insert(payload)
+
+      if (insertError) {
+        throw insertError
+      }
+
+      if (invoice.status === "Sent") {
+        const overdueUpdate: InvoiceUpdate = {
+          status: "Overdue",
+          paid_at: null,
+        }
+        const { data: updatedInvoice, error: invoiceError } = await supabase
+          .from("invoices")
+          .update(overdueUpdate)
+          .eq("id", invoice.id)
+          .eq("user_id", userId)
+          .select()
+          .single()
+
+        if (!invoiceError && updatedInvoice) {
+          setInvoices((current) =>
+            current.map((item) =>
+              item.id === updatedInvoice.id ? updatedInvoice : item
+            )
+          )
+        }
+      }
+
+      toast.success("Follow-up draft ready to review.")
+      router.push("/dashboard/recovery")
+    } catch (error) {
+      const message = getRecoveryDraftErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   async function createReminder(event: FormEvent<HTMLFormElement>) {
@@ -964,45 +1105,43 @@ export default function InvoicesPage() {
         current.filter((reminder) => reminder.invoice_id !== invoiceId)
       )
 
-      if (selectedInvoiceId === invoiceId) {
-        closeDetailSheet(false)
-      }
     }
 
     setIsSaving(false)
   }
 
-  async function copyFollowUpMessage() {
-    if (!followUpMessage) {
-      return
-    }
+  async function createClientFromCombobox(
+    company: string,
+    name: string,
+    email: string
+  ): Promise<ClientRow | null> {
+    if (!userId) return null
 
-    try {
-      await navigator.clipboard.writeText(followUpMessage)
-      setCopyState("copied")
-    } catch {
-      setCopyState("failed")
-    }
-  }
+    const { data, error } = await supabase
+      .from("clients")
+      .insert({
+        user_id: userId,
+        name: name || company,
+        company,
+        email: email || null,
+        payment_reliability: "New client" as const,
+      })
+      .select()
+      .single()
 
-  async function copyDetailFollowUpMessage() {
-    if (!detailFollowUpMessage) {
-      return
-    }
+    if (error || !data) return null
 
-    try {
-      await navigator.clipboard.writeText(detailFollowUpMessage)
-      setDetailCopyState("copied")
-    } catch {
-      setDetailCopyState("failed")
-    }
+    setClients((current) =>
+      [...current, data].sort((a, b) => a.company.localeCompare(b.company))
+    )
+    return data
   }
 
   return (
     <>
       <PageHeader
         title="Invoices"
-        description="Find unpaid invoices and open the details when you need notes, reminders, or follow-up text."
+        description="Find unpaid invoices, create recovery drafts, and keep payment follow-up connected."
       >
         <Dialog open={dialogOpen} onOpenChange={closeInvoiceDialog}>
           <Button onClick={openAddInvoice}>
@@ -1024,14 +1163,15 @@ export default function InvoicesPage() {
             <form className="grid gap-4" onSubmit={handleAddOrUpdateInvoice}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="client-name">Client name</Label>
-                  <Input
-                    id="client-name"
-                    value={form.clientName}
-                    onChange={(event) =>
-                      updateForm("clientName", event.target.value)
-                    }
-                    placeholder="Greenline HOA"
+                  <Label>Client</Label>
+                  <ClientCombobox
+                    clients={clients}
+                    value={form.clientId}
+                    onChange={(clientId, clientName) => {
+                      setForm((f) => ({ ...f, clientId, clientName }))
+                    }}
+                    onCreateClient={createClientFromCombobox}
+                    disabled={isSaving}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -1141,413 +1281,6 @@ export default function InvoicesPage() {
         isSaving={isSaving}
       />
 
-      <Sheet open={detailSheetOpen} onOpenChange={closeDetailSheet}>
-        <SheetContent
-          side="right"
-          className="flex h-full w-full max-w-full flex-col overflow-y-auto sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
-        >
-          {selectedInvoice ? (
-            <>
-              <SheetHeader className="border-b border-border px-4 py-4 sm:px-6">
-                <div className="flex flex-col gap-3 pr-8 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <SheetTitle className="text-xl">
-                      {selectedInvoice.invoice_number}
-                    </SheetTitle>
-                    <SheetDescription className="break-words">
-                      {selectedInvoice.client_name || "No client"} -{" "}
-                      {moneyFormatter.format(selectedInvoice.amount)}
-                    </SheetDescription>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge
-                      variant={statusTone[selectedInvoice.status]}
-                      className="max-w-full"
-                    >
-                      {selectedInvoice.status}
-                    </Badge>
-                    {selectedRecoveryStage ? (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "max-w-full",
-                          stageTone[selectedRecoveryStage]
-                        )}
-                      >
-                        {stageLabels[selectedRecoveryStage]}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-                {selectedInvoice.status !== "Paid" ? (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={isSaving}
-                      onClick={() =>
-                        void updateInvoiceStatus(selectedInvoice.id, "Paid")
-                      }
-                    >
-                      <CheckCircle2 className="size-3.5" />
-                      Mark paid
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openAddReminder(selectedInvoice)}
-                    >
-                      <Bell className="size-3.5" />
-                      Add reminder
-                    </Button>
-                  </div>
-                ) : null}
-              </SheetHeader>
-
-              <div className="grid gap-5 p-4 sm:p-6">
-                <section className="grid gap-3 rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Invoice details</h3>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Issued</div>
-                      <div className="mt-1 text-sm font-medium">
-                        {formatDate(selectedInvoice.issue_date)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Due</div>
-                      <div className="mt-1 text-sm font-medium">
-                        {formatDate(selectedInvoice.due_date)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">
-                        Days overdue
-                      </div>
-                      <div className="mt-1 text-sm font-medium">
-                        {getOverdueDays(
-                          selectedInvoice.due_date,
-                          selectedInvoice.status
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Trade</div>
-                      <div className="mt-1 text-sm font-medium">
-                        {selectedInvoice.trade || "Not set"}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="grid gap-3 rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Client details</h3>
-                  </div>
-                  {selectedClient ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          Company
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {selectedClient.company}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          Contact
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {selectedClient.name}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Email</div>
-                        <div className="mt-1 break-all text-sm font-medium">
-                          {selectedClient.email || "Not set"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Phone</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {selectedClient.phone || "Not set"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          Payment reliability
-                        </div>
-                        <div className="mt-1">
-                          <Badge variant="outline">
-                            {selectedClient.payment_reliability}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          Last contacted
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {formatDate(selectedClient.last_contacted_date)}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      No matching client record was found. The invoice still
-                      tracks the client name shown above.
-                    </div>
-                  )}
-                </section>
-
-                <form
-                  className="grid gap-4 rounded-lg border border-border p-4"
-                  onSubmit={saveInvoiceDetails}
-                >
-                  <div className="flex items-center gap-2">
-                    <Pencil className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Edit invoice</h3>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="detail-client-name">Client name</Label>
-                      <Input
-                        id="detail-client-name"
-                        value={detailForm.clientName}
-                        onChange={(event) =>
-                          updateDetailForm("clientName", event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="detail-invoice-number">
-                        Invoice number
-                      </Label>
-                      <Input
-                        id="detail-invoice-number"
-                        value={detailForm.invoiceNumber}
-                        onChange={(event) =>
-                          updateDetailForm("invoiceNumber", event.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor="detail-amount">Amount</Label>
-                      <Input
-                        id="detail-amount"
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={detailForm.amount}
-                        onChange={(event) =>
-                          updateDetailForm("amount", event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="detail-issue-date">Issue date</Label>
-                      <Input
-                        id="detail-issue-date"
-                        type="date"
-                        value={detailForm.issueDate}
-                        onChange={(event) =>
-                          updateDetailForm("issueDate", event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="detail-due-date">Due date</Label>
-                      <Input
-                        id="detail-due-date"
-                        type="date"
-                        value={detailForm.dueDate}
-                        onChange={(event) =>
-                          updateDetailForm("dueDate", event.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="detail-status">Status</Label>
-                    <SelectField
-                      id="detail-status"
-                      value={detailForm.status}
-                      onChange={(value) =>
-                        updateDetailForm("status", value as InvoiceStatus)
-                      }
-                    >
-                      {invoiceStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </SelectField>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="detail-notes">Notes</Label>
-                    <textarea
-                      id="detail-notes"
-                      value={detailForm.notes}
-                      onChange={(event) =>
-                        updateDetailForm("notes", event.target.value)
-                      }
-                      className="min-h-28 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      disabled={isSaving}
-                      className="w-full sm:w-auto"
-                    >
-                      {isSaving ? "Saving..." : "Save changes"}
-                    </Button>
-                  </div>
-                </form>
-
-                <section className="grid gap-3 rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-2">
-                    <Clock3 className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Follow-up history</h3>
-                  </div>
-                  {selectedRecoveryHistory.length > 0 ? (
-                    <div className="grid gap-3">
-                      {selectedRecoveryHistory.map((action) => (
-                        <div
-                          key={action.id}
-                          className="rounded-lg border border-border bg-muted/20 p-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="min-w-0 break-words font-medium">
-                              {action.action_type}
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={stageTone[action.stage]}
-                            >
-                              {stageLabels[action.stage]}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 text-sm text-muted-foreground">
-                            {new Date(action.created_at).toLocaleString()}
-                          </div>
-                          {action.recommended_next_action ? (
-                            <p className="mt-2 text-sm leading-5 text-muted-foreground">
-                              {action.recommended_next_action}
-                            </p>
-                          ) : null}
-                          {action.notes ? (
-                            <p className="mt-2 text-sm leading-5">
-                              {action.notes}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                      No follow-ups have been logged for this invoice.
-                    </div>
-                  )}
-                </section>
-
-                <section className="grid gap-3 rounded-lg border border-border p-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="size-4 text-muted-foreground" />
-                      <h3 className="text-sm font-semibold">Reminders</h3>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                      onClick={() => openAddReminder(selectedInvoice)}
-                    >
-                      <Bell className="size-3.5" />
-                      Add reminder
-                    </Button>
-                  </div>
-                  <ReminderList
-                    reminders={selectedReminders}
-                    invoiceById={invoiceById}
-                    emptyText="No reminders yet. Add one to keep this invoice on your radar."
-                    showInvoice={false}
-                    isSaving={isSaving}
-                    onMarkComplete={(reminder) =>
-                      void markReminderComplete(reminder)
-                    }
-                    onDelete={(reminder) => void deleteReminder(reminder)}
-                  />
-                </section>
-
-                <section className="grid gap-4 rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-2">
-                    <Send className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">
-                      Follow-up message
-                    </h3>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="detail-follow-up-tone">Tone</Label>
-                    <SelectField
-                      id="detail-follow-up-tone"
-                      value={detailFollowUpTone}
-                      onChange={(value) => {
-                        setDetailFollowUpTone(value as FollowUpTone)
-                        setDetailCopyState("idle")
-                      }}
-                    >
-                      {followUpTones.map((tone) => (
-                        <option key={tone} value={tone}>
-                          {tone}
-                        </option>
-                      ))}
-                    </SelectField>
-                  </div>
-                  <textarea
-                    readOnly
-                    value={detailFollowUpMessage}
-                    className="min-h-36 w-full resize-y rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm leading-6 shadow-xs outline-none"
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      className="w-full sm:w-auto"
-                      onClick={copyDetailFollowUpMessage}
-                    >
-                      <ClipboardCopy className="size-4" />
-                      {detailCopyState === "copied"
-                        ? "Copied"
-                        : detailCopyState === "failed"
-                          ? "Copy failed"
-                          : "Copy message"}
-                    </Button>
-                  </div>
-                </section>
-              </div>
-            </>
-          ) : (
-            <div className="p-6 text-sm text-muted-foreground">
-              Select an invoice to view details.
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader className="gap-4">
@@ -1555,12 +1288,14 @@ export default function InvoicesPage() {
               <div>
                 <CardTitle>Invoice worklist</CardTitle>
                 <CardDescription>
-                  Compact rows for scanning 20 or more invoices.
+                  Review invoices and prepare follow-up drafts for Follow-ups.
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="w-fit">
-                {filteredInvoices.length} of {invoices.length} invoices
-              </Badge>
+              {hasActiveFilters ? (
+                <Badge variant="outline" className="w-fit">
+                  {filteredInvoices.length} of {invoices.length} invoices
+                </Badge>
+              ) : null}
             </div>
 
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_220px_220px_auto]">
@@ -1593,9 +1328,9 @@ export default function InvoicesPage() {
                 aria-label="Filter by client"
               >
                 <option value="all">All clients</option>
-                {clientOptions.map((client) => (
-                  <option key={client} value={client}>
-                    {client}
+                {clientsWithInvoices.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {getClientLabel(client)}
                   </option>
                 ))}
               </SelectField>
@@ -1660,16 +1395,7 @@ export default function InvoicesPage() {
                     return (
                       <div key={invoice.id} className="min-w-0 px-4 py-3">
                         <div
-                          role="button"
-                          tabIndex={0}
-                          className="grid min-w-0 cursor-pointer gap-3 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 xl:grid-cols-[120px_1fr_112px_112px_120px_56px] xl:items-center"
-                          onClick={() => openInvoiceDetails(invoice)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault()
-                              openInvoiceDetails(invoice)
-                            }
-                          }}
+                          className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_112px_112px_120px_56px] xl:items-center"
                         >
                           <div className="min-w-0">
                             <div className="truncate font-medium">
@@ -1691,7 +1417,11 @@ export default function InvoicesPage() {
                             <div className="mt-1 text-xs text-muted-foreground">
                               {overdueDays > 0
                                 ? `${overdueDays} days overdue`
-                                : "Not overdue"}
+                                : isDueToday(invoice.due_date) &&
+                                    invoice.status !== "Paid" &&
+                                    invoice.status !== "Draft"
+                                  ? "Due today"
+                                  : "Not overdue"}
                             </div>
                           </div>
                           <div className="font-semibold">
@@ -1709,12 +1439,13 @@ export default function InvoicesPage() {
                                 isOverdueInvoice(invoice) ? "default" : "outline"
                               }
                               className="w-full sm:w-auto"
+                              disabled={isSaving}
                               onClick={(event) => {
                                 event.stopPropagation()
                                 if (isOverdueInvoice(invoice)) {
-                                  openFollowUp(invoice)
+                                  void prepareRecoveryDraft(invoice)
                                 } else {
-                                  openInvoiceDetails(invoice)
+                                  openEditInvoice(invoice)
                                 }
                               }}
                             >
@@ -1745,32 +1476,40 @@ export default function InvoicesPage() {
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  onSelect={() => openEditInvoice(invoice)}
+                                  onSelect={(event) => {
+                                    event.stopPropagation()
+                                    openEditInvoice(invoice)
+                                  }}
                                 >
                                   <Pencil className="size-4" />
                                   Edit invoice
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onSelect={() => openAddReminder(invoice)}
+                                  onSelect={(event) => {
+                                    event.stopPropagation()
+                                    openAddReminder(invoice)
+                                  }}
                                 >
                                   <Bell className="size-4" />
                                   Add reminder
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onSelect={() =>
-                                    void updateInvoiceStatus(
-                                      invoice.id,
-                                      "Follow-up Sent"
-                                    )
+                                  disabled={
+                                    !isOverdueInvoice(invoice) || isSaving
                                   }
+                                  onSelect={(event) => {
+                                    event.stopPropagation()
+                                    void prepareRecoveryDraft(invoice)
+                                  }}
                                 >
                                   <Send className="size-4" />
-                                  Mark follow-up sent
+                                  Generate follow-up
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onSelect={() =>
+                                  onSelect={(event) => {
+                                    event.stopPropagation()
                                     void updateInvoiceStatus(invoice.id, "Paid")
-                                  }
+                                  }}
                                 >
                                   <CalendarDays className="size-4" />
                                   Mark paid
@@ -1778,7 +1517,10 @@ export default function InvoicesPage() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   variant="destructive"
-                                  onSelect={() => void deleteInvoice(invoice.id)}
+                                  onSelect={(event) => {
+                                    event.stopPropagation()
+                                    void deleteInvoice(invoice.id)
+                                  }}
                                 >
                                   <Trash2 className="size-4" />
                                   Delete invoice
@@ -1843,98 +1585,6 @@ export default function InvoicesPage() {
         </Card>
       </div>
 
-      <Dialog
-        open={followUpInvoice !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setFollowUpInvoice(null)
-            setCopyState("idle")
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generated follow-up</DialogTitle>
-            <DialogDescription>
-              Copy this message into email or text.
-            </DialogDescription>
-          </DialogHeader>
-
-          {followUpInvoice ? (
-            <div className="grid gap-4">
-              <div className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-3">
-                <div>
-                  <div className="text-xs text-muted-foreground">Client</div>
-                  <div className="mt-1 text-sm font-medium">
-                    {followUpInvoice.client_name || "No client"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Invoice</div>
-                  <div className="mt-1 text-sm font-medium">
-                    {followUpInvoice.invoice_number}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">
-                    Days overdue
-                  </div>
-                  <div className="mt-1 text-sm font-medium">
-                    {getOverdueDays(
-                      followUpInvoice.due_date,
-                      followUpInvoice.status
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="follow-up-tone">Tone</Label>
-                <SelectField
-                  id="follow-up-tone"
-                  value={followUpTone}
-                  onChange={(value) => {
-                    setFollowUpTone(value as FollowUpTone)
-                    setCopyState("idle")
-                  }}
-                >
-                  {followUpTones.map((tone) => (
-                    <option key={tone} value={tone}>
-                      {tone}
-                    </option>
-                  ))}
-                </SelectField>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="follow-up-message">Suggested message</Label>
-                <textarea
-                  id="follow-up-message"
-                  readOnly
-                  value={followUpMessage}
-                  className="min-h-40 w-full resize-y rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm leading-6 shadow-xs outline-none"
-                />
-              </div>
-
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Close
-                  </Button>
-                </DialogClose>
-                <Button type="button" onClick={copyFollowUpMessage}>
-                  <ClipboardCopy className="size-4" />
-                  {copyState === "copied"
-                    ? "Copied"
-                    : copyState === "failed"
-                      ? "Copy failed"
-                      : "Copy message"}
-                </Button>
-              </DialogFooter>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

@@ -14,10 +14,12 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock3,
+  HelpCircle,
   Mail,
   Pencil,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -39,22 +41,39 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  generateFollowUpMessage,
   getFollowUpActionText,
   getFollowUpSubtext,
   getNextReminderDate,
   getOverdueDays,
+  getOverdueStage,
   getRecoveryRecommendation,
   overdueStageToRecoveryStage,
   type RecoveryRecommendation,
 } from "@/lib/recovery-engine"
+import {
+  buildFollowUpQueue,
+  buildRecoveryQueue,
+  type EstimateFollowUpQueueItem,
+  type RecoveryQueueItem,
+} from "@/lib/recovery-queue"
 import { mockSendEmail, mockSendSms } from "@/lib/mock-sender"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
+type EstimateRow = Database["public"]["Tables"]["estimates"]["Row"]
+type EstimateUpdate = Database["public"]["Tables"]["estimates"]["Update"]
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type InvoiceUpdate = Database["public"]["Tables"]["invoices"]["Update"]
 type RecoveryActionRow =
@@ -66,6 +85,7 @@ type RecoveryDraftRow =
 type RecoveryDraftUpdate =
   Database["public"]["Tables"]["recovery_drafts"]["Update"]
 type ReminderInsert = Database["public"]["Tables"]["reminders"]["Insert"]
+type EstimateStatus = Database["public"]["Enums"]["estimate_status"]
 type InvoiceStatus = Database["public"]["Enums"]["invoice_status"]
 type RecoveryStage = Database["public"]["Enums"]["recovery_stage"]
 type ContactMethod = Database["public"]["Enums"]["contact_method"]
@@ -148,6 +168,12 @@ function getTomorrowInputDate() {
   return formatInputDate(tomorrow)
 }
 
+function getFutureInputDate(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return formatInputDate(date)
+}
+
 function toReminderTimestamp(date: string) {
   return new Date(`${date}T09:00:00`).toISOString()
 }
@@ -205,19 +231,6 @@ function getStatusLabel(item: RecoveryItem): string {
   return "Needs approval"
 }
 
-function uniqueInvoiceAmount(items: RecoveryItem[]) {
-  const seen = new Set<string>()
-
-  return items.reduce((sum, item) => {
-    if (seen.has(item.invoice.id)) {
-      return sum
-    }
-
-    seen.add(item.invoice.id)
-    return sum + item.amount
-  }, 0)
-}
-
 function uniqueInvoiceCount(items: RecoveryItem[]) {
   return new Set(items.map((item) => item.invoice.id)).size
 }
@@ -236,14 +249,16 @@ function FeaturedCard({
   onSaveMessage,
   onApproveAndSend,
   onRemindLater,
-  onResolved,
+  onAlreadyFollowedUp,
+  onHasPaid,
 }: {
   item: RecoveryItem
   isSaving: boolean
   onSaveMessage: (item: RecoveryItem, body: string) => Promise<boolean>
   onApproveAndSend: (item: RecoveryItem, body: string) => Promise<void>
   onRemindLater: (item: RecoveryItem) => Promise<void>
-  onResolved: (item: RecoveryItem) => Promise<void>
+  onAlreadyFollowedUp: (item: RecoveryItem) => void
+  onHasPaid: (item: RecoveryItem) => void
 }) {
   const [isEditingMessage, setIsEditingMessage] = useState(false)
   const [editBody, setEditBody] = useState(item.draftBody)
@@ -455,10 +470,20 @@ function FeaturedCard({
               variant="ghost"
               className="gap-2 text-muted-foreground hover:text-foreground"
               disabled={isSaving}
-              onClick={() => void onResolved(item)}
+              onClick={() => onAlreadyFollowedUp(item)}
+            >
+              <HelpCircle className="size-4" />
+              Already followed up
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="gap-2 text-muted-foreground hover:text-foreground"
+              disabled={isSaving}
+              onClick={() => onHasPaid(item)}
             >
               <CheckCircle2 className="size-4" />
-              Mark as resolved
+              Has {item.clientName} paid?
             </Button>
           </div>
         </div>
@@ -470,6 +495,7 @@ function FeaturedCard({
 export default function RecoveryPage() {
   const supabase = useMemo(() => createClient(), [])
   const [clients, setClients] = useState<ClientRow[]>([])
+  const [estimates, setEstimates] = useState<EstimateRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [actions, setActions] = useState<RecoveryActionRow[]>([])
   const [drafts, setDrafts] = useState<RecoveryDraftRow[]>([])
@@ -482,6 +508,12 @@ export default function RecoveryPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null)
+  const [followedUpDialog, setFollowedUpDialog] = useState<RecoveryItem | null>(null)
+  const [hasPaidDialog, setHasPaidDialog] = useState<RecoveryItem | null>(null)
+  const [estimateDialog, setEstimateDialog] =
+    useState<EstimateFollowUpQueueItem | null>(null)
+  const [estimateDrafts, setEstimateDrafts] = useState<Record<string, string>>({})
   const featuredRef = useRef<HTMLElement>(null)
 
   const loadRecovery = useCallback(async () => {
@@ -496,6 +528,7 @@ export default function RecoveryPage() {
     if (userError || !user) {
       setErrorMessage(userError?.message || "You must be logged in.")
       setClients([])
+      setEstimates([])
       setInvoices([])
       setActions([])
       setDrafts([])
@@ -506,13 +539,18 @@ export default function RecoveryPage() {
 
     setUserId(user.id)
 
-    const [clientResult, invoiceResult, actionResult, draftResult] =
+    const [clientResult, estimateResult, invoiceResult, actionResult, draftResult] =
       await Promise.all([
         supabase
           .from("clients")
           .select("*")
           .eq("user_id", user.id)
           .order("company", { ascending: true }),
+        supabase
+          .from("estimates")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("follow_up_date", { ascending: true, nullsFirst: false }),
         supabase
           .from("invoices")
           .select("*")
@@ -532,18 +570,25 @@ export default function RecoveryPage() {
 
     const firstError =
       clientResult.error ||
+      estimateResult.error ||
       invoiceResult.error ||
       actionResult.error ||
       draftResult.error
 
     if (firstError) {
-      setErrorMessage(firstError.message)
+      setErrorMessage(
+        firstError.message.includes("estimates")
+          ? "The estimates table is not available yet. Apply supabase/apply_estimates.sql in Supabase, then refresh."
+          : firstError.message
+      )
       setClients([])
+      setEstimates([])
       setInvoices([])
       setActions([])
       setDrafts([])
     } else {
       setClients(clientResult.data ?? [])
+      setEstimates(estimateResult.data ?? [])
       setInvoices(invoiceResult.data ?? [])
       setActions(actionResult.data ?? [])
       setDrafts(draftResult.data ?? [])
@@ -719,12 +764,37 @@ export default function RecoveryPage() {
     }
   }, [approvalItems.length, drafts, invoiceById, waitingItems.length])
 
-  const totals = useMemo(
-    () => ({
-      activeCount: uniqueInvoiceCount(recoveryItems),
-      activeAmount: uniqueInvoiceAmount(recoveryItems),
-    }),
-    [recoveryItems]
+  // Overdue invoices with no active draft — need a follow-up generated
+  const overdueNoDraftItems = useMemo<RecoveryQueueItem[]>(() => {
+    const queue = buildRecoveryQueue({
+      invoices,
+      clients,
+      recoveryDrafts: drafts,
+    })
+    return queue.filter(
+      (item) => item.state === "needs_followup" && item.draft === null
+    )
+  }, [invoices, clients, drafts])
+
+  const followUpQueue = useMemo(
+    () =>
+      buildFollowUpQueue({
+        estimates,
+        invoices,
+        clients,
+        recoveryDrafts: drafts,
+        reminders: [],
+      }),
+    [clients, drafts, estimates, invoices]
+  )
+
+  const estimateFollowUpItems = useMemo(
+    () =>
+      followUpQueue.filter(
+        (item): item is EstimateFollowUpQueueItem =>
+          item.kind === "estimate"
+      ),
+    [followUpQueue]
   )
 
   function updateReminderForm<Field extends keyof ReminderFormValues>(
@@ -954,6 +1024,7 @@ export default function RecoveryPage() {
     const saved = await createReminderForItem(item, reminderDate)
 
     if (saved) {
+      setFollowedUpDialog(null)
       toast.success("Reminder scheduled for tomorrow")
     }
 
@@ -1005,7 +1076,7 @@ export default function RecoveryPage() {
         contact_method: "Email" as ContactMethod,
         recommended_next_action: "Invoice is paid. No further action needed.",
         completed_at: now,
-        notes: "Marked paid from the recovery queue.",
+        notes: "Marked paid from the follow-up queue.",
       }
       const { error: actionError } = await supabase
         .from("recovery_actions")
@@ -1014,6 +1085,7 @@ export default function RecoveryPage() {
       if (actionError) throw actionError
 
       await loadRecovery()
+      setHasPaidDialog(null)
       toast.success("Invoice marked resolved")
     } catch (error) {
       const message =
@@ -1025,13 +1097,209 @@ export default function RecoveryPage() {
     }
   }
 
-  const hasActiveItems = recoveryItems.length > 0
+  async function generateDraftForInvoice(queueItem: RecoveryQueueItem) {
+    if (!userId) {
+      toast.error("You must be logged in")
+      return
+    }
+
+    setGeneratingFor(queueItem.invoiceId)
+
+    try {
+      const daysOverdue = queueItem.daysOverdue
+      const overdueStage = getOverdueStage(daysOverdue)
+      const messageBody = generateFollowUpMessage({
+        clientName: queueItem.clientName,
+        invoiceNumber: queueItem.invoiceNumber,
+        amount: queueItem.amount,
+        daysOverdue,
+        overdueStage,
+      })
+
+      const { error } = await supabase.from("recovery_drafts").insert({
+        user_id: userId,
+        client_id: queueItem.clientId,
+        invoice_id: queueItem.invoiceId,
+        channel: "email",
+        message_body: messageBody,
+        status: "needs_approval",
+        recommended_action: `${overdueStage === "final_notice" ? "Send final notice." : "Send a payment reminder."}`,
+        days_overdue: daysOverdue,
+      })
+
+      if (error) throw error
+
+      await loadRecovery()
+      toast.success("Follow-up draft created — ready to review")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not create draft"
+      toast.error(msg)
+    } finally {
+      setGeneratingFor(null)
+    }
+  }
+
+  async function markInvoiceStatus(
+    item: RecoveryItem,
+    status: InvoiceStatus,
+    resolveDraft = false
+  ) {
+    if (!userId) return
+
+    setIsSaving(true)
+    try {
+      const now = new Date().toISOString()
+
+      if (resolveDraft) {
+        await supabase
+          .from("recovery_drafts")
+          .update({ status: "resolved", resolved_at: now } satisfies RecoveryDraftUpdate)
+          .eq("id", item.draft.id)
+          .eq("user_id", userId)
+      }
+
+      const invoiceUpdate: InvoiceUpdate = {
+        status,
+        paid_at: status === "Paid" ? now : null,
+      }
+      const { error } = await supabase
+        .from("invoices")
+        .update(invoiceUpdate)
+        .eq("id", item.invoice.id)
+        .eq("user_id", userId)
+
+      if (error) throw error
+
+      await loadRecovery()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not update invoice"
+      toast.error(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function markDraftWaiting(item: RecoveryItem) {
+    if (!userId) return
+
+    setIsSaving(true)
+    try {
+      await supabase
+        .from("recovery_drafts")
+        .update({ status: "waiting_on_customer" } satisfies RecoveryDraftUpdate)
+        .eq("id", item.draft.id)
+        .eq("user_id", userId)
+
+      await supabase
+        .from("invoices")
+        .update({ status: "Payment Plan" } satisfies InvoiceUpdate)
+        .eq("id", item.invoice.id)
+        .eq("user_id", userId)
+
+      await loadRecovery()
+      setFollowedUpDialog(null)
+      setHasPaidDialog(null)
+      toast.success("Marked as payment promised")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not update"
+      toast.error(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function markDisputed(item: RecoveryItem) {
+    if (!userId) return
+
+    setIsSaving(true)
+    try {
+      await supabase
+        .from("invoices")
+        .update({ status: "Escalated" } satisfies InvoiceUpdate)
+        .eq("id", item.invoice.id)
+        .eq("user_id", userId)
+
+      await loadRecovery()
+      setHasPaidDialog(null)
+      toast.success("Invoice marked as disputed")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not update"
+      toast.error(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function updateEstimateOutcome(
+    item: EstimateFollowUpQueueItem,
+    status: EstimateStatus,
+    followUpDate: string | null,
+    successMessage: string
+  ) {
+    if (!userId) {
+      toast.error("You must be logged in")
+      return
+    }
+
+    setIsSaving(true)
+    setErrorMessage(null)
+
+    try {
+      const currentMessage = estimateDrafts[item.estimateId] ?? item.message
+      const payload: EstimateUpdate = {
+        status,
+        follow_up_date: followUpDate,
+        notes: [
+          item.estimate.notes,
+          `Follow-up note: ${currentMessage}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      }
+
+      const { data, error } = await supabase
+        .from("estimates")
+        .update(payload)
+        .eq("id", item.estimateId)
+        .eq("user_id", userId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setEstimates((current) =>
+        current.map((estimate) =>
+          estimate.id === data.id ? data : estimate
+        )
+      )
+      setEstimateDialog(null)
+      toast.success(successMessage)
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Could not update estimate"
+      setErrorMessage(msg)
+      toast.error(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const hasActiveItems =
+    estimateFollowUpItems.length > 0 ||
+    recoveryItems.length > 0 ||
+    overdueNoDraftItems.length > 0
+  const activeFollowUpCount =
+    estimateFollowUpItems.length +
+    uniqueInvoiceCount(recoveryItems) +
+    overdueNoDraftItems.length
+  const invoiceFollowUpCount =
+    uniqueInvoiceCount(recoveryItems) + overdueNoDraftItems.length
 
   return (
     <>
       <PageHeader
-        title="Money to Recover"
-        description="Review overdue invoices, approve follow-up messages, and track what's waiting on payment."
+        title="Follow-ups"
+        description="Review estimate follow-ups and invoice payment reminders in one worklist."
       >
         <Button
           type="button"
@@ -1058,7 +1326,7 @@ export default function RecoveryPage() {
         open={reminderDialogOpen}
         onOpenChange={closeReminderDialog}
         title="Create reminder"
-        description="Add a reminder connected to an invoice."
+        description="Add a payment reminder connected to an invoice."
         form={reminderForm}
         onFormChange={updateReminderForm}
         onSubmit={submitReminderDialog}
@@ -1070,7 +1338,7 @@ export default function RecoveryPage() {
         {errorMessage ? (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-5">
             <div className="font-medium text-destructive">
-              Couldn't load your recovery queue
+              Couldn't load your follow-up queue
             </div>
             <p className="mt-1 text-sm leading-6 text-destructive/80">
               {errorMessage}
@@ -1097,9 +1365,14 @@ export default function RecoveryPage() {
                     and quiet customers will appear here automatically.
                   </p>
                   <div className="mt-6 flex justify-center">
-                    <Button asChild>
-                      <a href="/dashboard/invoices">Review invoices</a>
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button asChild>
+                        <a href="/dashboard/estimates">Review estimates</a>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <a href="/dashboard/invoices">Review invoices</a>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1113,16 +1386,18 @@ export default function RecoveryPage() {
                     <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-3">
                         <p className="text-sm font-semibold text-green-700">
-                          Waiting to recover
+                          Follow-ups due
                         </p>
                         <div>
                           <div className="text-4xl font-bold tabular-nums sm:text-5xl">
-                            {moneyFormatter.format(totals.activeAmount)}
+                            {activeFollowUpCount}
                           </div>
                           <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
-                            {totals.activeCount === 1
-                              ? "1 unpaid invoice in your recovery queue."
-                              : `${totals.activeCount} unpaid invoices in your recovery queue.`}
+                            {estimateFollowUpItems.length} estimate follow-up
+                            {estimateFollowUpItems.length === 1 ? "" : "s"} and{" "}
+                            {invoiceFollowUpCount} invoice follow-up
+                            {invoiceFollowUpCount === 1 ? "" : "s"} need
+                            attention.
                           </p>
                         </div>
                       </div>
@@ -1186,6 +1461,125 @@ export default function RecoveryPage() {
                   </Card>
                 </div>
 
+                {estimateFollowUpItems.length > 0 ? (
+                  <section
+                    className="animate-[fade-slide-up_0.45s_ease_both] motion-reduce:animate-none"
+                    style={{ animationDelay: "140ms" }}
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-base font-semibold">
+                        Estimate follow-ups
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        Ask if they want to move forward.
+                      </p>
+                    </div>
+                    <div className="grid gap-3">
+                      {estimateFollowUpItems.map((item) => {
+                        const currentMessage =
+                          estimateDrafts[item.estimateId] ?? item.message
+
+                        return (
+                          <Card key={item.id}>
+                            <CardContent className="grid gap-4 p-4">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <Badge
+                                    variant="outline"
+                                    className="mb-2 border-green-200 bg-green-50 text-green-800"
+                                  >
+                                    Estimate
+                                  </Badge>
+                                  <div className="text-base font-semibold">
+                                    {item.clientName}
+                                  </div>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                                    {item.explanation}
+                                  </p>
+                                </div>
+                                <div className="shrink-0 sm:text-right">
+                                  <div className="font-semibold">
+                                    {moneyFormatter.format(item.amount)}
+                                  </div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    {item.followUpDate
+                                      ? `Follow up ${new Date(
+                                          item.followUpDate + "T00:00:00"
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                        })}`
+                                      : `Sent ${item.daysSinceSent} day${
+                                          item.daysSinceSent === 1 ? "" : "s"
+                                        } ago`}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid gap-2">
+                                <div className="text-sm font-medium">
+                                  Message draft
+                                </div>
+                                <Textarea
+                                  value={currentMessage}
+                                  onChange={(event) =>
+                                    setEstimateDrafts((current) => ({
+                                      ...current,
+                                      [item.estimateId]: event.target.value,
+                                    }))
+                                  }
+                                  className="min-h-24 text-sm leading-6"
+                                  disabled={isSaving}
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  className="gap-2 bg-green-700 text-white hover:bg-green-800"
+                                  disabled={isSaving}
+                                  onClick={() => setEstimateDialog(item)}
+                                >
+                                  <CheckCircle2 className="size-4" />
+                                  Have you followed up?
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  disabled={isSaving}
+                                  onClick={() =>
+                                    void updateEstimateOutcome(
+                                      item,
+                                      "Won",
+                                      null,
+                                      "Estimate marked won"
+                                    )
+                                  }
+                                >
+                                  Mark won
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  className="text-muted-foreground"
+                                  disabled={isSaving}
+                                  onClick={() =>
+                                    void updateEstimateOutcome(
+                                      item,
+                                      "Lost",
+                                      null,
+                                      "Estimate marked lost"
+                                    )
+                                  }
+                                >
+                                  Mark lost
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+
                 {featuredItem ? (
                   <section
                     ref={featuredRef}
@@ -1207,10 +1601,11 @@ export default function RecoveryPage() {
                       onSaveMessage={saveDraftMessage}
                       onApproveAndSend={approveAndSend}
                       onRemindLater={remindLater}
-                      onResolved={markResolved}
+                      onAlreadyFollowedUp={setFollowedUpDialog}
+                      onHasPaid={setHasPaidDialog}
                     />
                   </section>
-                ) : (
+                ) : estimateFollowUpItems.length === 0 ? (
                   <div
                     className="animate-[fade-slide-up_0.45s_ease_both] rounded-xl border border-dashed border-green-200 bg-green-50/50 p-6 text-center motion-reduce:animate-none"
                     style={{ animationDelay: "160ms" }}
@@ -1223,7 +1618,7 @@ export default function RecoveryPage() {
                       responses.
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {queueNeedsApproval.length > 0 ? (
                   <section
@@ -1279,6 +1674,60 @@ export default function RecoveryPage() {
                               }}
                             >
                               Review
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                {overdueNoDraftItems.length > 0 ? (
+                  <section
+                    className="animate-[fade-slide-up_0.45s_ease_both] motion-reduce:animate-none"
+                    style={{ animationDelay: "280ms" }}
+                  >
+                    <h2 className="mb-3 text-base font-semibold">
+                      Invoices needing follow-up
+                    </h2>
+                    <div className="space-y-3">
+                      {overdueNoDraftItems.map((item) => (
+                        <div
+                          key={item.invoiceId}
+                          className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4 sm:flex-row sm:items-center"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium">
+                              {item.clientName}
+                            </div>
+                            <div className="mt-0.5 text-sm text-muted-foreground">
+                              {item.invoiceNumber}
+                              {item.daysOverdue > 0
+                                ? ` - ${item.daysOverdue} day${
+                                    item.daysOverdue === 1 ? "" : "s"
+                                  } overdue`
+                                : " - due today"}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-4 sm:contents">
+                            <div className="shrink-0 sm:text-right">
+                              <div className="font-semibold">
+                                {moneyFormatter.format(item.amount)}
+                              </div>
+                              <Badge variant="warning" className="mt-1">
+                                Payment follow-up
+                              </Badge>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="shrink-0"
+                              disabled={generatingFor === item.invoiceId}
+                              onClick={() => void generateDraftForInvoice(item)}
+                            >
+                              {generatingFor === item.invoiceId
+                                ? "Generating..."
+                                : "Generate message"}
                             </Button>
                           </div>
                         </div>
@@ -1351,6 +1800,179 @@ export default function RecoveryPage() {
           </div>
         </ContentReveal>
       </div>
+
+      <Dialog
+        open={estimateDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setEstimateDialog(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Have you followed up with{" "}
+              {estimateDialog?.clientName ?? "this client"}?
+            </DialogTitle>
+            <DialogDescription>
+              Log what happened so the next follow-up date stays accurate.
+            </DialogDescription>
+          </DialogHeader>
+          {estimateDialog ? (
+            <div className="grid gap-2">
+              <Button
+                disabled={isSaving}
+                onClick={() =>
+                  void updateEstimateOutcome(
+                    estimateDialog,
+                    "Won",
+                    null,
+                    "Estimate marked won"
+                  )
+                }
+              >
+                They want to move forward
+              </Button>
+              <Button
+                variant="outline"
+                disabled={isSaving}
+                onClick={() =>
+                  void updateEstimateOutcome(
+                    estimateDialog,
+                    "Interested",
+                    getFutureInputDate(7),
+                    "Follow-up scheduled for next week"
+                  )
+                }
+              >
+                They need more time
+              </Button>
+              <Button
+                variant="outline"
+                disabled={isSaving}
+                onClick={() =>
+                  void updateEstimateOutcome(
+                    estimateDialog,
+                    "Follow-up Needed",
+                    getFutureInputDate(2),
+                    "Another estimate follow-up scheduled"
+                  )
+                }
+              >
+                No response
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-muted-foreground"
+                disabled={isSaving}
+                onClick={() =>
+                  void updateEstimateOutcome(
+                    estimateDialog,
+                    "Lost",
+                    null,
+                    "Estimate marked lost"
+                  )
+                }
+              >
+                They said no
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={hasPaidDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setHasPaidDialog(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Has {hasPaidDialog?.clientName ?? "this client"} paid?
+            </DialogTitle>
+            <DialogDescription>
+              Update the invoice status based on what happened.
+            </DialogDescription>
+          </DialogHeader>
+          {hasPaidDialog ? (
+            <div className="grid gap-2">
+              <Button
+                disabled={isSaving}
+                onClick={() => void markResolved(hasPaidDialog)}
+              >
+                Yes, mark paid
+              </Button>
+              <Button
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => setHasPaidDialog(null)}
+              >
+                Not yet
+              </Button>
+              <Button
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => void markDraftWaiting(hasPaidDialog)}
+              >
+                They promised payment
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-muted-foreground"
+                disabled={isSaving}
+                onClick={() => void markDisputed(hasPaidDialog)}
+              >
+                There is a dispute
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={followedUpDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setFollowedUpDialog(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Already followed up with{" "}
+              {followedUpDialog?.clientName ?? "this client"}?
+            </DialogTitle>
+            <DialogDescription>
+              Log the result without sending another message.
+            </DialogDescription>
+          </DialogHeader>
+          {followedUpDialog ? (
+            <div className="grid gap-2">
+              <Button
+                disabled={isSaving}
+                onClick={() => void markDraftWaiting(followedUpDialog)}
+              >
+                They promised payment
+              </Button>
+              <Button
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => void remindLater(followedUpDialog)}
+              >
+                Remind me tomorrow
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-muted-foreground"
+                disabled={isSaving}
+                onClick={() => setFollowedUpDialog(null)}
+              >
+                No update
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
