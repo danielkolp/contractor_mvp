@@ -147,7 +147,7 @@ function HeroHeadline() {
       {lines.map((line, i) => (
         <m.span
           key={line.phrase}
-          className="block"
+          className={i === 1 ? "block md:whitespace-nowrap" : "block"}
           initial={reduced ? false : { opacity: 0, y: 28, filter: "blur(3px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{
@@ -158,7 +158,7 @@ function HeroHeadline() {
         >
           {line.prefix}
           <span className={line.tone === "green"
-                ? "bg-gradient-to-t from-green-100/90 from-[38%] to-transparent to-[56%] px-0.5 text-green-700 [-webkit-box-decoration-break:clone] [box-decoration-break:clone]"
+                ? "bg-gradient-to-t from-green-100/90 from-[38%] to-transparent to-[56%] px-0.5 font-[family-name:var(--font-caveat)] text-[1.12em] font-bold leading-none tracking-normal text-green-700 [-webkit-box-decoration-break:clone] [box-decoration-break:clone]"
                 : "bg-gradient-to-t from-amber-100/80 from-[30%] to-transparent to-[52%] px-0.5 text-zinc-900 [-webkit-box-decoration-break:clone] [box-decoration-break:clone]"
           }>
             {line.phrase}
@@ -1001,16 +1001,7 @@ export function LandingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.55, ease: EASE, delay: 0.08 }}
               >
-                <SectionBadge tone="white">
-                  <m.span
-                    style={{ display: "inline-flex" }}
-                    animate={reduced ? undefined : { rotate: [0, 14, -10, 0] }}
-                    transition={{ duration: 2.4, delay: 1.8, ease: EASE }}
-                  >
-                    <Wrench className="size-3.5" />
-                  </m.span>
-                  For estimates, invoices, and awkward follow-ups
-                </SectionBadge>
+                
               </m.div>
 
               <HeroHeadline />
