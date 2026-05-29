@@ -26,6 +26,7 @@ import { RecoveryCard } from "@/components/dashboard/recovery-card"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Button } from "@/components/ui/button"
 import { generateRecoveryItemMessage } from "@/lib/recovery-engine"
+import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import { seedDemoRecoveryItems } from "@/lib/demo-data"
 import type { Database as DB } from "@/lib/supabase/database.types"
@@ -37,12 +38,6 @@ type RecoveryItemUpdate = DB["public"]["Tables"]["recovery_items"]["Update"]
 type ClientRow = DB["public"]["Tables"]["clients"]["Row"]
 type InvoiceRow = DB["public"]["Tables"]["invoices"]["Row"]
 type EstimateRow = DB["public"]["Tables"]["estimates"]["Row"]
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -244,7 +239,7 @@ export function TodayPage() {
       toast.success(
         `Marked as sent. Check-in scheduled for ${new Date(
           `${date}T00:00:00`
-        ).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+        ).toLocaleDateString("en-CA", { month: "short", day: "numeric" })}.`
       )
     }
     setCheckBackItem(null)
@@ -943,8 +938,8 @@ function OnboardingState({
       </div>
       <p className="mt-6 text-xs text-muted-foreground">
         Already have customers?{" "}
-        <Link href="/dashboard/customers" className="font-medium text-foreground hover:underline">
-          Go to Customers
+        <Link href="/dashboard/clients" className="font-medium text-foreground hover:underline">
+          Go to Clients
         </Link>
       </p>
     </div>

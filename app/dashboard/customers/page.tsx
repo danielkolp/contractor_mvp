@@ -47,6 +47,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatPhoneNumberInput } from "@/lib/phone-format"
+import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -81,12 +82,6 @@ const initialForm: CustomerForm = {
   lastContactedDate: "",
   paymentReliability: "New client",
 }
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
 
 function formatDate(iso: string | null): string {
   if (!iso) return "Never"

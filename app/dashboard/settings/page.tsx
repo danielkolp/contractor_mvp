@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { RotateCcw, Save } from "lucide-react"
+import { Check, ClipboardCopy, RotateCcw, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -93,6 +93,60 @@ function toSettingsForm(settings: SettingsRow | null): SettingsForm {
 function nullableText(value: string) {
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function ClientRequestLinkCard({ userId }: { userId: string }) {
+  const [copied, setCopied] = useState(false)
+  const link =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/client/jobs/new?contractor=${userId}`
+      : `/client/jobs/new?contractor=${userId}`
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(link)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Client request link</CardTitle>
+        <CardDescription>
+          Share this link so clients can submit job requests directly to your workspace.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="flex items-center gap-2">
+          <code className="flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {link}
+          </code>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={() => void handleCopy()}
+          >
+            {copied ? (
+              <>
+                <Check className="size-3.5 text-green-600" />
+                Copied
+              </>
+            ) : (
+              <>
+                <ClipboardCopy className="size-3.5" />
+                Copy
+              </>
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Clients must be signed in to submit. Requests appear in your Job Requests page.
+        </p>
+      </CardContent>
+    </Card>
+  )
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -456,7 +510,7 @@ export default function SettingsPage() {
               <div className="grid gap-2">
                 <Label>Trades</Label>
                 <p className="text-xs text-muted-foreground">
-                  Select all that apply — clients discover you based on these.
+                  Select all that apply — used in your profile and client job request matching.
                 </p>
                 <TradeMultiSelect
                   value={
@@ -636,6 +690,11 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </form>
+
+        {/* ── Client request link ── */}
+        {userId && (
+          <ClientRequestLinkCard userId={userId} />
+        )}
 
         {/* ── Account ── */}
         <Card>

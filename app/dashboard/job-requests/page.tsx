@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   Plus,
   RefreshCw,
-  Wrench,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -39,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
+import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -48,13 +47,7 @@ type JobRequestUpdate = Database["public"]["Tables"]["job_requests"]["Update"]
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
 
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
-
-const dateFmt = new Intl.DateTimeFormat("en-US", {
+const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
   day: "numeric",
   year: "numeric",
@@ -117,8 +110,6 @@ function RequestsSkeleton() {
 export default function ContractorJobRequestsPage() {
   const supabase = useMemo(() => createClient(), [])
   const [requests, setRequests] = useState<JobRequest[]>([])
-  const [contractorTrades, setContractorTrades] = useState<string[]>([])
-  const [tradeFilter, setTradeFilter] = useState<"mine" | "all">("mine")
   const [userId, setUserId] = useState<string | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<JobRequest | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -142,22 +133,11 @@ export default function ContractorJobRequestsPage() {
 
     setUserId(user.id)
 
-    const [{ data: profileData }, { data, error }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("trade")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("job_requests")
-        .select("*")
-        .order("created_at", { ascending: false }),
-    ])
-
-    const trades = profileData?.trade
-      ? profileData.trade.split(",").map((t: string) => t.trim()).filter(Boolean)
-      : []
-    setContractorTrades(trades)
+    const { data, error } = await supabase
+      .from("job_requests")
+      .select("*")
+      .eq("contractor_id", user.id)
+      .order("created_at", { ascending: false })
 
     if (error) {
       setErrorMessage(error.message)
@@ -284,18 +264,7 @@ export default function ContractorJobRequestsPage() {
     setIsSaving(false)
   }
 
-  const hasTrades = contractorTrades.length > 0
-
-  const visibleRequests = useMemo(() => {
-    if (tradeFilter === "mine" && hasTrades) {
-      return requests.filter(
-        (r) => r.trade && contractorTrades.includes(r.trade)
-      )
-    }
-    return requests
-  }, [requests, tradeFilter, contractorTrades, hasTrades])
-
-  const newCount = visibleRequests.filter((r) => r.status === "new").length
+  const newCount = requests.filter((r) => r.status === "new").length
 
   return (
     <>
@@ -405,49 +374,18 @@ export default function ContractorJobRequestsPage() {
 
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
         <Card>
-          <CardHeader className="gap-4">
+          <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>Incoming Requests</CardTitle>
                 <CardDescription>
-                  Client-submitted job requests waiting for review.
+                  Client job requests submitted to your workspace.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="w-fit">
                 {newCount} new
               </Badge>
             </div>
-            {hasTrades && (
-              <div className="flex items-center gap-2">
-                <Wrench className="size-3.5 shrink-0 text-muted-foreground" />
-                <div className="flex rounded-lg border border-border bg-muted/40 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setTradeFilter("mine")}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      tradeFilter === "mine"
-                        ? "bg-background text-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    My trades ({contractorTrades.join(", ")})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTradeFilter("all")}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      tradeFilter === "all"
-                        ? "bg-background text-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    All requests
-                  </button>
-                </div>
-              </div>
-            )}
           </CardHeader>
           <CardContent>
             {errorMessage ? (
@@ -457,14 +395,9 @@ export default function ContractorJobRequestsPage() {
             ) : null}
 
             <ContentReveal isLoading={isLoading} skeleton={<RequestsSkeleton />}>
-              {visibleRequests.length > 0 ? (
+              {requests.length > 0 ? (
                 <div className="grid gap-3">
-                  {visibleRequests.map((request) => {
-                    const isMyTrade =
-                      hasTrades && request.trade
-                        ? contractorTrades.includes(request.trade)
-                        : false
-                    return (
+                  {requests.map((request) => (
                     <div
                       key={request.id}
                       className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
@@ -478,11 +411,7 @@ export default function ContractorJobRequestsPage() {
                             {request.trade && (
                               <Badge
                                 variant="outline"
-                                className={cn(
-                                  isMyTrade
-                                    ? "border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200"
-                                    : ""
-                                )}
+                                className="border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200"
                               >
                                 {request.trade}
                               </Badge>
@@ -552,8 +481,7 @@ export default function ContractorJobRequestsPage() {
                         </div>
                       </div>
                     </div>
-                  )
-                  })}
+                  ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
@@ -561,24 +489,11 @@ export default function ContractorJobRequestsPage() {
                     <ClipboardList className="size-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">
-                    {tradeFilter === "mine" && hasTrades
-                      ? `No ${contractorTrades.join(" or ")} requests yet`
-                      : "No incoming requests"}
+                    No incoming requests
                   </h3>
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                    {tradeFilter === "mine" && hasTrades
-                      ? "Clients haven't submitted requests matching your trades yet. Switch to \"All requests\" to browse others."
-                      : "Client job requests will appear here when submitted."}
+                    Share your client request link so clients can submit job requests directly to you.
                   </p>
-                  {tradeFilter === "mine" && hasTrades && (
-                    <button
-                      type="button"
-                      onClick={() => setTradeFilter("all")}
-                      className="mt-4 text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                    >
-                      Show all requests
-                    </button>
-                  )}
                 </div>
               )}
             </ContentReveal>

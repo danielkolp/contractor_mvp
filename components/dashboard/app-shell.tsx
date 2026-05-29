@@ -4,7 +4,6 @@ import { useTransition } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Bell,
   CalendarCheck2,
   ChevronDown,
   ClipboardList,
@@ -13,7 +12,6 @@ import {
   Menu,
   Receipt,
   RotateCcw,
-  ScrollText,
   Settings,
   ShieldCheck,
   UsersRound,
@@ -74,11 +72,6 @@ const navigation = [
     name: "Recovery",
     href: "/dashboard/recoveries",
     icon: RotateCcw,
-  },
-  {
-    name: "Templates",
-    href: "/dashboard/templates",
-    icon: ScrollText,
   },
   {
     name: "Settings",
@@ -224,9 +217,6 @@ function TopBar({ userEmail }: { userEmail?: string }) {
       </Link>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         <ThemeToggle />
-        <Button variant="ghost" size="icon" aria-label="Notifications">
-          <Bell className="size-4" />
-        </Button>
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { generateRecoveryItemMessage, reasonLabel } from "@/lib/recovery-engine"
+import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -46,12 +47,6 @@ type RecoveryItemInsert = Database["public"]["Tables"]["recovery_items"]["Insert
 type RecoveryItemUpdate = Database["public"]["Tables"]["recovery_items"]["Update"]
 type RecoveryItemReason = RecoveryItem["reason"]
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -71,7 +66,7 @@ function isCheckInDue(item: RecoveryItem): boolean {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—"
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-CA", {
     month: "short",
     day: "numeric",
   })
@@ -290,7 +285,7 @@ export default function RecoveriesPage() {
       toast.success(
         `Marked as sent. Check-in scheduled for ${new Date(
           `${date}T00:00:00`
-        ).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+        ).toLocaleDateString("en-CA", { month: "short", day: "numeric" })}.`
       )
     }
     setCheckBackItem(null)
@@ -623,7 +618,7 @@ function RecoveryRow({
               <Button
                 size="sm"
                 variant="ghost"
-                className="size-8 p-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                className="size-8 p-0 text-muted-foreground"
                 disabled={isSaving}
                 aria-label="More actions"
               >

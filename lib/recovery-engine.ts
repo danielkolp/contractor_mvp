@@ -1,3 +1,4 @@
+import { money as moneyFormatter } from "@/lib/format-money"
 import type { Database } from "@/lib/supabase/database.types"
 
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
@@ -29,12 +30,6 @@ export type RecoveryRecommendation = {
   nextReminderDate: string // YYYY-MM-DD
   recoveryStatus: RecoveryStatus
 }
-
-const moneyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 

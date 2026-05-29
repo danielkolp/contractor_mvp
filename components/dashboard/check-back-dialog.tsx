@@ -21,7 +21,7 @@ function addDays(n: number): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-CA", {
     weekday: "long",
     month: "short",
     day: "numeric",

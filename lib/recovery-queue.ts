@@ -1,3 +1,4 @@
+import { money } from "@/lib/format-money"
 import type { Database } from "@/lib/supabase/database.types"
 import { getOverdueDays } from "@/lib/recovery-engine"
 
@@ -220,17 +221,12 @@ export function generateEstimateFollowUpMessage({
   amount: number
   daysSinceSent: number
 }): string {
-  const moneyFormatter = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  })
   const sentCopy =
     daysSinceSent > 0
       ? ` I sent it ${daysSinceSent} day${daysSinceSent === 1 ? "" : "s"} ago.`
       : ""
 
-  return `Hi ${clientName || "there"}, just following up on estimate ${estimateNumber} for ${moneyFormatter.format(amount)}.${sentCopy} Would you like to move forward, or is there anything you want me to adjust? Thanks.`
+  return `Hi ${clientName || "there"}, just following up on estimate ${estimateNumber} for ${money.format(amount)}.${sentCopy} Would you like to move forward, or is there anything you want me to adjust? Thanks.`
 }
 
 function shouldFollowUpEstimate(estimate: EstimateRow): boolean {
@@ -380,11 +376,7 @@ export function buildFollowUpQueue({
               ? "Due today"
               : "Follow up",
         primaryActionLabel: "Follow up",
-        explanation: `${estimate.estimate_number} was sent ${daysSinceSent} day${daysSinceSent === 1 ? "" : "s"} ago for ${new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-          maximumFractionDigits: 0,
-        }).format(estimate.amount)}. Ask if they want to move forward.`,
+        explanation: `${estimate.estimate_number} was sent ${daysSinceSent} day${daysSinceSent === 1 ? "" : "s"} ago for ${money.format(estimate.amount)}. Ask if they want to move forward.`,
         message: generateEstimateFollowUpMessage({
           clientName,
           estimateNumber: estimate.estimate_number,

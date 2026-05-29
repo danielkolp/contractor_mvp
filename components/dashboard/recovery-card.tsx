@@ -25,17 +25,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { reasonLabel } from "@/lib/recovery-engine"
+import { money } from "@/lib/format-money"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
 
 type RecoveryItem = Database["public"]["Tables"]["recovery_items"]["Row"]
 type RecoveryItemReason = RecoveryItem["reason"]
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
 
 function relativeDate(iso: string | null): string {
   if (!iso) return ""

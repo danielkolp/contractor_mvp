@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/card"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Skeleton } from "@/components/ui/skeleton"
+import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -32,13 +33,7 @@ type JobRequest = Database["public"]["Tables"]["job_requests"]["Row"]
 type Estimate = Database["public"]["Tables"]["estimates"]["Row"]
 type Invoice = Database["public"]["Tables"]["invoices"]["Row"]
 
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
-
-const dateFmt = new Intl.DateTimeFormat("en-US", {
+const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
   day: "numeric",
   year: "numeric",

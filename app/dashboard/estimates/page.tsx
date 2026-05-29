@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { money as moneyFormatter } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -190,11 +191,6 @@ const statusTone: Record<
   Archived: "muted",
 }
 
-const moneyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-})
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",

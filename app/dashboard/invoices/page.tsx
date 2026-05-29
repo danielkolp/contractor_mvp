@@ -69,6 +69,7 @@ import {
   getRecommendedAction,
   isRecoverableInvoice,
 } from "@/lib/recovery-engine"
+import { money as moneyFormatter } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -209,11 +210,6 @@ function getStatusDisplayLabel(status: InvoiceStatus): string {
 }
 
 
-const moneyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",

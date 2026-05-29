@@ -2,7 +2,7 @@
 
 import { type FormEvent, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ImagePlus, Send } from "lucide-react"
 import { toast } from "sonner"
 
@@ -47,10 +47,25 @@ function nullableNumber(value: FormDataEntryValue | null) {
 
 export default function NewClientJobPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const contractorId = searchParams.get("contractor")
   const supabase = useMemo(() => createClient(), [])
   const [isPending, startTransition] = useTransition()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [submittedTitle, setSubmittedTitle] = useState<string | null>(null)
+
+  // Block submission if no contractor ID was provided in the URL.
+  if (!contractorId) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <p className="text-lg font-semibold text-foreground">Invalid request link</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This link is missing the contractor reference. Please use the link
+          your contractor shared with you.
+        </p>
+      </div>
+    )
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -69,7 +84,21 @@ export default function NewClientJobPage() {
         return
       }
 
-      const { data: profile } = await supabase
+      // Verify the contractor exists before creating the request.
+      // contractorId is guaranteed non-null here (guarded by early return above).
+      const { data: contractorProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id, role")
+        .eq("user_id", contractorId!)
+        .eq("role", "contractor")
+        .maybeSingle()
+
+      if (profileError || !contractorProfile) {
+        setErrorMessage("Contractor not found. Please use the link your contractor shared.")
+        return
+      }
+
+      const { data: clientProfile } = await supabase
         .from("profiles")
         .select("owner_name")
         .eq("user_id", user.id)
@@ -87,7 +116,8 @@ export default function NewClientJobPage() {
 
       const payload: JobRequestInsert = {
         client_id: user.id,
-        client_name: profile?.owner_name || user.email || null,
+        contractor_id: contractorId,
+        client_name: clientProfile?.owner_name || user.email || null,
         client_email: user.email ?? null,
         title,
         description,
@@ -281,10 +311,10 @@ export default function NewClientJobPage() {
                     <ImagePlus className="size-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">Photo upload placeholder</p>
+                    <p className="text-sm font-medium">Share photo details</p>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      Uploads are not enabled yet. Add notes about any photos or
-                      files you can share later.
+                      Photo uploads are not available yet. Describe any photos
+                      or files you can share with the contractor later.
                     </p>
                     <textarea
                       id="photo_notes"
