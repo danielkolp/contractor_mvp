@@ -37,13 +37,18 @@ as $$
   );
 $$;
 
--- Allow authenticated users and anonymous visitors to call this function so
--- the client job-request form can validate the contractor before submitting.
-grant execute on function public.contractor_exists(uuid) to authenticated, anon;
+-- Client job-request form requires login before calling this RPC, so grant
+-- only to authenticated.  Anonymous access is not needed.
+grant execute on function public.contractor_exists(uuid) to authenticated;
 
 -- ── Drop old broad contractor policies ───────────────────────────────────────
 drop policy if exists "job_requests: contractors can read incoming" on public.job_requests;
 drop policy if exists "job_requests: contractors can update incoming" on public.job_requests;
+
+-- Drop new-style policies idempotently so a re-run after a partial apply
+-- never fails with "policy already exists".
+drop policy if exists "job_requests: contractor reads own" on public.job_requests;
+drop policy if exists "job_requests: contractor updates own" on public.job_requests;
 
 -- Contractors can only read requests assigned to them.
 create policy "job_requests: contractor reads own" on public.job_requests

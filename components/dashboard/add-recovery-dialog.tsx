@@ -392,7 +392,7 @@ export function AddRecoveryDialog({
         {step === 2 && (
           <div className="grid gap-4 py-2">
             <DialogDescription>
-              What's the situation with {form.clientName}?
+              What&apos;s the situation with {form.clientName}?
             </DialogDescription>
             <div className="grid gap-2">
               {REASONS.map((r) => (
@@ -473,7 +473,7 @@ export function AddRecoveryDialog({
         {step === 4 && (
           <div className="grid gap-4 py-2">
             <DialogDescription>
-              Here's your follow-up message for{" "}
+              Here&apos;s your follow-up message for{" "}
               <strong>{form.clientName}</strong> ·{" "}
               {reasonLabel(form.reason)}. Edit it if you want.
             </DialogDescription>

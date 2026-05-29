@@ -67,7 +67,7 @@ export function CheckBackDialog({
         <DialogHeader>
           <DialogTitle>When should we check back?</DialogTitle>
           <DialogDescription>
-            We'll resurface {clientName} on this date so you don't forget to
+            We&apos;ll resurface {clientName} on this date so you don&apos;t forget to
             follow up.
           </DialogDescription>
         </DialogHeader>

@@ -621,7 +621,7 @@ function HeroSummary({
               </span>
             </div>
             <h2 className="text-lg font-semibold text-foreground">
-              Today's follow-ups
+              Today&apos;s follow-ups
             </h2>
           </div>
           <p className="mt-1.5 text-sm text-muted-foreground">
@@ -912,7 +912,7 @@ function OnboardingState({
         <Sparkles className="size-7 text-green-700 dark:text-green-400" />
       </div>
       <h2 className="text-xl font-semibold text-foreground">
-        Let's set up your first recovery job.
+        Let&apos;s set up your first recovery job.
       </h2>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
         Add a customer and what happened — EstiGator will generate a follow-up
@@ -973,7 +973,7 @@ function AllCaughtUp({
           </svg>
         </div>
         <h3 className="text-base font-semibold text-green-800 dark:text-green-200">
-          You're all caught up for today.
+          You&apos;re all caught up for today.
         </h3>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-green-700/70 dark:text-green-300/70">
           {atRisk > 0

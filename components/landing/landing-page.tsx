@@ -732,7 +732,7 @@ function DarkProductSection() {
                 </m.div>
                 <div>
                   <div className="text-sm font-black text-white">AI draft ready</div>
-                  <div className="text-[11px] text-green-400/80">"Hi Sam, quick reminder on invoice INV-1048…"</div>
+                  <div className="text-[11px] text-green-400/80">&ldquo;Hi Sam, quick reminder on invoice INV-1048…&rdquo;</div>
                 </div>
               </div>
             </m.div>

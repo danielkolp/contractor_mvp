@@ -476,7 +476,7 @@ export default function CustomersPage() {
             {errorMessage && clients.length === 0 ? (
               <Card>
                 <CardContent className="py-10 text-center">
-                  <p className="font-semibold">Couldn't load customers</p>
+                  <p className="font-semibold">Couldn&apos;t load customers</p>
                   <p className="mt-1 text-sm text-muted-foreground">{errorMessage}</p>
                   <Button className="mt-4" variant="outline" onClick={() => void load()}>
                     <RefreshCw className="size-4" /> Try again

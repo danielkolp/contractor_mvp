@@ -346,7 +346,7 @@ export function AnimatedHeroMockup() {
               <div>
                 <div className="text-sm font-black">AI draft ready</div>
                 <div className="text-xs text-green-100/80">
-                  "Hi Sam, quick reminder on invoice INV-1048…"
+                  &ldquo;Hi Sam, quick reminder on invoice INV-1048…&rdquo;
                 </div>
               </div>
             </div>
