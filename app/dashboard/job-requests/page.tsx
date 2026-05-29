@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   ClipboardList,
   FileText,
@@ -97,6 +98,52 @@ function requestNotes(request: JobRequest) {
     .join("\n")
 }
 
+function EstimateActionButton({
+  request,
+  estimateId,
+  isSaving,
+  onCreateEstimate,
+}: {
+  request: JobRequest
+  estimateId: string | undefined
+  isSaving: boolean
+  onCreateEstimate: (r: JobRequest) => void
+}) {
+  const hasEstimate =
+    request.status === "estimate_created" ||
+    request.status === "accepted" ||
+    request.status === "declined"
+
+  if (estimateId) {
+    return (
+      <Button variant="outline" asChild>
+        <Link href={`/dashboard/estimates?highlight=${estimateId}`}>
+          <FileText className="size-4" />
+          View estimate
+        </Link>
+      </Button>
+    )
+  }
+  if (hasEstimate) {
+    return (
+      <Button variant="outline" disabled>
+        <FileText className="size-4" />
+        Estimate created
+      </Button>
+    )
+  }
+  return (
+    <Button
+      className="bg-green-700 text-white hover:bg-green-800"
+      disabled={isSaving}
+      onClick={() => onCreateEstimate(request)}
+    >
+      <Plus className="size-4" />
+      Create estimate
+    </Button>
+  )
+}
+
 function RequestsSkeleton() {
   return (
     <div className="grid gap-3">
@@ -115,6 +162,8 @@ export default function ContractorJobRequestsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // Maps job_request.id → estimate.id for requests that already have an estimate.
+  const [estimateIdByRequestId, setEstimateIdByRequestId] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -143,7 +192,34 @@ export default function ContractorJobRequestsPage() {
       setErrorMessage(error.message)
       setRequests([])
     } else {
-      setRequests(data ?? [])
+      const rows = data ?? []
+      setRequests(rows)
+
+      // Back-fill estimate IDs for requests that already have one so the
+      // "View estimate" button appears correctly on first load.
+      const linkedIds = rows
+        .filter(
+          (r) =>
+            r.status === "estimate_created" ||
+            r.status === "accepted" ||
+            r.status === "declined"
+        )
+        .map((r) => r.id)
+
+      if (linkedIds.length > 0) {
+        const { data: estimateRows } = await supabase
+          .from("estimates")
+          .select("id, job_request_id")
+          .in("job_request_id", linkedIds)
+
+        if (estimateRows) {
+          const map: Record<string, string> = {}
+          for (const row of estimateRows) {
+            if (row.job_request_id) map[row.job_request_id] = row.id
+          }
+          setEstimateIdByRequestId(map)
+        }
+      }
     }
 
     setIsLoading(false)
@@ -257,9 +333,10 @@ export default function ContractorJobRequestsPage() {
 
     await updateRequestStatus(request, { status: "estimate_created" })
 
-    toast.success(`Estimate ${data.estimate_number} created`, {
-      description: "The estimate is linked to this job request.",
-    })
+    setEstimateIdByRequestId((prev) => ({ ...prev, [request.id]: data.id }))
+    window.dispatchEvent(new Event("estg:badge-refresh"))
+
+    toast.success(`Estimate ${data.estimate_number} created`)
 
     setIsSaving(false)
   }
@@ -357,14 +434,12 @@ export default function ContractorJobRequestsPage() {
                   >
                     Mark reviewed
                   </Button>
-                  <Button
-                    className="bg-green-700 text-white hover:bg-green-800"
-                    disabled={isSaving}
-                    onClick={() => void createEstimateFromRequest(selectedRequest)}
-                  >
-                    <Plus className="size-4" />
-                    Create estimate
-                  </Button>
+                  <EstimateActionButton
+                    request={selectedRequest}
+                    estimateId={estimateIdByRequestId[selectedRequest.id]}
+                    isSaving={isSaving}
+                    onCreateEstimate={(r) => void createEstimateFromRequest(r)}
+                  />
                 </div>
               </div>
             </>
@@ -440,14 +515,12 @@ export default function ContractorJobRequestsPage() {
                             <FileText className="size-4" />
                             View details
                           </Button>
-                          <Button
-                            className="bg-green-700 text-white hover:bg-green-800"
-                            disabled={isSaving}
-                            onClick={() => void createEstimateFromRequest(request)}
-                          >
-                            <Plus className="size-4" />
-                            Create estimate
-                          </Button>
+                          <EstimateActionButton
+                            request={request}
+                            estimateId={estimateIdByRequestId[request.id]}
+                            isSaving={isSaving}
+                            onCreateEstimate={(r) => void createEstimateFromRequest(r)}
+                          />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon">

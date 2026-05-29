@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   CheckCircle2,
   ExternalLink,
@@ -20,6 +20,7 @@ import {
   Receipt,
   RefreshCw,
   Search,
+  Send,
   Trash2,
   X,
   XCircle,
@@ -301,6 +302,8 @@ function formFromEstimate(estimate: EstimateRow): EstimateForm {
 
 export default function EstimatesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const highlightId = searchParams.get("highlight")
   const supabase = useMemo(() => createClient(), [])
   const [clients, setClients] = useState<ClientRow[]>([])
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
@@ -314,6 +317,7 @@ export default function EstimatesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
 
   // ─── Derived line item totals ────────────────────────────────────────────────
   const subtotal = useMemo(() => lineItemSubtotal(form.lineItems), [form.lineItems])
@@ -382,6 +386,19 @@ export default function EstimatesPage() {
     }, 0)
     return () => window.clearTimeout(timeoutId)
   }, [loadEstimates])
+
+  // When navigated here with ?highlight=<estimateId>, scroll to the row and
+  // briefly flash a green ring so the contractor knows which estimate was just
+  // created from their job request.
+  useEffect(() => {
+    if (!highlightId || isLoading) return
+    const el = document.getElementById(`estimate-row-${highlightId}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    setHighlightedId(highlightId)
+    const timer = window.setTimeout(() => setHighlightedId(null), 2500)
+    return () => window.clearTimeout(timer)
+  }, [highlightId, isLoading])
 
   // ─── Filtering ───────────────────────────────────────────────────────────────
   const filteredEstimates = useMemo(() => {
@@ -619,6 +636,35 @@ export default function EstimatesPage() {
     setIsSaving(false)
   }
 
+  // ─── Share estimate with client ───────────────────────────────────────────────
+  async function shareEstimate(estimate: EstimateRow) {
+    if (estimate.amount <= 0) {
+      toast.error("Add an amount before sharing this estimate.")
+      return
+    }
+    if (!userId) return
+    setIsSaving(true)
+
+    const { data, error } = await supabase
+      .from("estimates")
+      .update({ status: "Sent" })
+      .eq("id", estimate.id)
+      .eq("user_id", userId)
+      .select()
+      .single()
+
+    if (error) {
+      toast.error("Could not share estimate")
+    } else {
+      setEstimates((current) =>
+        current.map((e) => (e.id === estimate.id ? data : e))
+      )
+      toast.success("Estimate shared with client")
+    }
+
+    setIsSaving(false)
+  }
+
   // ─── Delete estimate ──────────────────────────────────────────────────────────
   async function deleteEstimate(estimate: EstimateRow) {
     if (!userId) return
@@ -630,10 +676,20 @@ export default function EstimatesPage() {
 
     if (error) {
       toast.error("Could not delete estimate")
-    } else {
-      setEstimates((current) => current.filter((e) => e.id !== estimate.id))
-      toast.success("Estimate deleted")
+      return
     }
+
+    setEstimates((current) => current.filter((e) => e.id !== estimate.id))
+
+    // Reset the linked job request so the contractor can create a new estimate.
+    if (estimate.job_request_id) {
+      await supabase
+        .from("job_requests")
+        .update({ status: "reviewed" })
+        .eq("id", estimate.job_request_id)
+    }
+
+    toast.success("Estimate deleted")
   }
 
   // ─── Convert estimate → invoice ───────────────────────────────────────────────
@@ -1096,7 +1152,15 @@ export default function EstimatesPage() {
                   </div>
                   <div className="divide-y divide-border">
                     {filteredEstimates.map((estimate) => (
-                      <div key={estimate.id} className="min-w-0 px-4 py-3">
+                      <div
+                        key={estimate.id}
+                        id={`estimate-row-${estimate.id}`}
+                        className={cn(
+                          "min-w-0 px-4 py-3 transition-colors duration-700",
+                          highlightedId === estimate.id &&
+                            "bg-green-50 ring-1 ring-inset ring-green-300 dark:bg-green-950/20 dark:ring-green-700/50"
+                        )}
+                      >
                         <div className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_120px_120px_130px_80px] xl:items-center">
                           <div className="min-w-0">
                             <div className="truncate font-medium">
@@ -1146,6 +1210,15 @@ export default function EstimatesPage() {
                                   <Pencil className="size-4" />
                                   Edit estimate
                                 </DropdownMenuItem>
+
+                                {estimate.status === "Draft" ? (
+                                  <DropdownMenuItem
+                                    onSelect={() => void shareEstimate(estimate)}
+                                  >
+                                    <Send className="size-4" />
+                                    Share with client
+                                  </DropdownMenuItem>
+                                ) : null}
 
                                 <DropdownMenuItem asChild>
                                   <a

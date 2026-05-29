@@ -125,6 +125,7 @@ export function ClientDashboardPage() {
         .from("estimates")
         .select("*")
         .in("job_request_id", requestIds)
+        .neq("status", "Draft")
         .order("sent_date", { ascending: false }),
       supabase
         .from("invoices")

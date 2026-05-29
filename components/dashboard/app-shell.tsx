@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -40,6 +40,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 const navigation = [
@@ -88,6 +89,15 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
+function NotificationBadge({ count }: { count: number }) {
+  if (count === 0) return null
+  return (
+    <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  )
+}
+
 function BrandMark() {
   return (
     <Link
@@ -99,7 +109,13 @@ function BrandMark() {
   )
 }
 
-function SidebarNav({ mobile = false }: { mobile?: boolean }) {
+function SidebarNav({
+  mobile = false,
+  counts = {},
+}: {
+  mobile?: boolean
+  counts?: Record<string, number>
+}) {
   const pathname = usePathname()
 
   return (
@@ -107,6 +123,7 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
       {navigation.map((item) => {
         const active = isActivePath(pathname, item.href)
         const Icon = item.icon
+        const count = counts[item.href] ?? 0
         const link = (
           <Link
             href={item.href}
@@ -117,8 +134,9 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <Icon className={cn("size-4", active && "text-green-700")} />
-            <span>{item.name}</span>
+            <Icon className={cn("size-4 shrink-0", active && "text-green-700")} />
+            <span className="flex-1">{item.name}</span>
+            <NotificationBadge count={count} />
           </Link>
         )
 
@@ -134,13 +152,13 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
   )
 }
 
-function Sidebar() {
+function Sidebar({ counts }: { counts: Record<string, number> }) {
   return (
     <aside className="hidden w-64 shrink-0 border-r border-border bg-sidebar lg:flex lg:flex-col">
       <div className="flex min-h-24 items-center justify-center px-5 pb-4 pt-5">
         <BrandMark />
       </div>
-      <SidebarNav />
+      <SidebarNav counts={counts} />
       <div className="px-3 pb-4 pt-2">
         <div className="rounded-xl border border-green-100 bg-green-50 p-4 text-green-950 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -157,7 +175,7 @@ function Sidebar() {
   )
 }
 
-function MobileSidebar() {
+function MobileSidebar({ counts }: { counts: Record<string, number> }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -178,7 +196,7 @@ function MobileSidebar() {
           <div className="flex h-16 items-center px-5">
             <BrandMark />
           </div>
-          <SidebarNav mobile />
+          <SidebarNav mobile counts={counts} />
         </div>
       </SheetContent>
     </Sheet>
@@ -200,14 +218,20 @@ function getInitials(email?: string) {
   return name.slice(0, 2).toUpperCase()
 }
 
-function TopBar({ userEmail }: { userEmail?: string }) {
+function TopBar({
+  userEmail,
+  counts,
+}: {
+  userEmail?: string
+  counts: Record<string, number>
+}) {
   const [isPending, startTransition] = useTransition()
   const displayName = userEmail?.split("@")[0] || "Owner"
   const initials = getInitials(userEmail)
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6 lg:px-8">
-      <MobileSidebar />
+      <MobileSidebar counts={counts} />
       <Link
         href="/dashboard"
         className="grid size-9 shrink-0 place-items-center rounded-lg lg:hidden"
@@ -271,12 +295,39 @@ export function AppShell({
   children: React.ReactNode
   userEmail?: string
 }) {
+  const supabase = useMemo(() => createClient(), [])
+  const pathname = usePathname()
+  const [counts, setCounts] = useState<Record<string, number>>({})
+
+  const fetchCounts = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+    const { count } = await supabase
+      .from("job_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("contractor_id", user.id)
+      .eq("status", "new")
+    setCounts({ "/dashboard/job-requests": count ?? 0 })
+  }, [supabase])
+
+  // Re-fetch on every navigation.
+  useEffect(() => { void fetchCounts() }, [fetchCounts, pathname])
+
+  // Re-fetch immediately when a job request status changes in the same session.
+  useEffect(() => {
+    function onRefresh() { void fetchCounts() }
+    window.addEventListener("estg:badge-refresh", onRefresh)
+    return () => window.removeEventListener("estg:badge-refresh", onRefresh)
+  }, [fetchCounts])
+
   return (
     <div className="min-h-screen bg-zinc-50 text-foreground dark:bg-background">
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Sidebar counts={counts} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar userEmail={userEmail} />
+          <TopBar userEmail={userEmail} counts={counts} />
           <main className="flex-1">{children}</main>
         </div>
       </div>

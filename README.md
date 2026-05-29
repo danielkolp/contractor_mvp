@@ -160,3 +160,22 @@ npm run lint     # ESLint
 Deploy to [Vercel](https://vercel.com) by connecting the GitHub repo. Add the two environment variables in the Vercel project settings under **Environment Variables**.
 
 The app has no build-time Supabase dependency — pages that require auth gracefully degrade when env vars are missing.
+
+## Planned features
+
+### Public no-account request form
+
+**Status: not yet built — do not partially implement.**
+
+The current client request link (`/client/jobs/new?contractor=<uuid>`) requires the client to be signed in. This is acceptable for the authenticated portal flow but not suitable for posting on a contractor's website or social profile.
+
+Future route: `/request/[contractorId]`
+
+Requirements before building:
+- New public route outside `/client` — no login required
+- Anonymous submit must use a `SECURITY DEFINER` RPC (never a direct anonymous insert on `job_requests`)
+- Collect `requester_name`, `requester_email`, `requester_phone` on the form
+- Insert `job_request` with `client_id = null` and `contractor_id` set
+- Contractor sees it in Job Requests as a lead with requester contact fields
+- Existing authenticated client portal remains unchanged
+- Client account only needed later for estimate acceptance / portal access

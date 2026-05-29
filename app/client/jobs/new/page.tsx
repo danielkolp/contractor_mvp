@@ -19,27 +19,10 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
+import { CONTRACTOR_TRADES } from "@/components/ui/trade-multi-select"
 
 type JobRequestInsert = Database["public"]["Tables"]["job_requests"]["Insert"]
 type JobUrgency = Database["public"]["Enums"]["job_request_urgency"]
-
-const TRADES = [
-  "Carpentry",
-  "Concrete",
-  "Drywall",
-  "Electrical",
-  "Flooring",
-  "General Contracting",
-  "HVAC",
-  "Landscaping",
-  "Masonry",
-  "Painting",
-  "Plumbing",
-  "Renovation",
-  "Roofing",
-  "Tiling",
-  "Other",
-] as const
 
 type ContractorProfile = {
   company_name: string | null
@@ -71,10 +54,13 @@ export default function NewClientJobPage() {
       return
     }
     void (async () => {
-      const { data } = await supabase.rpc("contractor_public_profile", {
+      const { data, error } = await supabase.rpc("contractor_public_profile", {
         contractor_user_id: contractorId,
       })
-      if (!data || data.length === 0) {
+      if (error) {
+        // Function not yet deployed — fall through with null profile.
+        // The form still works; RLS enforces contractor validity at insert time.
+      } else if (!data || data.length === 0) {
         setContractorNotFound(true)
       } else {
         setContractorProfile(data[0])
@@ -107,9 +93,13 @@ export default function NewClientJobPage() {
     )
   }
 
-  // Parse contractor trades: single value → hide field; multiple (comma-separated) → show subset; none → show full fallback list.
+  // Parse contractor trades — only keep values that exist in the canonical list so
+  // stale or mistyped values (e.g. "Trades") never reach the client dropdown.
   const contractorTrades = contractorProfile?.trade
-    ? contractorProfile.trade.split(",").map((t) => t.trim()).filter(Boolean)
+    ? contractorProfile.trade
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t): t is string => (CONTRACTOR_TRADES as readonly string[]).includes(t))
     : []
 
   const contractorName =
@@ -263,7 +253,7 @@ export default function NewClientJobPage() {
                   className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <option value="" disabled>Select a trade…</option>
-                  {(contractorTrades.length > 1 ? contractorTrades : TRADES).map((t) => (
+                  {(contractorTrades.length > 1 ? contractorTrades : CONTRACTOR_TRADES).map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>

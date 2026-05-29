@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ServiceAreaSelect } from "@/components/ui/service-area-select"
-import { TradeMultiSelect } from "@/components/ui/trade-multi-select"
+import { CONTRACTOR_TRADES, TradeMultiSelect } from "@/components/ui/trade-multi-select"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -68,10 +68,14 @@ type ValidSettingsValues = {
 }
 
 function toProfileForm(profile: ProfileRow | null): ProfileForm {
+  const validTrades = (profile?.trade ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t): t is string => t.length > 0 && (CONTRACTOR_TRADES as readonly string[]).includes(t))
   return {
     company_name: profile?.company_name ?? "",
     owner_name: profile?.owner_name ?? "",
-    trade: profile?.trade ?? "",
+    trade: validTrades.join(","),
     phone: profile?.phone ?? "",
     website: profile?.website ?? "",
     service_area: profile?.service_area ?? "",

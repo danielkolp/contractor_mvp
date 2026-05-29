@@ -79,6 +79,20 @@ export default async function EstimatePrintPage({
   const { data: estimate } = await supabase.from("estimates").select("*").eq("id", id).single()
   if (!estimate) notFound()
 
+  // Clients may not view Draft estimates — the contractor has not shared it yet.
+  if (role === "client" && estimate.status === "Draft") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-100">
+        <div className="rounded-xl border border-border bg-white p-10 text-center shadow">
+          <p className="text-base font-semibold text-foreground">Estimate not available</p>
+          <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+            Your contractor is still preparing this estimate. Check back once they share it with you.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", estimate.user_id).single()
 
   let client: ClientRow | null = null
