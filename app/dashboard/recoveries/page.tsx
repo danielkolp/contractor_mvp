@@ -11,6 +11,8 @@ import {
   Check,
   CheckCircle2,
   ClipboardCopy,
+  Mail,
+  MessageSquare,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -24,6 +26,8 @@ import { toast } from "sonner"
 import { AddRecoveryDialog } from "@/components/dashboard/add-recovery-dialog"
 import { CheckBackDialog } from "@/components/dashboard/check-back-dialog"
 import { PageHeader } from "@/components/dashboard/page-header"
+import { RecoveryRepliesDialog } from "@/components/dashboard/recovery-replies-dialog"
+import { SendFollowUpDialog } from "@/components/dashboard/send-follow-up-dialog"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -47,6 +51,13 @@ type RecoveryItemInsert = Database["public"]["Tables"]["recovery_items"]["Insert
 type RecoveryItemUpdate = Database["public"]["Tables"]["recovery_items"]["Update"]
 type RecoveryItemReason = RecoveryItem["reason"]
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
+
+interface ReplyInfo {
+  count: number
+  latestFromName: string | null
+  latestFromEmail: string
+  latestReceivedAt: string
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -161,7 +172,9 @@ function StatusBadge({ item }: { item: RecoveryItem }) {
 
 function primaryActionLabel(item: RecoveryItem): string {
   if (isCheckInDue(item)) return "Record response"
-  if (item.status === "message_ready") return "Copy & mark sent"
+  if (item.status === "message_ready") {
+    return item.client_email ? "Send follow-up email" : "Copy message"
+  }
   if (item.status === "needs_follow_up") return "Review message"
   if (item.status === "sent" || item.status === "waiting") return "Reschedule"
   return "View"
@@ -171,6 +184,7 @@ export default function RecoveriesPage() {
   const supabase = useMemo(() => createClient(), [])
   const [items, setItems] = useState<RecoveryItem[]>([])
   const [clients, setClients] = useState<ClientRow[]>([])
+  const [replyInfoMap, setReplyInfoMap] = useState<Record<string, ReplyInfo>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -178,6 +192,8 @@ export default function RecoveriesPage() {
   const [search, setSearch] = useState("")
   const [addOpen, setAddOpen] = useState(false)
   const [checkBackItem, setCheckBackItem] = useState<RecoveryItem | null>(null)
+  const [sendFollowUpItem, setSendFollowUpItem] = useState<RecoveryItem | null>(null)
+  const [viewRepliesItem, setViewRepliesItem] = useState<RecoveryItem | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -200,8 +216,41 @@ export default function RecoveriesPage() {
         .order("company", { ascending: true }),
     ])
 
-    setItems(itemsResult.data ?? [])
+    const loadedItems = itemsResult.data ?? []
+    setItems(loadedItems)
     setClients(clientsResult.data ?? [])
+
+    if (loadedItems.length > 0) {
+      const itemIds = loadedItems.map((i) => i.id)
+      const { data: replies } = await supabase
+        .from("recovery_email_replies")
+        .select("recovery_item_id, from_email, from_name, received_at")
+        .eq("user_id", user.id)
+        .in("recovery_item_id", itemIds)
+        .order("received_at", { ascending: false })
+
+      if (replies && replies.length > 0) {
+        const map: Record<string, ReplyInfo> = {}
+        for (const reply of replies) {
+          const id = reply.recovery_item_id
+          if (!map[id]) {
+            map[id] = {
+              count: 0,
+              latestFromName: reply.from_name,
+              latestFromEmail: reply.from_email,
+              latestReceivedAt: reply.received_at,
+            }
+          }
+          map[id].count++
+        }
+        setReplyInfoMap(map)
+      } else {
+        setReplyInfoMap({})
+      }
+    } else {
+      setReplyInfoMap({})
+    }
+
     setIsLoading(false)
   }, [supabase])
 
@@ -317,6 +366,14 @@ export default function RecoveriesPage() {
     setIsSaving(false)
   }
 
+  function handleSendFollowUp(item: RecoveryItem) {
+    setSendFollowUpItem(item)
+  }
+
+  function handleEmailSent(updatedItem: RecoveryItem) {
+    setItems((prev) => prev.map((i) => (i.id === updatedItem.id ? updatedItem : i)))
+  }
+
   async function handleMarkResolved(item: RecoveryItem) {
     setIsSaving(true)
     await updateItem(item.id, { status: "resolved" })
@@ -358,8 +415,8 @@ export default function RecoveriesPage() {
   function handlePrimaryAction(item: RecoveryItem) {
     if (isCheckInDue(item) || item.status === "sent" || item.status === "waiting") {
       setCheckBackItem(item)
-    } else if (item.status === "message_ready") {
-      void handleMarkSentAndSchedule(item)
+    } else if (item.status === "message_ready" && item.client_email) {
+      setSendFollowUpItem(item)
     } else {
       void handleMarkSentAndSchedule(item)
     }
@@ -407,6 +464,19 @@ export default function RecoveriesPage() {
         onConfirm={handleCheckBackConfirm}
         onCancel={() => setCheckBackItem(null)}
         isLoading={isSaving}
+      />
+
+      <SendFollowUpDialog
+        open={sendFollowUpItem !== null}
+        item={sendFollowUpItem}
+        onClose={() => setSendFollowUpItem(null)}
+        onSent={handleEmailSent}
+      />
+
+      <RecoveryRepliesDialog
+        open={viewRepliesItem !== null}
+        item={viewRepliesItem}
+        onClose={() => setViewRepliesItem(null)}
       />
 
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -488,12 +558,15 @@ export default function RecoveriesPage() {
                     item={item}
                     isSaving={isSaving}
                     copiedId={copiedId}
+                    replyInfo={replyInfoMap[item.id]}
                     onPrimaryAction={handlePrimaryAction}
                     onCopyMessage={handleCopyMessage}
+                    onMarkSentManually={setCheckBackItem}
                     onFollowUpAgain={handleFollowUpAgain}
                     onRemindLater={handleRemindLater}
                     onMarkResolved={handleMarkResolved}
                     onMarkLost={handleMarkLost}
+                    onViewReplies={setViewRepliesItem}
                   />
                 ))}
               </div>
@@ -511,22 +584,28 @@ function RecoveryRow({
   item,
   isSaving,
   copiedId,
+  replyInfo,
   onPrimaryAction,
   onCopyMessage,
+  onMarkSentManually,
   onFollowUpAgain,
   onRemindLater,
   onMarkResolved,
   onMarkLost,
+  onViewReplies,
 }: {
   item: RecoveryItem
   isSaving: boolean
   copiedId: string | null
-  onPrimaryAction: (item: RecoveryItem) => void
-  onCopyMessage: (item: RecoveryItem) => void
-  onFollowUpAgain: (item: RecoveryItem) => void
-  onRemindLater: (item: RecoveryItem) => void
-  onMarkResolved: (item: RecoveryItem) => void
-  onMarkLost: (item: RecoveryItem) => void
+  replyInfo?: ReplyInfo
+  onPrimaryAction:    (item: RecoveryItem) => void
+  onCopyMessage:      (item: RecoveryItem) => void
+  onMarkSentManually: (item: RecoveryItem) => void
+  onFollowUpAgain:    (item: RecoveryItem) => void
+  onRemindLater:      (item: RecoveryItem) => void
+  onMarkResolved:     (item: RecoveryItem) => void
+  onMarkLost:         (item: RecoveryItem) => void
+  onViewReplies:      (item: RecoveryItem) => void
 }) {
   const isResolved = item.status === "resolved"
   const isLost = item.status === "lost"
@@ -552,6 +631,16 @@ function RecoveryRow({
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-semibold text-foreground">{item.client_name}</p>
           <StatusBadge item={item} />
+          {replyInfo && replyInfo.count > 0 && (
+            <button
+              type="button"
+              onClick={() => onViewReplies(item)}
+              className="flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/60"
+            >
+              <MessageSquare className="size-3" />
+              {replyInfo.count === 1 ? "1 reply" : `${replyInfo.count} replies`}
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span>{sourceTypeLabel(item.reason as RecoveryItemReason)}</span>
@@ -583,14 +672,17 @@ function RecoveryRow({
               "gap-1.5",
               isCheckInDue(item)
                 ? "bg-sky-600 text-white hover:bg-sky-700"
-                : item.status === "message_ready"
-                ? "bg-green-700 text-white hover:bg-green-800"
                 : "bg-green-700 text-white hover:bg-green-800"
             )}
             disabled={isSaving}
             onClick={() => onPrimaryAction(item)}
           >
-            {item.status === "message_ready" ? (
+            {item.status === "message_ready" && item.client_email ? (
+              <>
+                <Mail className="size-3.5" />
+                {primaryActionLabel(item)}
+              </>
+            ) : item.status === "message_ready" ? (
               copiedId === item.id ? (
                 <>
                   <Check className="size-3.5" />
@@ -625,13 +717,23 @@ function RecoveryRow({
                 <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-48">
+              {replyInfo && replyInfo.count > 0 && (
+                <DropdownMenuItem onClick={() => onViewReplies(item)}>
+                  <MessageSquare className="mr-2 size-3.5" />
+                  View replies
+                </DropdownMenuItem>
+              )}
               {item.message_body && (
                 <DropdownMenuItem onClick={() => onCopyMessage(item)}>
                   <ClipboardCopy className="mr-2 size-3.5" />
                   Copy message
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={() => onMarkSentManually(item)}>
+                <Check className="mr-2 size-3.5" />
+                Mark sent manually
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onFollowUpAgain(item)}>
                 <TrendingUp className="mr-2 size-3.5" />
                 New follow-up

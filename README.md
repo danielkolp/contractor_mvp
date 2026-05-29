@@ -64,12 +64,38 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment variables
 
+### Supabase (required)
+
 | Variable | Description |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
 
 Both variables must be prefixed with `NEXT_PUBLIC_` so they are available in the browser.
+
+### Resend — transactional email (optional, enables direct sending)
+
+Follow-up emails are sent via [Resend](https://resend.com). Sign up, verify a sending domain, and create an API key.
+
+| Variable | Description |
+|---|---|
+| `RESEND_API_KEY` | Resend API key (starts with `re_`) |
+| `RESEND_FROM_EMAIL` | Verified sender, e.g. `EstiGator <followups@yourdomain.com>` |
+
+**If these are missing:** the app does not crash. The "Send follow-up email" button shows a clear configuration error. Copy/manual fallback continues to work. Only recovery follow-up emails use Resend — invoice and estimate sending is not yet implemented.
+
+### Email format
+
+Follow-up emails are sent as **branded HTML** with a plain-text fallback. The HTML template (`lib/email/recovery-email-template.ts`) uses inline styles only — no external CSS or fonts — so it renders correctly in Gmail, Outlook, Apple Mail, and mobile clients.
+
+Layout:
+- Green header bar with "Follow-up from [Company Name]"
+- Subject line as a heading
+- Message body as paragraphs (line breaks preserved)
+- Contractor signature (name, company, phone if set, website if set)
+- Footer: "Sent via EstiGator on behalf of [Company Name]"
+
+**Reply-To**: when `RESEND_INBOUND_DOMAIN` is configured, the `replyTo` address is set to a unique inbound address (`r_<event_id>@<domain>`) and client replies are routed back to the dashboard. Without inbound configured, the contractor's real email is used as `replyTo` — replies go to their inbox and are not tracked in-app. See **Inbound reply handling** below.
 
 ## Database migrations
 
@@ -88,6 +114,10 @@ Run all migration files in order by pasting them into the Supabase SQL Editor. E
 | `20240109000000_job_requests_trade.sql` | Trade field on job requests |
 | `20240110000000_tax_lines.sql` | Multi-line tax support |
 | `20240111000000_job_requests_contractor_id.sql` | **Required:** scopes job requests to contractor |
+| `20240112000000_contractor_public_profile.sql` | RPC for safe contractor profile exposure to clients |
+| `20240113000000_recovery_email_events.sql` | **Required for email:** audit log of all sent follow-ups |
+| `20240114000000_grant_recovery_email_events.sql` | Explicit grants for recovery_email_events |
+| `20240115000000_recovery_inbound_replies.sql` | **Required for inbound replies:** reply addressing columns + recovery_email_replies table |
 
 Tables created:
 - `profiles` — business profile per user, auto-created on signup
@@ -96,6 +126,7 @@ Tables created:
 - `invoices` — invoice tracking with status and recovery stage
 - `estimates` — estimate tracking linked to clients
 - `recovery_items` — follow-up queue items (the core product)
+- `recovery_email_events` — audit log of every recovery email send attempt
 - `job_requests` — client-submitted job requests scoped to a contractor
 - `recovery_drafts`, `reminders`, `recovery_actions` — supporting tables
 
@@ -132,18 +163,85 @@ The default currency is **CAD**. All dashboard displays and PDFs use `en-CA` for
 
 1. Add a recovery item (ignored estimate, overdue invoice, unpaid work, etc.)
 2. The app generates a polite follow-up message
-3. **Copy** the message and send it manually (email, SMS, phone — your choice)
-4. Mark as sent and schedule a check-back date
+3. If a client email is on the item: click **Send follow-up email** — the app emails the client directly via Resend, logs the event, and schedules the check-back
+4. If no email is available: **Copy** the message and send it manually, then click **Mark sent manually**
 5. Come back on the check-back date to record the outcome
 6. Mark won / lost / follow up again
 
-> Messages are **copied to clipboard only** — no automatic email or SMS is sent.
+Every email send is logged in `recovery_email_events`. The recovery item is only updated to "Waiting for reply" after the provider confirms delivery — a failed send never silently marks the item as sent.
+
+> **Email requires Resend credentials** — see Environment variables above. Copy/manual mode works without them.
+
+## Inbound reply handling
+
+When a contractor sends a recovery follow-up email, the app can generate a unique **Reply-To** address that routes the client's reply back into the dashboard. This requires configuring Resend Receiving.
+
+### Required environment variables
+
+| Variable | Description |
+|---|---|
+| `RESEND_INBOUND_DOMAIN` | Domain you configured for Resend Receiving, e.g. `reply.yourdomain.com` |
+| `RESEND_WEBHOOK_SECRET` | Shared secret to authenticate inbound webhook POSTs |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key — webhook uses this to bypass RLS when saving replies |
+
+### Resend Receiving setup
+
+1. Go to **Resend dashboard → Receiving**.
+2. Add a receiving domain (e.g. `reply.yourdomain.com`) and follow DNS setup instructions.
+3. Add a webhook endpoint with event type **`email.received`**.
+4. Set the webhook URL to: `https://your-app.com/api/webhooks/resend/inbound?secret=<RESEND_WEBHOOK_SECRET>`
+   - Or pass the secret as `x-resend-webhook-secret` header if Resend supports custom headers.
+5. Set `RESEND_INBOUND_DOMAIN=reply.yourdomain.com` in your environment.
+6. Set `RESEND_WEBHOOK_SECRET` to any long random string.
+
+### How reply addresses work
+
+Each outbound follow-up email generates a unique reply address:
+
+```
+r_<email_event_uuid>@<RESEND_INBOUND_DOMAIN>
+```
+
+This address is stored in `recovery_email_events.reply_to_email` and embedded as the `Reply-To` header. When the client replies, Resend routes the email to the webhook which looks up the matching event and saves the reply to `recovery_email_replies`.
+
+### Local testing with ngrok
+
+Resend needs a publicly reachable URL to deliver inbound webhooks.
+
+```bash
+# Start the dev server
+npm run dev
+
+# In another terminal, expose port 3000
+ngrok http 3000
+```
+
+Use the ngrok URL (`https://xxxx.ngrok.io/api/webhooks/resend/inbound?secret=...`) as the webhook URL in Resend.
+
+### Database migrations
+
+Two new tables / columns are added by `20240115000000_recovery_inbound_replies.sql`:
+
+- `recovery_email_events.reply_to_email` — the inbound address used for a specific send
+- `recovery_email_events.inbound_thread_key` — UUID used to match inbound replies
+- `recovery_email_replies` — stores each inbound reply from a client
+
+### Limitations
+
+- Replies are only visible in the app for emails **sent after inbound setup** — historical emails have no `reply_to_email` set.
+- No in-app reply composer yet — the contractor must reply via their own email client.
+- Email attachments in client replies are not stored (only text/HTML body).
+- If `RESEND_INBOUND_DOMAIN` is missing, the `Reply-To` header falls back to the contractor's real email — replies go to their inbox and are **not tracked** in the app.
+- Requires Resend's Receiving feature, which may require a custom domain and DNS setup.
+
+---
 
 ## Known limitations / future work
 
 - Photo uploads in client job requests are not yet implemented
 - Templates feature is not yet implemented
-- No automatic email/SMS sending — all messages are copy/paste
+- Invoice and estimate email sending not yet implemented (only recovery follow-ups use Resend)
+- No SMS sending (Twilio integration is future work)
 - No Stripe or payment processing
 
 ## Run commands

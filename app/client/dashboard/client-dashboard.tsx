@@ -1,142 +1,208 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
+  ArrowRight,
   CheckCircle2,
+  Clock,
   FileText,
-  Inbox,
-  type LucideIcon,
-  Printer,
-  Receipt,
-  XCircle,
+  FolderOpen,
+  HardHat,
+  Plus,
+  RefreshCw,
 } from "lucide-react"
-import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Skeleton } from "@/components/ui/skeleton"
-import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
 type JobRequest = Database["public"]["Tables"]["job_requests"]["Row"]
-type Estimate = Database["public"]["Tables"]["estimates"]["Row"]
-type Invoice = Database["public"]["Tables"]["invoices"]["Row"]
+type Estimate   = Database["public"]["Tables"]["estimates"]["Row"]
+type Invoice    = Database["public"]["Tables"]["invoices"]["Row"]
 
-const dateFmt = new Intl.DateTimeFormat("en-CA", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-})
+// ── Status helpers ────────────────────────────────────────────────────────────
 
-function formatDate(value: string | null) {
-  if (!value) return "Not set"
-  return dateFmt.format(new Date(`${value.slice(0, 10)}T00:00:00`))
+const STATUS_LABEL: Record<string, string> = {
+  new:              "Under Review",
+  reviewed:         "Estimate Pending",
+  estimate_created: "Estimate Ready",
+  accepted:         "Accepted",
+  declined:         "Declined",
+  closed:           "Closed",
 }
 
-function statusLabel(value: string) {
-  return value
-    .split("_")
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ")
+const STATUS_NEXT: Record<string, string> = {
+  new:              "Your contractor is reviewing your request.",
+  reviewed:         "Your contractor is preparing an estimate.",
+  estimate_created: "An estimate is ready — open the project to review it.",
+  accepted:         "Your contractor will be in touch to schedule the work.",
+  declined:         "The estimate was not accepted.",
+  closed:           "This project has been closed.",
 }
 
-function EmptyState({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: LucideIcon
-  title: string
-  description: string
-}) {
+type StatusColor = "gray" | "yellow" | "green" | "red"
+
+const STATUS_COLOR: Record<string, StatusColor> = {
+  new:              "gray",
+  reviewed:         "yellow",
+  estimate_created: "green",
+  accepted:         "green",
+  declined:         "red",
+  closed:           "gray",
+}
+
+const colorClasses: Record<StatusColor, { badge: string; dot: string }> = {
+  gray:   { badge: "bg-gray-100 text-gray-700",           dot: "bg-gray-400" },
+  yellow: { badge: "bg-amber-50 text-amber-700",           dot: "bg-amber-400" },
+  green:  { badge: "bg-green-50 text-green-700",           dot: "bg-green-500" },
+  red:    { badge: "bg-red-50 text-red-700",               dot: "bg-red-400" },
+}
+
+function relativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime()
+  const mins  = Math.floor(diff / 60_000)
+  if (mins < 60)      return mins <= 1 ? "Just now" : `${mins} minutes ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24)     return hours === 1 ? "1 hour ago" : `${hours} hours ago`
+  const days  = Math.floor(hours / 24)
+  if (days < 7)       return days === 1 ? "Yesterday" : `${days} days ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5)      return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`
+  return new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric" }).format(
+    new Date(isoString)
+  )
+}
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+
+function DashboardSkeleton() {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-      <div className="mx-auto grid size-12 place-items-center rounded-lg bg-background text-muted-foreground">
-        <Icon className="size-5" />
+    <div className="space-y-4">
+      {[1, 2].map((i) => (
+        <Skeleton key={i} className="h-44 rounded-2xl" />
+      ))}
+    </div>
+  )
+}
+
+// ── Project card ──────────────────────────────────────────────────────────────
+
+function ProjectCard({
+  job,
+  hasNewEstimate,
+}: {
+  job:            JobRequest
+  hasNewEstimate: boolean
+}) {
+  const status    = job.status as keyof typeof STATUS_LABEL
+  const color     = STATUS_COLOR[status] ?? "gray"
+  const classes   = colorClasses[color]
+  const label     = STATUS_LABEL[status] ?? status
+  const next      = STATUS_NEXT[status] ?? ""
+
+  return (
+    <Link
+      href={`/client/portal/${job.id}`}
+      className="group block rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm transition hover:border-gray-300 hover:shadow-md sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${classes.badge}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${classes.dot}`} />
+              {label}
+            </span>
+            {hasNewEstimate && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                <FileText className="h-3 w-3" />
+                New estimate
+              </span>
+            )}
+          </div>
+          <h3 className="mt-2.5 truncate text-base font-semibold text-gray-900 group-hover:text-green-700 transition-colors">
+            {job.title}
+          </h3>
+          <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">
+            {next}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-2 text-gray-400 transition group-hover:border-green-200 group-hover:bg-green-50 group-hover:text-green-600">
+            <ArrowRight className="h-4 w-4" />
+          </div>
+        </div>
       </div>
-      <h3 className="mt-4 text-base font-semibold">{title}</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        {description}
+
+      <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
+        <span className="flex items-center gap-1">
+          <Clock className="h-3.5 w-3.5" />
+          Updated {relativeTime(job.updated_at)}
+        </span>
+        {job.service_area && job.service_area !== "Not specified" && (
+          <span>{job.service_area}</span>
+        )}
+      </div>
+    </Link>
+  )
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
+        <FolderOpen className="h-7 w-7 text-gray-400" />
+      </div>
+      <h3 className="text-base font-semibold text-gray-900">No projects yet</h3>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
+        Use the request link your contractor shared with you to submit your first
+        project — no account setup needed.
       </p>
     </div>
   )
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="grid gap-6">
-      <Skeleton className="h-36 rounded-xl" />
-      <div className="grid gap-6 xl:grid-cols-3">
-        <Skeleton className="h-72 rounded-xl" />
-        <Skeleton className="h-72 rounded-xl" />
-        <Skeleton className="h-72 rounded-xl" />
-      </div>
-    </div>
-  )
-}
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function ClientDashboardPage() {
   const supabase = useMemo(() => createClient(), [])
-  const [jobRequests, setJobRequests] = useState<JobRequest[]>([])
-  const [estimates, setEstimates] = useState<Estimate[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
+
+  const [jobs,     setJobs]     = useState<JobRequest[]>([])
+  const [estimates, setEsts]    = useState<Estimate[]>([])
+  const [isLoading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    setIsLoading(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    setLoading(true)
 
-    if (!user) {
-      setIsLoading(false)
-      return
-    }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
 
     const { data: requests } = await supabase
       .from("job_requests")
       .select("*")
       .eq("client_id", user.id)
-      .order("created_at", { ascending: false })
+      .order("updated_at", { ascending: false })
 
-    const requestRows = requests ?? []
-    setJobRequests(requestRows)
+    const rows = requests ?? []
+    setJobs(rows)
 
-    const requestIds = requestRows.map((request) => request.id)
-    if (requestIds.length === 0) {
-      setEstimates([])
-      setInvoices([])
-      setIsLoading(false)
-      return
-    }
+    if (rows.length === 0) { setLoading(false); return }
 
-    const [estimateResult, invoiceResult] = await Promise.all([
-      supabase
-        .from("estimates")
-        .select("*")
-        .in("job_request_id", requestIds)
-        .neq("status", "Draft")
-        .order("sent_date", { ascending: false }),
-      supabase
-        .from("invoices")
-        .select("*")
-        .in("job_request_id", requestIds)
-        .order("issue_date", { ascending: false }),
-    ])
+    const ids = rows.map((r) => r.id)
+    const { data: ests } = await supabase
+      .from("estimates")
+      .select("id, job_request_id, status, created_at")
+      .in("job_request_id", ids)
+      .in("status", ["Sent", "Follow-up Needed", "Follow-up Sent", "Interested"])
 
-    setEstimates(estimateResult.data ?? [])
-    setInvoices(invoiceResult.data ?? [])
-    setIsLoading(false)
+    setEsts(ests ?? [])
+    setLoading(false)
   }, [supabase])
 
   useEffect(() => {
@@ -144,254 +210,81 @@ export function ClientDashboardPage() {
     return () => window.clearTimeout(id)
   }, [load])
 
-  async function respondToEstimate(
-    estimate: Estimate,
-    response: "Accepted" | "Declined"
-  ) {
-    if (!estimate.job_request_id) return
-    setIsSaving(true)
-
-    const requestStatus = response === "Accepted" ? "accepted" : "declined"
-    const [estimateResult, requestResult] = await Promise.all([
-      supabase
-        .from("estimates")
-        .update({ status: response })
-        .eq("id", estimate.id)
-        .select()
-        .single(),
-      supabase
-        .from("job_requests")
-        .update({ status: requestStatus })
-        .eq("id", estimate.job_request_id)
-        .select()
-        .single(),
-    ])
-
-    if (estimateResult.error || requestResult.error) {
-      toast.error("Could not update the estimate response.")
-    } else {
-      setEstimates((current) =>
-        current.map((item) =>
-          item.id === estimate.id ? estimateResult.data : item
-        )
-      )
-      setJobRequests((current) =>
-        current.map((item) =>
-          item.id === estimate.job_request_id ? requestResult.data : item
-        )
-      )
-      toast.success(
-        response === "Accepted" ? "Estimate accepted" : "Estimate declined"
-      )
+  // Map job_request_id → whether there's a pending estimate
+  const newEstimateByJob = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const e of estimates) {
+      if (e.job_request_id) map[e.job_request_id] = true
     }
+    return map
+  }, [estimates])
 
-    setIsSaving(false)
-  }
+  // Summary counts
+  const pendingCount  = jobs.filter((j) => j.status === "new" || j.status === "reviewed").length
+  const actionCount   = jobs.filter((j) => j.status === "estimate_created").length
 
   return (
-    <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
-      <ContentReveal isLoading={isLoading} skeleton={<DashboardSkeleton />}>
-        <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Welcome to your EstiGator portal
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Submit job requests and review estimates or invoices connected
-                to your work.
-              </p>
-            </div>
-            <p className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground sm:text-right">
-              Need a new estimate? Use the request link your contractor shared with you.
-            </p>
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+
+      {/* Welcome header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+          Your Projects
+        </h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Track the status of your contractor projects in one place.
+        </p>
+      </div>
+
+      {/* Quick-glance stat row */}
+      {!isLoading && jobs.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-xs">
+            <div className="text-2xl font-bold text-gray-900">{jobs.length}</div>
+            <div className="mt-0.5 text-xs text-gray-500">Total</div>
           </div>
-        </section>
+          <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-xs">
+            <div className="text-2xl font-bold text-amber-600">{pendingCount}</div>
+            <div className="mt-0.5 text-xs text-gray-500">In progress</div>
+          </div>
+          <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-center shadow-xs">
+            <div className="text-2xl font-bold text-green-700">{actionCount}</div>
+            <div className="mt-0.5 text-xs text-gray-500">Need action</div>
+          </div>
+        </div>
+      )}
 
-        <section className="grid gap-6 xl:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Submitted Job Requests</CardTitle>
-              <CardDescription>
-                Requests you have sent to your contractor.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {jobRequests.length > 0 ? (
-                <div className="grid gap-3">
-                  {jobRequests.map((request) => (
-                    <div
-                      key={request.id}
-                      className="rounded-lg border border-border bg-background p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{request.title}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {request.service_area} - {formatDate(request.created_at)}
-                          </p>
-                        </div>
-                        <Badge variant="outline">
-                          {statusLabel(request.status)}
-                        </Badge>
-                      </div>
-                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                        {request.description}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={Inbox}
-                  title="No requests yet"
-                  description="Use the request link your contractor shared with you to send your first request."
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card id="estimates">
-            <CardHeader>
-              <CardTitle>Estimates Received</CardTitle>
-              <CardDescription>
-                Review estimate details and respond when ready.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {estimates.length > 0 ? (
-                <div className="grid gap-3">
-                  {estimates.map((estimate) => {
-                    const canRespond =
-                      estimate.status !== "Accepted" &&
-                      estimate.status !== "Declined" &&
-                      estimate.status !== "Won" &&
-                      estimate.status !== "Lost"
-
-                    return (
-                      <div
-                        key={estimate.id}
-                        className="rounded-lg border border-border bg-background p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-medium">
-                              {estimate.estimate_number}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-green-700 dark:text-green-400">
-                              {money.format(estimate.amount)}
-                            </p>
-                          </div>
-                          <Badge variant="outline">{estimate.status}</Badge>
-                        </div>
-                        {estimate.notes ? (
-                          <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                            {estimate.notes}
-                          </p>
-                        ) : null}
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" asChild>
-                            <a
-                              href={`/print/estimate/${estimate.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <Printer className="size-3.5" />
-                              View PDF
-                            </a>
-                          </Button>
-                          {canRespond ? (
-                            <>
-                              <Button
-                                size="sm"
-                                className="bg-green-700 text-white hover:bg-green-800"
-                                disabled={isSaving}
-                                onClick={() =>
-                                  void respondToEstimate(estimate, "Accepted")
-                                }
-                              >
-                                <CheckCircle2 className="size-3.5" />
-                                Accept
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isSaving}
-                                onClick={() =>
-                                  void respondToEstimate(estimate, "Declined")
-                                }
-                              >
-                                <XCircle className="size-3.5" />
-                                Decline
-                              </Button>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={FileText}
-                  title="No estimates received"
-                  description="Estimates linked to your submitted job requests will appear here."
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card id="invoices">
-            <CardHeader>
-              <CardTitle>Invoices Received</CardTitle>
-              <CardDescription>
-                View invoices connected to accepted work.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {invoices.length > 0 ? (
-                <div className="grid gap-3">
-                  {invoices.map((invoice) => (
-                    <div
-                      key={invoice.id}
-                      className="rounded-lg border border-border bg-background p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium">{invoice.invoice_number}</p>
-                          <p className="mt-1 text-sm font-semibold text-green-700 dark:text-green-400">
-                            {money.format(invoice.amount)}
-                          </p>
-                        </div>
-                        <Badge variant="outline">{invoice.status}</Badge>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Due {formatDate(invoice.due_date)}
-                      </p>
-                      <Button className="mt-4" size="sm" variant="outline" asChild>
-                        <a
-                          href={`/print/invoice/${invoice.id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Printer className="size-3.5" />
-                          View PDF
-                        </a>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={Receipt}
-                  title="No invoices received"
-                  description="Invoices linked to your accepted work will appear here."
-                />
-              )}
-            </CardContent>
-          </Card>
-        </section>
+      {/* Project list */}
+      <ContentReveal isLoading={isLoading} skeleton={<DashboardSkeleton />}>
+        {jobs.length > 0 ? (
+          <div className="space-y-3">
+            {jobs.map((job) => (
+              <ProjectCard
+                key={job.id}
+                job={job}
+                hasNewEstimate={!!newEstimateByJob[job.id]}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState />
+        )}
       </ContentReveal>
+
+      {/* Refresh helper */}
+      {!isLoading && jobs.length > 0 && (
+        <div className="text-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-400 hover:text-gray-600"
+            onClick={() => void load()}
+          >
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            Refresh
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

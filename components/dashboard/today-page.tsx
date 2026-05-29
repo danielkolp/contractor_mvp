@@ -22,7 +22,9 @@ import { toast } from "sonner"
 
 import { AddRecoveryDialog } from "@/components/dashboard/add-recovery-dialog"
 import { CheckBackDialog } from "@/components/dashboard/check-back-dialog"
-import { RecoveryCard } from "@/components/dashboard/recovery-card"
+import { RecoveryCard, type ReplyInfo } from "@/components/dashboard/recovery-card"
+import { RecoveryRepliesDialog } from "@/components/dashboard/recovery-replies-dialog"
+import { SendFollowUpDialog } from "@/components/dashboard/send-follow-up-dialog"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Button } from "@/components/ui/button"
 import { generateRecoveryItemMessage } from "@/lib/recovery-engine"
@@ -71,11 +73,14 @@ export function TodayPage() {
   const [overdueInvoices, setOverdueInvoices] = useState<InvoiceRow[]>([])
   const [pendingEstimates, setPendingEstimates] = useState<EstimateRow[]>([])
   const [acceptedEstimates, setAcceptedEstimates] = useState<EstimateRow[]>([])
+  const [replyInfoMap, setReplyInfoMap] = useState<Record<string, ReplyInfo>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [checkBackItem, setCheckBackItem] = useState<RecoveryItem | null>(null)
+  const [sendFollowUpItem, setSendFollowUpItem] = useState<RecoveryItem | null>(null)
+  const [viewRepliesItem, setViewRepliesItem] = useState<RecoveryItem | null>(null)
   const [isDemoSeeding, setIsDemoSeeding] = useState(false)
   const actionSectionRef = useRef<HTMLDivElement>(null)
 
@@ -136,11 +141,46 @@ export function TodayPage() {
           .limit(5),
       ])
 
-    setItems(itemsResult.data ?? [])
+    const loadedItems = itemsResult.data ?? []
+    setItems(loadedItems)
     setClients(clientsResult.data ?? [])
     setOverdueInvoices(invoicesResult.data ?? [])
     setPendingEstimates(estimatesResult.data ?? [])
     setAcceptedEstimates(acceptedEstimatesResult.data ?? [])
+
+    // Load reply info for all visible items in one query
+    if (loadedItems.length > 0) {
+      const itemIds = loadedItems.map((i) => i.id)
+      const { data: replies } = await supabase
+        .from("recovery_email_replies")
+        .select("recovery_item_id, from_email, from_name, text_body, received_at")
+        .eq("user_id", user.id)
+        .in("recovery_item_id", itemIds)
+        .order("received_at", { ascending: false })
+
+      if (replies && replies.length > 0) {
+        const map: Record<string, ReplyInfo> = {}
+        for (const reply of replies) {
+          const id = reply.recovery_item_id
+          if (!map[id]) {
+            map[id] = {
+              count: 0,
+              latestFromName: reply.from_name,
+              latestFromEmail: reply.from_email,
+              latestTextBody: reply.text_body,
+              latestReceivedAt: reply.received_at,
+            }
+          }
+          map[id].count++
+        }
+        setReplyInfoMap(map)
+      } else {
+        setReplyInfoMap({})
+      }
+    } else {
+      setReplyInfoMap({})
+    }
+
     setIsLoading(false)
   }, [supabase])
 
@@ -251,6 +291,18 @@ export function TodayPage() {
     const ok = await updateItem(item.id, { check_back_date: addDaysIso(1) })
     if (ok) toast.success("Snoozed until tomorrow.")
     setIsSaving(false)
+  }
+
+  function handleSendFollowUp(item: RecoveryItem) {
+    setSendFollowUpItem(item)
+  }
+
+  function handleEmailSent(updatedItem: RecoveryItem) {
+    setItems((prev) => prev.map((i) => (i.id === updatedItem.id ? updatedItem : i)))
+  }
+
+  function handleViewReplies(item: RecoveryItem) {
+    setViewRepliesItem(item)
   }
 
   async function handleResolve(item: RecoveryItem) {
@@ -447,13 +499,15 @@ export function TodayPage() {
 
   const sharedCardProps = {
     isSaving,
-    onMarkSent: handleMarkSent,
-    onRemindLater: handleRemindLater,
-    onResolve: handleResolve,
-    onLost: handleLost,
-    onPaid: handlePaid,
+    onMarkSent:      handleMarkSent,
+    onSendFollowUp:  handleSendFollowUp,
+    onRemindLater:   handleRemindLater,
+    onResolve:       handleResolve,
+    onLost:          handleLost,
+    onPaid:          handlePaid,
     onFollowUpAgain: handleFollowUpAgain,
-    onNoResponse: handleNoResponse,
+    onNoResponse:    handleNoResponse,
+    onViewReplies:   handleViewReplies,
   }
 
   return (
@@ -473,6 +527,19 @@ export function TodayPage() {
         onConfirm={handleCheckBackConfirm}
         onCancel={() => setCheckBackItem(null)}
         isLoading={isSaving}
+      />
+
+      <SendFollowUpDialog
+        open={sendFollowUpItem !== null}
+        item={sendFollowUpItem}
+        onClose={() => setSendFollowUpItem(null)}
+        onSent={handleEmailSent}
+      />
+
+      <RecoveryRepliesDialog
+        open={viewRepliesItem !== null}
+        item={viewRepliesItem}
+        onClose={() => setViewRepliesItem(null)}
       />
 
       <div className="grid gap-4 p-4 sm:p-6 lg:p-8">
@@ -514,6 +581,7 @@ export function TodayPage() {
                         key={item.id}
                         item={item}
                         isCheckIn
+                        replyInfo={replyInfoMap[item.id]}
                         {...sharedCardProps}
                       />
                     ))}
@@ -522,6 +590,7 @@ export function TodayPage() {
                         key={item.id}
                         item={item}
                         isCheckIn={false}
+                        replyInfo={replyInfoMap[item.id]}
                         {...sharedCardProps}
                       />
                     ))}
@@ -562,6 +631,7 @@ export function TodayPage() {
                         key={item.id}
                         item={item}
                         isCheckIn={false}
+                        replyInfo={replyInfoMap[item.id]}
                         {...sharedCardProps}
                       />
                     ))}
@@ -582,6 +652,7 @@ export function TodayPage() {
                         item={item}
                         isCheckIn={false}
                         isWaiting
+                        replyInfo={replyInfoMap[item.id]}
                         {...sharedCardProps}
                       />
                     ))}

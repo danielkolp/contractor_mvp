@@ -480,6 +480,111 @@ export type Database = {
         }
         Relationships: []
       }
+      recovery_email_events: {
+        Row: {
+          id: string
+          user_id: string
+          recovery_item_id: string
+          to_email: string
+          subject: string
+          body: string
+          provider: string
+          provider_message_id: string | null
+          status: string
+          error_message: string | null
+          reply_to_email: string | null
+          inbound_thread_key: string | null
+          sent_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          recovery_item_id: string
+          to_email: string
+          subject: string
+          body: string
+          provider?: string
+          provider_message_id?: string | null
+          status?: string
+          error_message?: string | null
+          reply_to_email?: string | null
+          inbound_thread_key?: string | null
+          sent_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          recovery_item_id?: string
+          to_email?: string
+          subject?: string
+          body?: string
+          provider?: string
+          provider_message_id?: string | null
+          status?: string
+          error_message?: string | null
+          reply_to_email?: string | null
+          inbound_thread_key?: string | null
+          sent_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      recovery_email_replies: {
+        Row: {
+          id: string
+          user_id: string
+          recovery_item_id: string
+          recovery_email_event_id: string | null
+          from_email: string
+          from_name: string | null
+          to_email: string
+          subject: string | null
+          text_body: string | null
+          html_body: string | null
+          provider: string
+          provider_email_id: string | null
+          raw_payload: Json | null
+          received_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          recovery_item_id: string
+          recovery_email_event_id?: string | null
+          from_email: string
+          from_name?: string | null
+          to_email: string
+          subject?: string | null
+          text_body?: string | null
+          html_body?: string | null
+          provider?: string
+          provider_email_id?: string | null
+          raw_payload?: Json | null
+          received_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          recovery_item_id?: string
+          recovery_email_event_id?: string | null
+          from_email?: string
+          from_name?: string | null
+          to_email?: string
+          subject?: string | null
+          text_body?: string | null
+          html_body?: string | null
+          provider?: string
+          provider_email_id?: string | null
+          raw_payload?: Json | null
+          received_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       recovery_items: {
         Row: {
           id: string

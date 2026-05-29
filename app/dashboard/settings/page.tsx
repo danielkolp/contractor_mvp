@@ -19,13 +19,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatPhoneNumberInput } from "@/lib/phone-format"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ServiceAreaSelect } from "@/components/ui/service-area-select"
 import { CONTRACTOR_TRADES, TradeMultiSelect } from "@/components/ui/trade-multi-select"
 import { createClient } from "@/lib/supabase/client"
@@ -657,22 +650,7 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="grid gap-2 sm:max-w-xs">
-                <Label htmlFor="default_tone">Default follow-up tone</Label>
-                <Select
-                  value={settingsForm.default_tone}
-                  onValueChange={(v) => updateSettings("default_tone", v)}
-                >
-                  <SelectTrigger id="default_tone">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="friendly">Friendly — warm, polite reminder</SelectItem>
-                    <SelectItem value="firm">Firm — direct, professional</SelectItem>
-                    <SelectItem value="final">Final notice — urgent, last warning</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* default_tone is stored in DB but not yet wired to message generation */}
             </CardContent>
           </Card>
         </form>

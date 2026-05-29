@@ -1,14 +1,21 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { type FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import {
+  Check,
   ClipboardList,
+  Copy,
+  ExternalLink,
   FileText,
+  Link2,
+  Loader2,
   MapPin,
+  MessageSquare,
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Send,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -47,6 +54,14 @@ type JobRequest = Database["public"]["Tables"]["job_requests"]["Row"]
 type JobRequestUpdate = Database["public"]["Tables"]["job_requests"]["Update"]
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
+
+type Message = {
+  id:          string
+  sender_id:   string
+  sender_role: "contractor" | "client"
+  body:        string
+  created_at:  string
+}
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
@@ -159,11 +174,62 @@ export default function ContractorJobRequestsPage() {
   const [requests, setRequests] = useState<JobRequest[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<JobRequest | null>(null)
+  const [messagingRequest, setMessagingRequest] = useState<JobRequest | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [messageBody, setMessageBody] = useState("")
+  const [isSendingMsg, startMsgTransition] = useTransition()
+  const [linkCopied, setLinkCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   // Maps job_request.id → estimate.id for requests that already have an estimate.
   const [estimateIdByRequestId, setEstimateIdByRequestId] = useState<Record<string, string>>({})
+
+  const shareableLink = userId
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${userId}`
+    : null
+
+  function copyLink() {
+    if (!shareableLink) return
+    navigator.clipboard.writeText(shareableLink).then(() => {
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    })
+  }
+
+  async function openMessages(request: JobRequest) {
+    setMessagingRequest(request)
+    setMessages([])
+    const { data } = await supabase
+      .from("client_messages" as "job_requests")
+      .select("*")
+      .eq("job_request_id", request.id)
+      .order("created_at", { ascending: true })
+    setMessages((data ?? []) as unknown as Message[])
+  }
+
+  function sendMessage(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!messagingRequest || !userId || !messageBody.trim()) return
+    const text = messageBody.trim()
+    setMessageBody("")
+
+    startMsgTransition(async () => {
+      const { data, error } = await supabase
+        .from("client_messages" as "job_requests")
+        .insert({
+          job_request_id: messagingRequest.id,
+          sender_id:      userId,
+          sender_role:    "contractor",
+          body:           text,
+        } as unknown as Parameters<ReturnType<typeof supabase.from<"job_requests">>["insert"]>[0])
+        .select()
+        .single()
+
+      if (error) { toast.error("Could not send message"); return }
+      if (data) setMessages((prev) => [...prev, data as unknown as Message])
+    })
+  }
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -355,6 +421,67 @@ export default function ContractorJobRequestsPage() {
         </Button>
       </PageHeader>
 
+      {/* Messages dialog */}
+      <Dialog
+        open={messagingRequest !== null}
+        onOpenChange={(open) => { if (!open) { setMessagingRequest(null); setMessages([]) } }}
+      >
+        <DialogContent className="max-w-lg">
+          {messagingRequest && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <MessageSquare className="size-4 text-muted-foreground" />
+                  {messagingRequest.title}
+                </DialogTitle>
+                <DialogDescription>
+                  Messaging {messagingRequest.client_name || messagingRequest.client_email || "client"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-72 min-h-[6rem] space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-3">
+                {messages.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No messages yet. Start the conversation below.
+                  </p>
+                ) : (
+                  messages.map((msg) => {
+                    const isMe = msg.sender_role === "contractor"
+                    return (
+                      <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+                          isMe
+                            ? "bg-green-700 text-white"
+                            : "bg-background border border-border text-foreground"
+                        }`}>
+                          {msg.body}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+              <form onSubmit={sendMessage} className="flex gap-2">
+                <input
+                  type="text"
+                  value={messageBody}
+                  onChange={(e) => setMessageBody(e.target.value)}
+                  placeholder="Type a message…"
+                  className="flex h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSendingMsg || !messageBody.trim()}
+                  className="bg-green-700 text-white hover:bg-green-800"
+                >
+                  <Send className="size-4" />
+                </Button>
+              </form>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={selectedRequest !== null}
         onOpenChange={(open) => {
@@ -422,7 +549,17 @@ export default function ContractorJobRequestsPage() {
                     </p>
                   </div>
                 ) : null}
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedRequest(null)
+                      void openMessages(selectedRequest)
+                    }}
+                  >
+                    <MessageSquare className="size-4" />
+                    Message client
+                  </Button>
                   <Button
                     variant="outline"
                     disabled={isSaving}
@@ -448,6 +585,43 @@ export default function ContractorJobRequestsPage() {
       </Dialog>
 
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
+        {/* Shareable link card */}
+        {shareableLink && (
+          <div className="flex flex-col gap-3 rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-900/60 dark:bg-green-950/20 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-sm font-semibold text-green-900 dark:text-green-100">
+                <Link2 className="size-4 shrink-0" />
+                Your client request link
+              </div>
+              <p className="mt-0.5 truncate text-xs text-green-700 dark:text-green-300">
+                {shareableLink}
+              </p>
+              <p className="mt-1 text-xs text-green-700/70 dark:text-green-400">
+                Send this link to clients so they can submit a project request — no account needed.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-green-300 bg-white text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-transparent dark:text-green-200"
+                onClick={copyLink}
+              >
+                {linkCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {linkCopied ? "Copied!" : "Copy link"}
+              </Button>
+              <Button size="sm" variant="outline" asChild
+                className="border-green-300 bg-white text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-transparent dark:text-green-200"
+              >
+                <a href={shareableLink} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-3.5" />
+                  Preview
+                </a>
+              </Button>
+            </div>
+          </div>
+        )}
+
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -530,6 +704,11 @@ export default function ContractorJobRequestsPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>{request.title}</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onSelect={() => void openMessages(request)}>
+                                <MessageSquare className="size-4" />
+                                Message client
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onSelect={() =>

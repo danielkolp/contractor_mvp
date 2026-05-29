@@ -39,14 +39,18 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 const navigation = [
-  { name: "Dashboard", href: "/client/dashboard", icon: Home },
-  { name: "Estimates", href: "/client/estimates", icon: FileText },
-  { name: "Invoices", href: "/client/invoices", icon: Receipt },
-  { name: "Settings", href: "/client/settings", icon: Settings },
+  { name: "My Projects", href: "/client/dashboard", icon: Home },
+  { name: "Estimates",   href: "/client/estimates", icon: FileText },
+  { name: "Invoices",    href: "/client/invoices",  icon: Receipt },
+  { name: "Settings",    href: "/client/settings",  icon: Settings },
 ]
 
 function isActivePath(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`)
+  if (pathname === href) return true
+  if (pathname.startsWith(`${href}/`)) return true
+  // Portal project pages count as "My Projects"
+  if (href === "/client/dashboard" && pathname.startsWith("/client/portal/")) return true
+  return false
 }
 
 function getInitials(email?: string) {
@@ -113,7 +117,7 @@ function Sidebar({ counts }: { counts: Record<string, number> }) {
   return (
     <aside className="hidden w-64 shrink-0 border-r border-border bg-sidebar lg:flex lg:flex-col">
       <div className="flex min-h-24 items-center justify-center px-5 pb-4 pt-5">
-        <Link href="/client/dashboard" className="flex w-full min-w-0 justify-center">
+        <Link href="/client/dashboard" className="flex w-full min-w-0 justify-center" aria-label="My Projects">
           <BrandLogo className="h-auto w-44 max-w-full" priority />
         </Link>
       </div>
@@ -122,7 +126,7 @@ function Sidebar({ counts }: { counts: Record<string, number> }) {
         <div className="rounded-xl border border-green-100 bg-green-50 p-4 text-green-950 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100">
           <div className="text-sm font-medium">Client portal</div>
           <p className="mt-1.5 text-xs leading-5 text-green-800 dark:text-green-200">
-            Submit requests and review estimates or invoices from your contractor.
+            Track your projects and communicate with your contractor.
           </p>
         </div>
       </div>
