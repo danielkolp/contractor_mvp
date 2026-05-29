@@ -539,7 +539,12 @@ export type Database = {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      contractor_exists: {
+        Args: { contractor_user_id: string }
+        Returns: boolean
+      }
+    }
     Enums: {
       contact_method: "Email" | "Phone" | "Text"
       estimate_status:

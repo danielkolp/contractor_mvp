@@ -84,16 +84,14 @@ export default function NewClientJobPage() {
         return
       }
 
-      // Verify the contractor exists before creating the request.
-      // contractorId is guaranteed non-null here (guarded by early return above).
-      const { data: contractorProfile, error: profileError } = await supabase
-        .from("profiles")
-        .select("user_id, role")
-        .eq("user_id", contractorId!)
-        .eq("role", "contractor")
-        .maybeSingle()
+      // Verify the contractor exists via the SECURITY DEFINER RPC so we don't
+      // require clients to have read access to the profiles table before a job
+      // request row exists (avoids RLS denial on the profiles table).
+      // contractorId is non-null here: guarded by the early return above.
+      const { data: contractorExists, error: contractorError } = await supabase
+        .rpc("contractor_exists", { contractor_user_id: contractorId! })
 
-      if (profileError || !contractorProfile) {
+      if (contractorError || !contractorExists) {
         setErrorMessage("Contractor not found. Please use the link your contractor shared.")
         return
       }

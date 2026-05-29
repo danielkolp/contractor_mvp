@@ -9,7 +9,6 @@ import {
   Home,
   LogOut,
   Menu,
-  PlusCircle,
   Receipt,
   Settings,
 } from "lucide-react"
@@ -40,7 +39,6 @@ import { cn } from "@/lib/utils"
 
 const navigation = [
   { name: "Dashboard", href: "/client/dashboard", icon: Home },
-  { name: "Submit Job", href: "/client/jobs/new", icon: PlusCircle },
   { name: "Estimates", href: "/client/estimates", icon: FileText },
   { name: "Invoices", href: "/client/invoices", icon: Receipt },
   { name: "Settings", href: "/client/settings", icon: Settings },

@@ -211,7 +211,7 @@ function getStatusDisplayLabel(status: InvoiceStatus): string {
 
 
 
-const dateFormatter = new Intl.DateTimeFormat("en-US", {
+const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   month: "short",
   day: "numeric",
   year: "numeric",
@@ -1044,7 +1044,7 @@ export default function InvoicesPage() {
             ? "Follow-up already sent. Opening Follow-ups."
             : "Follow-up draft ready to review."
         )
-        router.push("/dashboard/recovery")
+        router.push("/dashboard/recoveries")
         return
       }
 
@@ -1080,7 +1080,7 @@ export default function InvoicesPage() {
       }
 
       toast.success("Follow-up draft ready to review.")
-      router.push("/dashboard/recovery")
+      router.push("/dashboard/recoveries")
     } catch (error) {
       const message = getRecoveryDraftErrorMessage(error)
       setErrorMessage(message)

@@ -582,7 +582,7 @@ export default function SettingsPage() {
               </div>
             </CardHeader>
             <CardContent className="grid gap-6">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="payment_terms">Payment terms (days)</Label>
                   <Input
@@ -608,24 +608,6 @@ export default function SettingsPage() {
                     aria-invalid={Boolean(settingsErrors.late_fee_percentage)}
                   />
                   <FieldError message={settingsErrors.late_fee_percentage} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="currency">Currency</Label>
-                  <Select
-                    value={settingsForm.currency}
-                    onValueChange={(v) => updateSettings("currency", v)}
-                  >
-                    <SelectTrigger id="currency">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CAD">CAD — Canadian Dollar</SelectItem>
-                      <SelectItem value="USD">USD — US Dollar</SelectItem>
-                      <SelectItem value="GBP">GBP — British Pound</SelectItem>
-                      <SelectItem value="AUD">AUD — Australian Dollar</SelectItem>
-                      <SelectItem value="EUR">EUR — Euro</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
 

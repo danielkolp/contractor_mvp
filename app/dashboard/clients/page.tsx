@@ -96,7 +96,7 @@ const initialForm: ClientForm = {
 }
 
 
-const dateFormatter = new Intl.DateTimeFormat("en-US", {
+const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   month: "short",
   day: "numeric",
   year: "numeric",

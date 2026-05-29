@@ -1,13 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import {
   CheckCircle2,
   FileText,
   Inbox,
   type LucideIcon,
-  Plus,
   Printer,
   Receipt,
   XCircle,
@@ -203,12 +201,9 @@ export function ClientDashboardPage() {
                 to your work.
               </p>
             </div>
-            <Button className="bg-green-700 text-white hover:bg-green-800" asChild>
-              <Link href="/client/jobs/new">
-                <Plus className="size-4" />
-                Submit a job request
-              </Link>
-            </Button>
+            <p className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground sm:text-right">
+              Use the request link your contractor shared to submit a new job.
+            </p>
           </div>
         </section>
 

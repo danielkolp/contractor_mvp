@@ -447,7 +447,7 @@ function WaitingCard({
   onLost: (item: RecoveryItem) => void
 }) {
   const checkBackFormatted = item.check_back_date
-    ? new Date(`${item.check_back_date}T00:00:00`).toLocaleDateString("en-US", {
+    ? new Date(`${item.check_back_date}T00:00:00`).toLocaleDateString("en-CA", {
         month: "short",
         day: "numeric",
       })
