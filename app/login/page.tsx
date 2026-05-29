@@ -1,7 +1,8 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { CheckCircle2, CircleDollarSign } from "lucide-react"
+import { CheckCircle2 } from "lucide-react"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { LoginForm } from "@/components/auth/login-form"
 import {
   Card,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/card"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { createClient } from "@/lib/supabase/server"
+import { dashboardPathForRole, getProfileRole } from "@/lib/user-role"
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -33,23 +35,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     } = await supabase.auth.getUser()
 
     if (user) {
-      redirect("/dashboard")
+      const role = await getProfileRole(supabase, user.id, user.user_metadata)
+      redirect(dashboardPathForRole(role))
     }
   }
 
   const params = await searchParams
 
   return (
-    <main className="grid min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
+    <main className="force-light grid min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
       {/* Left: form */}
       <section className="mx-auto flex min-w-0 w-full max-w-md flex-col justify-center lg:px-10">
-        <Link href="/" className="mb-10 flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-lg bg-green-700 text-sm font-bold text-white shadow-sm">
-            RR
-          </div>
-          <span className="text-sm font-semibold tracking-tight text-foreground">
-            Revenue Recovery
-          </span>
+        <Link href="/" className="mb-10 flex items-center" aria-label="EstiGator home">
+          <BrandLogo className="h-10" priority />
         </Link>
 
         <Card className="min-w-0 overflow-hidden border-zinc-200 shadow-sm">
@@ -78,8 +76,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <section className="hidden border-l border-border bg-white lg:flex lg:flex-col lg:justify-center">
         <div className="flex h-full flex-col justify-center px-12 xl:px-16">
           <div className="max-w-lg">
-            <div className="mb-6 grid size-14 place-items-center rounded-2xl bg-green-700 text-white shadow-lg shadow-green-900/20">
-              <CircleDollarSign className="size-7" />
+            <div className="mb-6 grid size-16 place-items-center rounded-2xl bg-green-50 shadow-lg shadow-green-900/10">
+              <BrandLogo variant="mark" className="size-12" />
             </div>
             <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 xl:text-4xl">
               Recover revenue that slipped through the cracks.

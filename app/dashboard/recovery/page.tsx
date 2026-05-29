@@ -198,21 +198,21 @@ function getFallbackMessage(item: Pick<RecoveryItem, "clientName" | "invoiceNumb
 
 function getStageStyle(item: RecoveryItem): string {
   if (item.waitingOnCustomer) {
-    return "border-amber-200 bg-amber-50 text-amber-800"
+    return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
   }
 
   const { overdueStage } = item.recommendation
   if (overdueStage === "final_notice") {
-    return "border-red-200 bg-red-50 text-red-700"
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
   }
   if (overdueStage === "second_reminder") {
-    return "border-orange-200 bg-orange-50 text-orange-700"
+    return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/40 dark:text-orange-300"
   }
   if (overdueStage === "first_reminder") {
-    return "border-amber-200 bg-amber-50 text-amber-800"
+    return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
   }
 
-  return "border-sky-200 bg-sky-50 text-sky-800"
+  return "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300"
 }
 
 function getStatusLabel(item: RecoveryItem): string {
@@ -295,7 +295,7 @@ function FeaturedCard({
   }
 
   return (
-    <Card className="border-2 border-green-100 shadow-sm">
+    <Card className="border-2 border-green-100 shadow-sm dark:border-green-900/40">
       <CardHeader className="pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -328,8 +328,8 @@ function FeaturedCard({
                 className={cn(
                   "mt-1.5",
                   item.daysOverdue > 60
-                    ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-orange-200 bg-orange-50 text-orange-700"
+                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                    : "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/40 dark:text-orange-300"
                 )}
               >
                 {item.daysOverdue} day{item.daysOverdue === 1 ? "" : "s"} overdue
@@ -340,11 +340,11 @@ function FeaturedCard({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="rounded-xl border border-green-100 bg-green-50 p-4">
-          <p className="text-sm font-semibold text-green-800">
+        <div className="rounded-xl border border-green-100 bg-green-50 p-4 dark:border-green-900/50 dark:bg-green-950/30">
+          <p className="text-sm font-semibold text-green-800 dark:text-green-200">
             {item.recommendedAction}
           </p>
-          <p className="mt-1 text-xs leading-5 text-green-700">
+          <p className="mt-1 text-xs leading-5 text-green-700 dark:text-green-300">
             {item.waitingOnCustomer
               ? "A follow-up was sent. The invoice is waiting on a customer response."
               : getFollowUpSubtext(item.recommendation.overdueStage)}
@@ -1354,7 +1354,7 @@ export default function RecoveryPage() {
             {!hasActiveItems ? (
               <Card>
                 <CardContent className="p-10 text-center">
-                  <div className="mx-auto grid size-14 place-items-center rounded-xl bg-green-50 text-green-700">
+                  <div className="mx-auto grid size-14 place-items-center rounded-xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
                     <ClipboardCheck className="size-6" />
                   </div>
                   <h3 className="mt-4 text-lg font-semibold">
@@ -1379,7 +1379,7 @@ export default function RecoveryPage() {
             ) : (
               <>
                 <Card
-                  className="animate-[fade-slide-up_0.45s_ease_both] border-2 border-green-100 bg-gradient-to-br from-white to-green-50/40 motion-reduce:animate-none"
+                  className="animate-[fade-slide-up_0.45s_ease_both] border-2 border-green-100 bg-gradient-to-br from-white to-green-50/40 motion-reduce:animate-none dark:border-green-900/40 dark:from-transparent dark:to-green-950/20"
                   style={{ animationDelay: "0ms" }}
                 >
                   <CardContent className="p-5 sm:p-6">
@@ -1486,7 +1486,7 @@ export default function RecoveryPage() {
                                 <div className="min-w-0">
                                   <Badge
                                     variant="outline"
-                                    className="mb-2 border-green-200 bg-green-50 text-green-800"
+                                    className="mb-2 border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200"
                                   >
                                     Estimate
                                   </Badge>
@@ -1607,13 +1607,13 @@ export default function RecoveryPage() {
                   </section>
                 ) : estimateFollowUpItems.length === 0 ? (
                   <div
-                    className="animate-[fade-slide-up_0.45s_ease_both] rounded-xl border border-dashed border-green-200 bg-green-50/50 p-6 text-center motion-reduce:animate-none"
+                    className="animate-[fade-slide-up_0.45s_ease_both] rounded-xl border border-dashed border-green-200 bg-green-50/50 p-6 text-center motion-reduce:animate-none dark:border-green-900/50 dark:bg-green-950/20"
                     style={{ animationDelay: "160ms" }}
                   >
-                    <p className="text-sm font-semibold text-green-800">
+                    <p className="text-sm font-semibold text-green-800 dark:text-green-200">
                       All follow-ups are sent.
                     </p>
-                    <p className="mt-1.5 text-xs leading-5 text-green-700">
+                    <p className="mt-1.5 text-xs leading-5 text-green-700 dark:text-green-300">
                       Your active recovery drafts are waiting on customer
                       responses.
                     </p>
@@ -1775,7 +1775,7 @@ export default function RecoveryPage() {
                               </div>
                               <Badge
                                 variant="outline"
-                                className="mt-1 border-amber-200 bg-amber-50 text-amber-800"
+                                className="mt-1 border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
                               >
                                 Waiting on customer
                               </Badge>

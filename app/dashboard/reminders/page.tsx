@@ -367,7 +367,7 @@ export default function RemindersPage() {
             <ContentReveal isLoading={isLoading} skeleton={<RemindersListSkeleton />}>
               {reminders.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700">
+                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
                   <Bell className="size-5" />
                 </div>
                 <h3 className="mt-4 text-base font-semibold">
@@ -396,7 +396,7 @@ export default function RemindersPage() {
             ) : filteredReminders.length === 0 ? (
               activeTab === "today" ? (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                  <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700">
+                  <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
                     <Bell className="size-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">No reminders due today</h3>

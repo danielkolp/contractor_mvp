@@ -13,6 +13,7 @@ import {
   type MotionValue,
 } from "motion/react"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { AnimatedHeroMockup } from "./hero-mockup"
 import {
   EASE, VIEWPORT, usePRM, AnimatedNumber, MagneticButton,
@@ -51,7 +52,7 @@ const darkQueueRows = [
 ]
 
 const faqs = [
-  { question: "Will this send texts without me approving them?", answer: "No. Revenue Recovery drafts the message, but you decide what gets sent. You can edit, approve, skip, or leave it for later." },
+  { question: "Will this send texts without me approving them?", answer: "No. EstiGator drafts the message, but you decide what gets sent. You can edit, approve, skip, or leave it for later." },
   { question: "Does it sound like a real contractor?", answer: "Yes. The copy is short, plain, and respectful. It is built for real customer conversations, not accounting jargon." },
   { question: "Can I start without a full integration?", answer: "Yes. You can start by tracking invoices, estimates, and clients in the workspace, then connect more tools as the workflow grows." },
   { question: "Who is this for?", answer: "Small trade businesses and contractors who want a simple way to recover missed money without hiring an admin team." },
@@ -60,11 +61,7 @@ const faqs = [
 // ─── Shared components ────────────────────────────────────────────────────────
 
 function LogoMark() {
-  return (
-    <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-green-700 text-xs font-black tracking-tight text-white shadow-lg shadow-green-700/20">
-      RR
-    </div>
-  )
+  return <BrandLogo variant="mark" className="drop-shadow-lg" />
 }
 
 function AppLink({
@@ -358,7 +355,7 @@ function QueueStorySection() {
               Loose estimates and invoices snap into a ranked queue.
             </h2>
             <p className="mt-4 max-w-lg text-base leading-7 text-zinc-600">
-              Revenue Recovery finds every open invoice, unanswered estimate, and past customer — then ranks them by what needs a nudge most urgently. No spreadsheet, no memory required.
+              EstiGator finds every open invoice, unanswered estimate, and past customer — then ranks them by what needs a nudge most urgently. No spreadsheet, no memory required.
             </p>
           </SectionReveal>
 
@@ -407,7 +404,7 @@ function FinalCTASection() {
             <span className="text-green-700">after the estimate.</span>
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-zinc-600">
-            Revenue Recovery shows which clients need a follow-up, drafts the message, and keeps every invoice or estimate moving — without you chasing people from memory.
+            EstiGator shows which clients need a follow-up, drafts the message, and keeps every invoice or estimate moving — without you chasing people from memory.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <AppLink href="/signup">
@@ -968,9 +965,8 @@ export function LandingPage() {
           transition={{ duration: 0.55, ease: EASE }}
         >
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <Link href="/" className="flex min-w-0 items-center gap-3">
-              <LogoMark />
-              <span className="truncate text-sm font-black tracking-tight">Revenue Recovery</span>
+            <Link href="/" className="flex min-w-0 items-center" aria-label="EstiGator home">
+              <BrandLogo className="h-9" priority />
             </Link>
             <nav className="flex items-center gap-2">
               <Link href="/dashboard" className="hidden rounded-lg px-3 py-2 text-sm font-bold text-zinc-700 transition hover:bg-green-50 hover:text-green-800 sm:inline-flex">
@@ -1012,7 +1008,7 @@ export function LandingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, ease: EASE, delay: 0.62 }}
               >
-                Revenue Recovery shows which clients need a follow-up, drafts the message, and keeps every estimate or invoice moving — without you chasing people from memory.
+                EstiGator shows which clients need a follow-up, drafts the message, and keeps every estimate or invoice moving — without you chasing people from memory.
               </m.p>
 
               <m.div
@@ -1066,7 +1062,7 @@ export function LandingPage() {
             <SectionHeading
               eyebrow="The work is done"
               title="The money is still scattered across texts, invoices, and old customers."
-              description="Revenue Recovery turns scattered follow-up into a clear daily list, so the next action is obvious."
+              description="EstiGator turns scattered follow-up into a clear daily list, so the next action is obvious."
             />
             {/* Cards scatter in, settle to grid */}
             <div className="mt-12 grid gap-5 md:grid-cols-3">
@@ -1163,7 +1159,7 @@ export function LandingPage() {
               <div>
                 <div className="flex items-center gap-3">
                   <LogoMark />
-                  <span className="text-sm font-black tracking-tight">Revenue Recovery</span>
+                  <span className="text-sm font-black tracking-tight">EstiGator</span>
                 </div>
                 <h2 className="mt-5 max-w-xl text-3xl font-black tracking-tight">
                   Stop letting good jobs disappear after the estimate.
@@ -1181,7 +1177,7 @@ export function LandingPage() {
             </SectionReveal>
           </StaggerReveal>
           <div className="mx-auto mt-8 max-w-7xl border-t border-zinc-800 pt-6 text-xs text-zinc-500">
-            &copy; {new Date().getFullYear()} Revenue Recovery. Built for contractors.
+            &copy; {new Date().getFullYear()} EstiGator. Built for contractors.
           </div>
         </footer>
 

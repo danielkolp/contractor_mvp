@@ -5,21 +5,25 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Bell,
+  CalendarCheck2,
   ChevronDown,
-  ClipboardCheck,
+  ClipboardList,
   FileText,
-  LayoutDashboard,
   LogOut,
   Menu,
-  ReceiptText,
+  Receipt,
+  RotateCcw,
+  ScrollText,
   Settings,
   ShieldCheck,
   UsersRound,
 } from "lucide-react"
 
 import { logout } from "@/app/auth/actions"
+import { BrandLogo } from "@/components/brand-logo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,14 +46,9 @@ import { cn } from "@/lib/utils"
 
 const navigation = [
   {
-    name: "Dashboard",
+    name: "Today",
     href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    name: "Invoices",
-    href: "/dashboard/invoices",
-    icon: ReceiptText,
+    icon: CalendarCheck2,
   },
   {
     name: "Estimates",
@@ -57,19 +56,29 @@ const navigation = [
     icon: FileText,
   },
   {
+    name: "Invoices",
+    href: "/dashboard/invoices",
+    icon: Receipt,
+  },
+  {
     name: "Clients",
     href: "/dashboard/clients",
     icon: UsersRound,
   },
   {
-    name: "Follow-ups",
-    href: "/dashboard/recovery",
-    icon: ClipboardCheck,
+    name: "Job Requests",
+    href: "/dashboard/job-requests",
+    icon: ClipboardList,
   },
   {
-    name: "Reminders",
-    href: "/dashboard/reminders",
-    icon: Bell,
+    name: "Recovery",
+    href: "/dashboard/recoveries",
+    icon: RotateCcw,
+  },
+  {
+    name: "Templates",
+    href: "/dashboard/templates",
+    icon: ScrollText,
   },
   {
     name: "Settings",
@@ -88,18 +97,11 @@ function isActivePath(pathname: string, href: string) {
 
 function BrandMark() {
   return (
-    <Link href="/dashboard" className="flex items-center gap-3">
-      <div className="grid size-9 place-items-center rounded-lg bg-green-700 text-sm font-bold text-white shadow-sm">
-        RR
-      </div>
-      <div className="min-w-0">
-        <div className="truncate text-sm font-semibold tracking-tight">
-          Revenue Recovery
-        </div>
-        <div className="truncate text-xs text-muted-foreground">
-          Contractor collections
-        </div>
-      </div>
+    <Link
+      href="/dashboard"
+      className="flex w-full min-w-0 items-center justify-center"
+    >
+      <BrandLogo className="h-auto w-44 max-w-full" priority />
     </Link>
   )
 }
@@ -141,8 +143,8 @@ function SidebarNav({ mobile = false }: { mobile?: boolean }) {
 
 function Sidebar() {
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-white lg:flex lg:flex-col">
-      <div className="flex h-16 items-center px-5">
+    <aside className="hidden w-64 shrink-0 border-r border-border bg-sidebar lg:flex lg:flex-col">
+      <div className="flex min-h-24 items-center justify-center px-5 pb-4 pt-5">
         <BrandMark />
       </div>
       <SidebarNav />
@@ -173,7 +175,7 @@ function MobileSidebar() {
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="flex w-[min(20rem,calc(100vw-1rem))] bg-white p-0"
+        className="flex w-[min(20rem,calc(100vw-1rem))] bg-sidebar p-0"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation</SheetTitle>
@@ -211,9 +213,17 @@ function TopBar({ userEmail }: { userEmail?: string }) {
   const initials = getInitials(userEmail)
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6 lg:px-8">
       <MobileSidebar />
+      <Link
+        href="/dashboard"
+        className="grid size-9 shrink-0 place-items-center rounded-lg lg:hidden"
+        aria-label="EstiGator dashboard"
+      >
+        <BrandLogo variant="mark" className="size-8" />
+      </Link>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <ThemeToggle />
         <Button variant="ghost" size="icon" aria-label="Notifications">
           <Bell className="size-4" />
         </Button>
@@ -272,7 +282,7 @@ export function AppShell({
   userEmail?: string
 }) {
   return (
-    <div className="min-h-screen bg-zinc-50 text-foreground dark:bg-zinc-950">
+    <div className="min-h-screen bg-zinc-50 text-foreground dark:bg-background">
       <div className="flex min-h-screen">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">

@@ -168,6 +168,72 @@ export function getFollowUpActionText(recoveryStage: RecoveryStage): string {
   return map[recoveryStage] ?? "Follow-up logged."
 }
 
+// ─── Recovery item message generation ───────────────────────────────────────
+
+type RecoveryItemReason =
+  | "estimate_no_reply"
+  | "invoice_overdue"
+  | "maybe_later"
+  | "work_not_paid"
+  | "other"
+
+export function generateRecoveryItemMessage(params: {
+  clientName: string
+  reason: RecoveryItemReason
+  amount: number
+  followUpCount?: number
+}): string {
+  const { clientName, reason, amount, followUpCount = 0 } = params
+  const fmt = moneyFormatter.format(amount)
+  const name = clientName || "there"
+  const isFollowUp = followUpCount > 0
+
+  if (isFollowUp) {
+    switch (reason) {
+      case "estimate_no_reply":
+        return `Hi ${name}, I'm reaching out again about the estimate for ${fmt}. I'd love to get this scheduled for you — could you let me know where you're at? Even a quick reply helps. Thanks.`
+      case "invoice_overdue":
+        return `Hi ${name}, I'm following up again on the outstanding balance of ${fmt}. I'd really appreciate hearing from you — please let me know when we can sort this out. Thanks.`
+      case "maybe_later":
+        return `Hi ${name}, checking in again on the ${fmt} project. I want to make sure I have availability when you're ready. Just a quick yes or no would help me plan. Thanks!`
+      case "work_not_paid":
+        return `Hi ${name}, I need to follow up again on the ${fmt} that's still outstanding for work already completed. Please let me know when this will be settled. Thanks.`
+      default:
+        return `Hi ${name}, following up again. The ${fmt} is still pending — could you give me an update? Thanks.`
+    }
+  }
+
+  switch (reason) {
+    case "estimate_no_reply":
+      return `Hi ${name}, just following up on the estimate I sent you for ${fmt}. Are you ready to move forward, or do you have any questions? I'm happy to adjust scope if needed. Thanks!`
+    case "invoice_overdue":
+      return `Hi ${name}, following up on the invoice for ${fmt} that's now overdue. Could you let me know when payment will be sent? If there's anything holding it up, I'm happy to talk through options. Thanks.`
+    case "maybe_later":
+      return `Hi ${name}, you mentioned wanting to revisit this project later. Just checking back in — are you ready to move forward on the ${fmt} project? I have availability coming up. Thanks!`
+    case "work_not_paid":
+      return `Hi ${name}, reaching out about the work completed — ${fmt} is still outstanding. Could you let me know when I can expect payment? Thanks.`
+    default:
+      return `Hi ${name}, just following up on our conversation regarding ${fmt}. Please let me know the best next step. Thanks.`
+  }
+}
+
+export function reasonLabel(
+  reason: RecoveryItemReason
+): string {
+  switch (reason) {
+    case "estimate_no_reply":
+      return "Estimate · No reply"
+    case "invoice_overdue":
+      return "Invoice · Overdue"
+    case "maybe_later":
+      return "Said maybe later"
+    case "work_not_paid":
+      return "Work done · Unpaid"
+    default:
+      return "Follow-up needed"
+  }
+}
+
 // ─── Invoice filtering ───────────────────────────────────────────────────────
 
 export function isRecoverableInvoice(invoice: InvoiceRow): boolean {

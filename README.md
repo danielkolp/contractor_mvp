@@ -37,7 +37,24 @@ Fill in your Supabase project URL and anon key (see below).
 
 The migration creates all tables, enums, RLS policies, and triggers (including auto-profile creation on signup).
 
-### 4. Run the dev server
+### 4. Enable email verification
+
+Supabase controls whether confirmation emails are sent, so this must be enabled in the Supabase dashboard:
+
+1. Go to **Authentication -> Providers -> Email**
+2. Turn on **Confirm email**
+3. Go to **Authentication -> URL Configuration**
+4. Set the site URL to your app URL
+5. Add redirect URLs for each environment:
+   - `http://localhost:3000/auth/callback`
+   - `https://your-production-domain.com/auth/callback`
+6. Go to **Authentication -> Email Templates -> Confirm signup**
+7. Use `supabase/email-templates/confirm-signup-subject.txt` as the subject
+8. Use `supabase/email-templates/confirm-signup.html` as the message body
+
+For reliable production delivery, configure a custom SMTP provider in Supabase Auth. The app includes resend-verification actions on both `/login` and `/signup`.
+
+### 5. Run the dev server
 
 ```bash
 npm run dev

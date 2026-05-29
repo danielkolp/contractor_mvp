@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { formatPhoneNumberInput } from "@/lib/phone-format"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -209,18 +210,18 @@ function getClientInvoiceStats(client: ClientRow, invoices: InvoiceRow[]) {
 
 function reliabilityBadgeClass(label: PaymentReliability) {
   if (label === "Reliable") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300"
   }
 
   if (label === "Slow payer") {
-    return "border-amber-200 bg-amber-50 text-amber-700"
+    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
   }
 
   if (label === "High risk") {
-    return "border-red-200 bg-red-50 text-red-700"
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
   }
 
-  return "border-sky-200 bg-sky-50 text-sky-700"
+  return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300"
 }
 
 function SelectField({
@@ -844,9 +845,13 @@ export default function ClientsPage() {
                 <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
+                  type="tel"
+                  inputMode="numeric"
                   value={form.phone}
-                  onChange={(event) => updateForm("phone", event.target.value)}
-                  placeholder="(555) 010-4420"
+                  onChange={(event) =>
+                    updateForm("phone", formatPhoneNumberInput(event.target.value))
+                  }
+                  placeholder="(555)-010-4420"
                 />
               </div>
             </div>

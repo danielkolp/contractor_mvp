@@ -2,6 +2,65 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { Database } from "@/lib/supabase/database.types"
 
+type RecoveryItemInsert = Database["public"]["Tables"]["recovery_items"]["Insert"]
+
+export function buildDemoRecoveryItems(userId: string): RecoveryItemInsert[] {
+  const d = new Date()
+  const ago = (n: number) => {
+    const x = new Date(d)
+    x.setDate(x.getDate() - n)
+    return x.toISOString().slice(0, 10)
+  }
+  return [
+    {
+      user_id: userId,
+      client_name: "Mike Thompson",
+      client_email: "mike@thompsonhomes.com",
+      client_phone: "555-0101",
+      reason: "estimate_no_reply",
+      amount: 3200,
+      contacted_date: ago(14),
+      status: "needs_follow_up",
+      message_body:
+        "Hi Mike, just following up on the estimate I sent you for $3,200 in roofing repairs. It's been a couple weeks — are you ready to move forward, or do you have any questions? Happy to adjust scope if needed. Thanks!",
+      is_demo: true,
+    },
+    {
+      user_id: userId,
+      client_name: "Johnson Roofing LLC",
+      client_email: "accounts@johnsonroofing.com",
+      reason: "invoice_overdue",
+      amount: 8500,
+      contacted_date: ago(45),
+      status: "needs_follow_up",
+      message_body:
+        "Hi there, following up on the invoice for $8,500 which is now 45 days overdue. Could you let me know when we can expect payment, or if there's anything holding this up? I'd appreciate a firm date. Thanks.",
+      is_demo: true,
+    },
+    {
+      user_id: userId,
+      client_name: "Sarah Martinez",
+      client_phone: "555-0203",
+      reason: "maybe_later",
+      amount: 1750,
+      contacted_date: ago(21),
+      status: "message_ready",
+      message_body:
+        "Hi Sarah, you mentioned wanting to revisit the deck project later in the season. Just checking back in — are you ready to move forward on the $1,750 project? I have availability coming up in the next few weeks. Thanks!",
+      is_demo: true,
+    },
+  ]
+}
+
+export async function seedDemoRecoveryItems(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<{ error: string | null }> {
+  const items = buildDemoRecoveryItems(userId)
+  const { error } = await supabase.from("recovery_items").insert(items)
+  return { error: error?.message ?? null }
+}
+
 type DB = Database
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]

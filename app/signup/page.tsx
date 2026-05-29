@@ -2,6 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { CheckCircle2, ShieldCheck } from "lucide-react"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { SignupForm } from "@/components/auth/signup-form"
 import {
   Card,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/card"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { createClient } from "@/lib/supabase/server"
+import { dashboardPathForRole, getProfileRole } from "@/lib/user-role"
 
 const bullets = [
   "Follow up on estimates that went quiet",
@@ -28,7 +30,8 @@ export default async function SignupPage() {
     } = await supabase.auth.getUser()
 
     if (user) {
-      redirect("/dashboard")
+      const role = await getProfileRole(supabase, user.id)
+      redirect(dashboardPathForRole(role))
     }
   }
 
@@ -38,13 +41,8 @@ export default async function SignupPage() {
         <div className="grid min-w-0 w-full gap-10 lg:grid-cols-[0.95fr_1.05fr]">
           {/* Left: pitch */}
           <section className="flex min-w-0 flex-col justify-center">
-            <Link href="/" className="mb-10 flex items-center gap-3">
-              <div className="grid size-9 place-items-center rounded-lg bg-green-700 text-sm font-bold text-white shadow-sm">
-                RR
-              </div>
-              <span className="text-sm font-semibold tracking-tight text-foreground">
-                Revenue Recovery
-              </span>
+            <Link href="/" className="mb-10 flex items-center" aria-label="EstiGator home">
+              <BrandLogo className="h-10" priority />
             </Link>
 
             <h1 className="max-w-xl break-words text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">

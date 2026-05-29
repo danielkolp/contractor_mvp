@@ -12,10 +12,12 @@ import { useRouter } from "next/navigation"
 import {
   Bell,
   CalendarDays,
+  ExternalLink,
   FileText,
   MoreHorizontal,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Send,
@@ -65,6 +67,7 @@ import {
   generateFollowUpMessage as generateRecoveryMessage,
   getOverdueStage,
   getRecommendedAction,
+  isRecoverableInvoice,
 } from "@/lib/recovery-engine"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
@@ -83,6 +86,50 @@ type RecoveryDraftInsert =
   Database["public"]["Tables"]["recovery_drafts"]["Insert"]
 type InvoiceStatus = Database["public"]["Enums"]["invoice_status"]
 
+// ─── Line item helpers ────────────────────────────────────────────────────────
+
+type LineItem = {
+  id: string
+  description: string
+  quantity: string
+  unit_price: string
+}
+
+function newLineItem(): LineItem {
+  return {
+    id: Math.random().toString(36).slice(2),
+    description: "",
+    quantity: "1",
+    unit_price: "",
+  }
+}
+
+function lineItemSubtotal(items: LineItem[]): number {
+  return items.reduce((sum, item) => {
+    return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0)
+  }, 0)
+}
+
+function serializeLineItems(items: LineItem[]) {
+  return items.map(({ description, quantity, unit_price }) => ({
+    description,
+    quantity: parseFloat(quantity) || 0,
+    unit_price: parseFloat(unit_price) || 0,
+  }))
+}
+
+function deserializeLineItems(raw: unknown): LineItem[] {
+  if (!raw || !Array.isArray(raw)) return []
+  return (raw as Record<string, unknown>[]).map((item) => ({
+    id: Math.random().toString(36).slice(2),
+    description: String(item.description ?? ""),
+    quantity: String(item.quantity ?? "1"),
+    unit_price: String(item.unit_price ?? ""),
+  }))
+}
+
+// ─── Invoice form type ────────────────────────────────────────────────────────
+
 type InvoiceForm = {
   clientId: string | null
   clientName: string
@@ -92,6 +139,8 @@ type InvoiceForm = {
   dueDate: string
   status: InvoiceStatus
   notes: string
+  lineItems: LineItem[]
+  taxRate: string
 }
 
 type FilterValue = "all"
@@ -118,19 +167,32 @@ const initialForm: InvoiceForm = {
   dueDate: "",
   status: "Draft",
   notes: "",
+  lineItems: [],
+  taxRate: "0",
 }
 
-const statusTone: Record<
-  InvoiceStatus,
-  "default" | "success" | "warning" | "muted" | "outline"
-> = {
-  Draft: "muted",
-  Sent: "default",
-  Overdue: "warning",
-  "Follow-up Sent": "default",
-  "Payment Plan": "outline",
-  Paid: "success",
-  Escalated: "warning",
+const recoveryReadyStatuses = new Set<InvoiceStatus>([
+  "Overdue",
+  "Follow-up Sent",
+  "Payment Plan",
+  "Escalated",
+])
+
+const statusPillClassName: Record<InvoiceStatus, string> = {
+  Draft:
+    "border-zinc-200 bg-zinc-100 text-zinc-600 dark:border-[#2F3A35] dark:bg-[#171D1A] dark:text-[#B6C2BB]",
+  Sent:
+    "border-sky-200 bg-sky-50 text-sky-700 dark:border-[#2F3A35] dark:bg-[#17201B] dark:text-[#DCE5E0]",
+  Overdue:
+    "border-amber-200 bg-amber-50 text-amber-700 dark:border-[#B97820]/70 dark:bg-[#B97820]/20 dark:text-[#F5B342]",
+  "Follow-up Sent":
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-[#16A34A]/40 dark:bg-[#16A34A]/20 dark:text-[#C8F5D4]",
+  "Payment Plan":
+    "border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-[#6B7280]/50 dark:bg-[#2C555E]/30 dark:text-[#D3ECEC]",
+  Paid:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-[#22C55E]/30 dark:bg-[#22C55E]/10 dark:text-[#BFEFD0]",
+  Escalated:
+    "border-orange-200 bg-orange-50 text-orange-700 dark:border-[#F59E0B]/70 dark:bg-[#F59E0B]/20 dark:text-[#F8C76B]",
 }
 
 function getStatusDisplayLabel(status: InvoiceStatus): string {
@@ -181,6 +243,20 @@ function getOverdueDays(dueDate: string | null, status: InvoiceStatus) {
 
 function isOverdueInvoice(invoice: InvoiceRow) {
   return getOverdueDays(invoice.due_date, invoice.status) > 0
+}
+
+function getEffectiveRecoveryDays(invoice: InvoiceRow) {
+  const overdueDays = getOverdueDays(invoice.due_date, invoice.status)
+
+  if (overdueDays > 0) {
+    return overdueDays
+  }
+
+  return recoveryReadyStatuses.has(invoice.status) ? 1 : 0
+}
+
+function canFollowUpInvoice(invoice: InvoiceRow) {
+  return isRecoverableInvoice(invoice)
 }
 
 function normalize(value: string | null | undefined) {
@@ -308,6 +384,8 @@ function formFromInvoice(invoice: InvoiceRow): InvoiceForm {
     dueDate: invoice.due_date || "",
     status: invoice.status,
     notes: invoice.notes || "",
+    lineItems: deserializeLineItems(invoice.line_items),
+    taxRate: String(invoice.tax_rate ?? "0"),
   }
 }
 
@@ -327,7 +405,7 @@ function buildRecoveryDraftPayload(
   invoice: InvoiceRow,
   userId: string
 ): RecoveryDraftInsert {
-  const daysOverdue = getOverdueDays(invoice.due_date, invoice.status)
+  const daysOverdue = getEffectiveRecoveryDays(invoice)
   const overdueStage = getOverdueStage(daysOverdue)
 
   return {
@@ -587,6 +665,13 @@ export default function InvoicesPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  // ─── Derived line item totals ──────────────────────────────────────────────
+  const liSubtotal = useMemo(() => lineItemSubtotal(form.lineItems), [form.lineItems])
+  const liTaxRate = useMemo(() => parseFloat(form.taxRate) || 0, [form.taxRate])
+  const liTaxAmount = useMemo(() => liSubtotal * (liTaxRate / 100), [liSubtotal, liTaxRate])
+  const liTotal = useMemo(() => liSubtotal + liTaxAmount, [liSubtotal, liTaxAmount])
+  const hasLineItems = form.lineItems.length > 0
+
   const loadInvoices = useCallback(async () => {
     const {
       data: { user },
@@ -717,6 +802,33 @@ export default function InvoicesPage() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  function addLineItem() {
+    setForm((current) => ({
+      ...current,
+      lineItems: [...current.lineItems, newLineItem()],
+    }))
+  }
+
+  function removeLineItem(id: string) {
+    setForm((current) => ({
+      ...current,
+      lineItems: current.lineItems.filter((item) => item.id !== id),
+    }))
+  }
+
+  function updateLineItem(
+    id: string,
+    field: keyof Omit<LineItem, "id">,
+    value: string
+  ) {
+    setForm((current) => ({
+      ...current,
+      lineItems: current.lineItems.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      ),
+    }))
+  }
+
   function updateReminderForm<Field extends keyof ReminderFormValues>(
     field: Field,
     value: ReminderFormValues[Field]
@@ -771,7 +883,8 @@ export default function InvoicesPage() {
 
     const invoiceNumber =
       form.invoiceNumber.trim() || `INV-${Date.now().toString().slice(-6)}`
-    const amount = parseAmount(form.amount)
+    const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
+    const finalAmount = hasLineItems ? liTotal : parseAmount(form.amount)
     const paidAt =
       form.status === "Paid"
         ? editingInvoice?.paid_at || new Date().toISOString()
@@ -791,12 +904,14 @@ export default function InvoicesPage() {
         client_id: form.clientId ?? null,
         client_name: resolvedClientName,
         trade: resolvedTrade,
-        amount,
+        amount: finalAmount,
         issue_date: nullableDate(form.issueDate),
         due_date: nullableDate(form.dueDate),
         status: form.status,
         notes: nullableText(form.notes),
         paid_at: paidAt,
+        line_items: serializedItems,
+        tax_rate: hasLineItems ? liTaxRate : 0,
       }
 
       const { data, error } = await supabase
@@ -825,12 +940,14 @@ export default function InvoicesPage() {
         client_id: form.clientId ?? null,
         client_name: resolvedClientName,
         trade: resolvedTrade,
-        amount,
+        amount: finalAmount,
         issue_date: nullableDate(form.issueDate),
         due_date: nullableDate(form.dueDate),
         status: form.status,
         notes: nullableText(form.notes),
         paid_at: paidAt,
+        line_items: serializedItems,
+        tax_rate: hasLineItems ? liTaxRate : 0,
       }
 
       const { data, error } = await supabase
@@ -900,9 +1017,8 @@ export default function InvoicesPage() {
       return
     }
 
-    const daysOverdue = getOverdueDays(invoice.due_date, invoice.status)
-    if (daysOverdue <= 0) {
-      toast.message("This invoice is not overdue yet.")
+    if (!canFollowUpInvoice(invoice)) {
+      toast.message("This invoice is not ready for a follow-up yet.")
       openEditInvoice(invoice)
       return
     }
@@ -1138,29 +1254,32 @@ export default function InvoicesPage() {
   }
 
   return (
-    <>
+    <div className="min-h-[calc(100vh-4rem)] bg-zinc-50 text-foreground dark:bg-[#0B0F0C] dark:text-[#F3F5F4]">
       <PageHeader
         title="Invoices"
         description="Find unpaid invoices, create recovery drafts, and keep payment follow-up connected."
+        className="dark:border-[#1F2924] dark:bg-[#0B0F0C] dark:[&_h1]:text-[#F3F5F4] dark:[&_p]:text-[#9AA39C]"
       >
         <Dialog open={dialogOpen} onOpenChange={closeInvoiceDialog}>
-          <Button onClick={openAddInvoice}>
+          <Button
+            className="bg-[#16A34A] text-white shadow-sm hover:bg-[#15803D] hover:shadow-md focus-visible:ring-[#16A34A]/40"
+            onClick={openAddInvoice}
+          >
             <Plus className="size-4" />
             Add invoice
           </Button>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto dark:border-[#1F2924] dark:bg-[#111714] dark:text-[#F3F5F4] dark:shadow-2xl dark:[&_[data-slot=dialog-description]]:text-[#9AA39C]">
             <DialogHeader>
               <DialogTitle>
-                {editingInvoice ? "Edit invoice" : "Add invoice"}
+                {editingInvoice ? "Edit invoice" : "New invoice"}
               </DialogTitle>
               <DialogDescription>
-                {editingInvoice
-                  ? "Update this invoice."
-                  : "Add an invoice you need to track."}
+                Add line items for a detailed PDF, or enter a flat amount.
               </DialogDescription>
             </DialogHeader>
 
-            <form className="grid gap-4" onSubmit={handleAddOrUpdateInvoice}>
+            <form className="grid gap-5" onSubmit={handleAddOrUpdateInvoice}>
+              {/* Client + number */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label>Client</Label>
@@ -1175,7 +1294,7 @@ export default function InvoicesPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="invoice-number">Invoice number</Label>
+                  <Label htmlFor="invoice-number">Invoice #</Label>
                   <Input
                     id="invoice-number"
                     value={form.invoiceNumber}
@@ -1187,19 +1306,8 @@ export default function InvoicesPage() {
                 </div>
               </div>
 
+              {/* Dates + status */}
               <div className="grid gap-4 sm:grid-cols-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="amount">Amount</Label>
-                  <Input
-                    id="amount"
-                    value={form.amount}
-                    onChange={(event) => updateForm("amount", event.target.value)}
-                    placeholder="8400"
-                    type="number"
-                    min="0"
-                    step="1"
-                  />
-                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="issue-date">Issue date</Label>
                   <Input
@@ -1220,25 +1328,158 @@ export default function InvoicesPage() {
                     type="date"
                   />
                 </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="status">Status</Label>
+                  <SelectField
+                    id="status"
+                    value={form.status}
+                    onChange={(value) =>
+                      updateForm("status", value as InvoiceStatus)
+                    }
+                  >
+                    {invoiceStatuses.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </SelectField>
+                </div>
               </div>
 
+              {/* ── Line items ── */}
               <div className="grid gap-2">
-                <Label htmlFor="status">Status</Label>
-                <SelectField
-                  id="status"
-                  value={form.status}
-                  onChange={(value) =>
-                    updateForm("status", value as InvoiceStatus)
-                  }
-                >
-                  {invoiceStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </SelectField>
+                <div className="flex items-center justify-between">
+                  <Label>Line Items</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addLineItem}
+                    disabled={isSaving}
+                  >
+                    <Plus className="size-3.5" />
+                    Add item
+                  </Button>
+                </div>
+
+                {hasLineItems && (
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="grid grid-cols-[1fr_56px_96px_28px] gap-2 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                      <span>Description</span>
+                      <span className="text-right">Qty</span>
+                      <span className="text-right">Unit Price</span>
+                      <span />
+                    </div>
+
+                    {form.lineItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-[1fr_56px_96px_28px] gap-2 border-t border-border px-3 py-2"
+                      >
+                        <Input
+                          value={item.description}
+                          onChange={(e) =>
+                            updateLineItem(item.id, "description", e.target.value)
+                          }
+                          placeholder="What's included"
+                          className="h-8 text-sm"
+                          disabled={isSaving}
+                        />
+                        <Input
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateLineItem(item.id, "quantity", e.target.value)
+                          }
+                          type="number"
+                          min="0"
+                          step="any"
+                          className="h-8 text-sm text-right"
+                          disabled={isSaving}
+                        />
+                        <Input
+                          value={item.unit_price}
+                          onChange={(e) =>
+                            updateLineItem(item.id, "unit_price", e.target.value)
+                          }
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="h-8 text-sm text-right"
+                          disabled={isSaving}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(item.id)}
+                          className="flex size-7 items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          disabled={isSaving}
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Totals */}
+                    <div className="border-t border-border bg-muted/30 px-3 py-3 space-y-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span className="tabular-nums">
+                          {moneyFormatter.format(liSubtotal)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <span>Tax</span>
+                          <Input
+                            value={form.taxRate}
+                            onChange={(e) => updateForm("taxRate", e.target.value)}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            className="h-7 w-16 text-sm text-right"
+                            disabled={isSaving}
+                          />
+                          <span>%</span>
+                        </div>
+                        <span className="tabular-nums">
+                          {moneyFormatter.format(liTaxAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
+                        <span>Total Due</span>
+                        <span className="tabular-nums text-green-700">
+                          {moneyFormatter.format(liTotal)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!hasLineItems && (
+                  <p className="text-xs text-muted-foreground">
+                    Add line items for a detailed PDF, or use the Amount field below for a quick flat total.
+                  </p>
+                )}
               </div>
 
+              {/* Flat amount — only shown when no line items */}
+              {!hasLineItems && (
+                <div className="grid gap-2">
+                  <Label htmlFor="amount">Amount</Label>
+                  <Input
+                    id="amount"
+                    value={form.amount}
+                    onChange={(event) => updateForm("amount", event.target.value)}
+                    placeholder="8400"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </div>
+              )}
+
+              {/* Notes */}
               <div className="grid gap-2">
                 <Label htmlFor="notes">Notes</Label>
                 <textarea
@@ -1246,7 +1487,7 @@ export default function InvoicesPage() {
                   value={form.notes}
                   onChange={(event) => updateForm("notes", event.target.value)}
                   placeholder="What work was completed or what follow-up is needed?"
-                  className="min-h-24 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 />
               </div>
 
@@ -1281,18 +1522,21 @@ export default function InvoicesPage() {
         isSaving={isSaving}
       />
 
-      <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
-        <Card>
-          <CardHeader className="gap-4">
+      <div className="bg-zinc-50 p-4 sm:p-6 lg:p-8 dark:bg-[#0B0F0C]">
+        <div className="mx-auto grid w-full max-w-7xl gap-6">
+        <Card className="rounded-lg dark:border-[#1F2924] dark:bg-[#111714] dark:shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+          <CardHeader className="gap-5 p-5 sm:p-6">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <CardTitle>Invoice worklist</CardTitle>
-                <CardDescription>
-                  Review invoices and prepare follow-up drafts for Follow-ups.
+                <CardTitle className="text-lg text-foreground dark:text-[#F3F5F4]">
+                  Invoice worklist
+                </CardTitle>
+                <CardDescription className="mt-1 text-muted-foreground dark:text-[#9AA39C]">
+                  Review invoices and prepare follow-up drafts for follow-ups.
                 </CardDescription>
               </div>
               {hasActiveFilters ? (
-                <Badge variant="outline" className="w-fit">
+                <Badge className="w-fit border-border bg-background text-muted-foreground dark:border-[#2F3A35] dark:bg-[#0B0F0C] dark:text-[#9AA39C]">
                   {filteredInvoices.length} of {invoices.length} invoices
                 </Badge>
               ) : null}
@@ -1300,9 +1544,9 @@ export default function InvoicesPage() {
 
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_220px_220px_auto]">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground dark:text-[#9AA39C]" />
                 <Input
-                  className="pl-9"
+                  className="pl-9 dark:border-[#1F2924] dark:bg-[#0B0F0C] dark:text-[#F3F5F4] dark:placeholder:text-[#9AA39C] dark:focus-visible:border-[#16A34A] dark:focus-visible:ring-[#16A34A]/25"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search client or invoice number"
@@ -1314,6 +1558,7 @@ export default function InvoicesPage() {
                   setStatusFilter(value as InvoiceStatus | FilterValue)
                 }
                 aria-label="Filter by status"
+                className="dark:border-[#1F2924] dark:bg-[#0B0F0C] dark:text-[#F3F5F4] dark:focus-visible:border-[#16A34A] dark:focus-visible:ring-[#16A34A]/25"
               >
                 <option value="all">All statuses</option>
                 {invoiceStatuses.map((status) => (
@@ -1326,6 +1571,7 @@ export default function InvoicesPage() {
                 value={clientFilter}
                 onChange={(value) => setClientFilter(value)}
                 aria-label="Filter by client"
+                className="dark:border-[#1F2924] dark:bg-[#0B0F0C] dark:text-[#F3F5F4] dark:focus-visible:border-[#16A34A] dark:focus-visible:ring-[#16A34A]/25"
               >
                 <option value="all">All clients</option>
                 {clientsWithInvoices.map((client) => (
@@ -1337,7 +1583,7 @@ export default function InvoicesPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full lg:w-auto"
+                className="w-full lg:w-auto dark:border-[#2F3A35] dark:bg-transparent dark:text-[#C7D0CA] dark:hover:bg-[#17201B] dark:hover:text-[#F3F5F4]"
                 disabled={!hasActiveFilters}
                 onClick={resetFilters}
               >
@@ -1346,25 +1592,28 @@ export default function InvoicesPage() {
             </div>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="p-5 pt-0 sm:p-6 sm:pt-0">
             {errorMessage ? (
-              <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
                 <div className="font-medium">Invoice sync error</div>
                 <p className="mt-1 leading-6">{errorMessage}</p>
               </div>
             ) : null}
 
-            <ContentReveal isLoading={isLoading} skeleton={<InvoiceListSkeleton rows={6} />}>
+            <ContentReveal
+              isLoading={isLoading}
+              skeleton={<InvoiceListSkeleton rows={6} />}
+            >
               {errorMessage && invoices.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                <h3 className="text-base font-semibold">
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center dark:border-[#2B3731] dark:bg-[#0B0F0C]">
+                <h3 className="text-base font-semibold text-foreground dark:text-[#F3F5F4]">
                   Something didn&apos;t load
                 </h3>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground dark:text-[#9AA39C]">
                   Your data is safe. Try refreshing, or check your connection.
                 </p>
                 <Button
-                  className="mt-5"
+                  className="mt-5 dark:border-[#2F3A35] dark:bg-transparent dark:text-[#F3F5F4] dark:hover:bg-[#17201B]"
                   variant="outline"
                   onClick={() => {
                     setIsLoading(true)
@@ -1377,44 +1626,57 @@ export default function InvoicesPage() {
                 </Button>
               </div>
             ) : filteredInvoices.length > 0 ? (
-              <div className="overflow-hidden rounded-lg border border-border">
-                <div className="hidden grid-cols-[120px_1fr_112px_112px_120px_56px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
+              <div className="overflow-hidden rounded-lg border border-border bg-background dark:border-[#1F2924] dark:bg-[#0B0F0C]">
+                <div className="hidden grid-cols-[116px_minmax(220px,1fr)_112px_112px_128px_112px_112px_40px] gap-3 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground dark:border-[#1F2924] dark:bg-[#151B18] dark:text-[#9AA39C] xl:grid">
                   <div>Invoice</div>
                   <div>Client</div>
                   <div>Due</div>
                   <div>Amount</div>
                   <div>Status</div>
+                  <div>View</div>
+                  <div>Follow up</div>
                   <div />
                 </div>
-                <div className="divide-y divide-border">
+                <div className="divide-y divide-border dark:divide-[#1F2924]">
                   {filteredInvoices.map((invoice) => {
                     const overdueDays = getOverdueDays(
                       invoice.due_date,
                       invoice.status
                     )
+                    const followUpEnabled = canFollowUpInvoice(invoice)
+
                     return (
-                      <div key={invoice.id} className="min-w-0 px-4 py-3">
+                      <div
+                        key={invoice.id}
+                        className="min-w-0 bg-background px-4 py-4 transition-colors hover:bg-muted/40 dark:bg-[#0B0F0C] dark:hover:bg-[#0F1512]"
+                      >
                         <div
-                          className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_112px_112px_120px_56px] xl:items-center"
+                          className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[116px_minmax(220px,1fr)_112px_112px_128px_112px_112px_40px] xl:items-center"
                         >
                           <div className="min-w-0">
-                            <div className="truncate font-medium">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9AA39C] xl:hidden">
+                              Invoice
+                            </div>
+                            <div className="truncate text-sm font-semibold text-foreground dark:text-[#F3F5F4]">
                               {invoice.invoice_number}
                             </div>
                           </div>
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">
+                          <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9AA39C] xl:hidden">
+                              Client
+                            </div>
+                            <div className="truncate text-sm font-medium text-foreground dark:text-[#F3F5F4]">
                               {invoice.client_name || "No client"}
                             </div>
                           </div>
                           <div className="text-sm">
-                            <div className="flex items-center gap-2 xl:block">
-                              <span className="text-xs font-medium uppercase text-muted-foreground xl:hidden">
-                                Due
-                              </span>
-                              <span>{formatDate(invoice.due_date)}</span>
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9AA39C] xl:hidden">
+                              Due
                             </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
+                            <div className="text-foreground dark:text-[#F3F5F4]">
+                              {formatDate(invoice.due_date)}
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground dark:text-[#9AA39C]">
                               {overdueDays > 0
                                 ? `${overdueDays} days overdue`
                                 : isDueToday(invoice.due_date) &&
@@ -1424,45 +1686,62 @@ export default function InvoicesPage() {
                                   : "Not overdue"}
                             </div>
                           </div>
-                          <div className="font-semibold">
+                          <div>
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9AA39C] xl:hidden">
+                              Amount
+                            </div>
+                            <div className="text-sm font-bold text-foreground dark:text-[#F3F5F4]">
                             {moneyFormatter.format(invoice.amount)}
+                            </div>
                           </div>
                           <div>
-                            <Badge variant={statusTone[invoice.status]}>
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9AA39C] xl:hidden">
+                              Status
+                            </div>
+                            <Badge
+                              className={cn(
+                                "whitespace-nowrap",
+                                statusPillClassName[invoice.status]
+                              )}
+                            >
                               {getStatusDisplayLabel(invoice.status)}
                             </Badge>
                           </div>
-                          <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
+                          <div>
                             <Button
                               size="sm"
-                              variant={
-                                isOverdueInvoice(invoice) ? "default" : "outline"
-                              }
-                              className="w-full sm:w-auto"
+                              variant="outline"
+                              className="h-9 w-full px-4 dark:border-[#2F3A35] dark:bg-transparent dark:text-[#F3F5F4] dark:hover:bg-[#17201B] dark:hover:text-white"
                               disabled={isSaving}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                if (isOverdueInvoice(invoice)) {
-                                  void prepareRecoveryDraft(invoice)
-                                } else {
-                                  openEditInvoice(invoice)
-                                }
+                                openEditInvoice(invoice)
                               }}
                             >
-                              {isOverdueInvoice(invoice) ? (
-                                <>
-                                  <Send className="size-3.5" />
-                                  Follow up
-                                </>
-                              ) : (
-                                "View"
-                              )}
+                              View
                             </Button>
+                          </div>
+                          <div>
+                            <Button
+                              size="sm"
+                              className="h-9 w-full bg-[#16A34A] px-4 text-white shadow-sm hover:bg-[#15803D] disabled:border disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 dark:disabled:border-[#2F3A35] dark:disabled:bg-[#17201B] dark:disabled:text-[#6F7B73]"
+                              disabled={isSaving || !followUpEnabled}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void prepareRecoveryDraft(invoice)
+                              }}
+                            >
+                              <Send className="size-3.5" />
+                              Follow up
+                            </Button>
+                          </div>
+                          <div className="flex justify-end sm:col-span-2 xl:col-span-1">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[#C7D0CA] dark:hover:bg-[#17201B] dark:hover:text-[#F3F5F4]"
                                   aria-label={`Actions for ${invoice.invoice_number}`}
                                   disabled={isSaving}
                                   onClick={(event) => event.stopPropagation()}
@@ -1470,7 +1749,7 @@ export default function InvoicesPage() {
                                   <MoreHorizontal className="size-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent>
+                              <DropdownMenuContent className="dark:border-[#1F2924] dark:bg-[#111714] dark:text-[#F3F5F4]">
                                 <DropdownMenuLabel>
                                   {invoice.invoice_number}
                                 </DropdownMenuLabel>
@@ -1484,6 +1763,18 @@ export default function InvoicesPage() {
                                   <Pencil className="size-4" />
                                   Edit invoice
                                 </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <a
+                                    href={`/print/invoice/${invoice.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <Printer className="size-4" />
+                                    View / Print PDF
+                                    <ExternalLink className="ml-auto size-3 opacity-50" />
+                                  </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onSelect={(event) => {
                                     event.stopPropagation()
@@ -1495,7 +1786,7 @@ export default function InvoicesPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   disabled={
-                                    !isOverdueInvoice(invoice) || isSaving
+                                    !followUpEnabled || isSaving
                                   }
                                   onSelect={(event) => {
                                     event.stopPropagation()
@@ -1536,55 +1827,50 @@ export default function InvoicesPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-background text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center dark:border-[#2B3731] dark:bg-[#0B0F0C]">
+                <div className="mx-auto grid size-12 place-items-center rounded-lg border border-border bg-background text-muted-foreground dark:border-[#2F3A35] dark:bg-[#111714] dark:text-[#9AA39C]">
                   {hasActiveFilters ? (
                     <Search className="size-5" />
                   ) : (
                     <FileText className="size-5" />
                   )}
                 </div>
-                <h3 className="mt-4 text-base font-semibold">
+                <h3 className="mt-4 text-base font-semibold text-foreground dark:text-[#F3F5F4]">
                   {hasActiveFilters
                     ? "No invoices match these filters"
-                    : "No invoices yet"}
+                    : "No invoices found"}
                 </h3>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground dark:text-[#9AA39C]">
                   {hasActiveFilters
                     ? "Try a different client, invoice number, or status."
-                    : "Add your first invoice to start tracking unpaid revenue. Link a client to keep balances organized."}
+                    : "Create your first invoice to get started."}
                 </p>
                 <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
                   {hasActiveFilters ? (
                     <Button
                       variant="outline"
-                      className="w-full sm:w-auto"
+                      className="w-full sm:w-auto dark:border-[#2F3A35] dark:bg-transparent dark:text-[#F3F5F4] dark:hover:bg-[#17201B]"
                       onClick={resetFilters}
                     >
                       Clear filters
                     </Button>
                   ) : null}
-                  <Button className="w-full sm:w-auto" onClick={openAddInvoice}>
+                  <Button
+                    className="w-full bg-[#16A34A] text-white hover:bg-[#15803D] sm:w-auto"
+                    onClick={openAddInvoice}
+                  >
                     <Plus className="size-4" />
                     Add invoice
                   </Button>
-                  {!hasActiveFilters ? (
-                    <Button
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                      asChild
-                    >
-                      <a href="/dashboard/clients">Add client</a>
-                    </Button>
-                  ) : null}
                 </div>
               </div>
             )}
             </ContentReveal>
           </CardContent>
         </Card>
+        </div>
       </div>
 
-    </>
+    </div>
   )
 }

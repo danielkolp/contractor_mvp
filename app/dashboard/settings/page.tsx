@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { Save } from "lucide-react"
+import Link from "next/link"
+import { RotateCcw, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { formatPhoneNumberInput } from "@/lib/phone-format"
 import {
   Select,
   SelectContent,
@@ -24,6 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ServiceAreaSelect } from "@/components/ui/service-area-select"
+import { TradeMultiSelect } from "@/components/ui/trade-multi-select"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -449,28 +453,35 @@ export default function SettingsPage() {
                   <FieldError message={profileErrors.owner_name} />
                 </div>
               </div>
+              <div className="grid gap-2">
+                <Label>Trades</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select all that apply — clients discover you based on these.
+                </p>
+                <TradeMultiSelect
+                  value={
+                    profileForm.trade
+                      ? profileForm.trade.split(",").map((t) => t.trim()).filter(Boolean)
+                      : []
+                  }
+                  onChange={(trades) => updateProfile("trade", trades.join(","))}
+                  disabled={isSavingProfile}
+                />
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="trade">Trade / service</Label>
-                  <Input
-                    id="trade"
-                    value={profileForm.trade}
-                    onChange={(e) => updateProfile("trade", e.target.value)}
-                    placeholder="e.g. Electrical, Roofing, Plumbing"
-                  />
-                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="phone">Phone</Label>
                   <Input
                     id="phone"
                     type="tel"
+                    inputMode="numeric"
                     value={profileForm.phone}
-                    onChange={(e) => updateProfile("phone", e.target.value)}
-                    placeholder="e.g. (604) 555-0100"
+                    onChange={(e) =>
+                      updateProfile("phone", formatPhoneNumberInput(e.target.value))
+                    }
+                    placeholder="e.g. (604)-555-0100"
                   />
                 </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="website">Website</Label>
                   <Input
@@ -483,15 +494,13 @@ export default function SettingsPage() {
                   />
                   <FieldError message={profileErrors.website} />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="service_area">Service area</Label>
-                  <Input
-                    id="service_area"
-                    value={profileForm.service_area}
-                    onChange={(e) => updateProfile("service_area", e.target.value)}
-                    placeholder="e.g. Greater Vancouver"
-                  />
-                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="service_area">Service area</Label>
+                <ServiceAreaSelect
+                  value={profileForm.service_area}
+                  onChange={(area) => updateProfile("service_area", area)}
+                />
               </div>
             </CardContent>
           </Card>
@@ -636,10 +645,24 @@ export default function SettingsPage() {
               Your login email and password are managed by the sign-in system.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-4">
             <p className="text-sm text-muted-foreground">
               To change your email or password, contact support.
             </p>
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+              <div className="grid gap-0.5">
+                <p className="text-sm font-medium">Setup wizard</p>
+                <p className="text-xs text-muted-foreground">
+                  Re-run the guided setup to add a customer or load demo data.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/dashboard/setup">
+                  <RotateCcw className="size-3.5" />
+                  Redo setup
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
           </div>

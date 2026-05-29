@@ -68,6 +68,7 @@ export type Database = {
           id: string
           user_id: string
           client_id: string | null
+          job_request_id: string | null
           client_name: string | null
           invoice_number: string
           project_name: string | null
@@ -78,6 +79,9 @@ export type Database = {
           status: Database["public"]["Enums"]["invoice_status"]
           trade: string | null
           notes: string | null
+          line_items: Json
+          tax_rate: number
+          tax_lines: Json
           created_at: string
           updated_at: string
         }
@@ -85,6 +89,7 @@ export type Database = {
           id?: string
           user_id: string
           client_id?: string | null
+          job_request_id?: string | null
           client_name?: string | null
           invoice_number: string
           project_name?: string | null
@@ -95,6 +100,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["invoice_status"]
           trade?: string | null
           notes?: string | null
+          line_items?: Json
+          tax_rate?: number
+          tax_lines?: Json
           created_at?: string
           updated_at?: string
         }
@@ -102,6 +110,7 @@ export type Database = {
           id?: string
           user_id?: string
           client_id?: string | null
+          job_request_id?: string | null
           client_name?: string | null
           invoice_number?: string
           project_name?: string | null
@@ -112,6 +121,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["invoice_status"]
           trade?: string | null
           notes?: string | null
+          line_items?: Json
+          tax_rate?: number
+          tax_lines?: Json
           created_at?: string
           updated_at?: string
         }
@@ -122,6 +134,7 @@ export type Database = {
           id: string
           user_id: string
           client_id: string | null
+          job_request_id: string | null
           client_name: string | null
           estimate_number: string
           amount: number
@@ -129,6 +142,9 @@ export type Database = {
           sent_date: string
           follow_up_date: string | null
           notes: string | null
+          line_items: Json
+          tax_rate: number
+          tax_lines: Json
           created_at: string
           updated_at: string
         }
@@ -136,6 +152,7 @@ export type Database = {
           id?: string
           user_id: string
           client_id?: string | null
+          job_request_id?: string | null
           client_name?: string | null
           estimate_number: string
           amount: number
@@ -143,6 +160,9 @@ export type Database = {
           sent_date?: string
           follow_up_date?: string | null
           notes?: string | null
+          line_items?: Json
+          tax_rate?: number
+          tax_lines?: Json
           created_at?: string
           updated_at?: string
         }
@@ -150,6 +170,7 @@ export type Database = {
           id?: string
           user_id?: string
           client_id?: string | null
+          job_request_id?: string | null
           client_name?: string | null
           estimate_number?: string
           amount?: number
@@ -157,6 +178,66 @@ export type Database = {
           sent_date?: string
           follow_up_date?: string | null
           notes?: string | null
+          line_items?: Json
+          tax_rate?: number
+          tax_lines?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      job_requests: {
+        Row: {
+          id: string
+          client_id: string
+          client_name: string | null
+          client_email: string | null
+          title: string
+          description: string
+          trade: string | null
+          service_area: string
+          urgency: Database["public"]["Enums"]["job_request_urgency"]
+          budget_min: number | null
+          budget_max: number | null
+          contact_preference: string
+          photo_notes: string | null
+          status: Database["public"]["Enums"]["job_request_status"]
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          client_name?: string | null
+          client_email?: string | null
+          title: string
+          description: string
+          trade?: string | null
+          service_area: string
+          urgency?: Database["public"]["Enums"]["job_request_urgency"]
+          budget_min?: number | null
+          budget_max?: number | null
+          contact_preference?: string
+          photo_notes?: string | null
+          status?: Database["public"]["Enums"]["job_request_status"]
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          client_name?: string | null
+          client_email?: string | null
+          title?: string
+          description?: string
+          trade?: string | null
+          service_area?: string
+          urgency?: Database["public"]["Enums"]["job_request_urgency"]
+          budget_min?: number | null
+          budget_max?: number | null
+          contact_preference?: string
+          photo_notes?: string | null
+          status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string
         }
@@ -166,6 +247,7 @@ export type Database = {
         Row: {
           id: string
           user_id: string
+          role: Database["public"]["Enums"]["user_role"]
           company_name: string | null
           owner_name: string | null
           trade: string | null
@@ -178,6 +260,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
+          role?: Database["public"]["Enums"]["user_role"]
           company_name?: string | null
           owner_name?: string | null
           trade?: string | null
@@ -190,6 +273,7 @@ export type Database = {
         Update: {
           id?: string
           user_id?: string
+          role?: Database["public"]["Enums"]["user_role"]
           company_name?: string | null
           owner_name?: string | null
           trade?: string | null
@@ -393,6 +477,63 @@ export type Database = {
         }
         Relationships: []
       }
+      recovery_items: {
+        Row: {
+          id: string
+          user_id: string
+          client_name: string
+          client_email: string | null
+          client_phone: string | null
+          reason: "estimate_no_reply" | "invoice_overdue" | "maybe_later" | "work_not_paid" | "other"
+          amount: number
+          contacted_date: string | null
+          status: "needs_follow_up" | "message_ready" | "sent" | "waiting" | "resolved" | "lost" | "archived"
+          message_body: string | null
+          check_back_date: string | null
+          follow_up_count: number
+          notes: string | null
+          is_demo: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          client_name: string
+          client_email?: string | null
+          client_phone?: string | null
+          reason?: "estimate_no_reply" | "invoice_overdue" | "maybe_later" | "work_not_paid" | "other"
+          amount?: number
+          contacted_date?: string | null
+          status?: "needs_follow_up" | "message_ready" | "sent" | "waiting" | "resolved" | "lost" | "archived"
+          message_body?: string | null
+          check_back_date?: string | null
+          follow_up_count?: number
+          notes?: string | null
+          is_demo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          client_name?: string
+          client_email?: string | null
+          client_phone?: string | null
+          reason?: "estimate_no_reply" | "invoice_overdue" | "maybe_later" | "work_not_paid" | "other"
+          amount?: number
+          contacted_date?: string | null
+          status?: "needs_follow_up" | "message_ready" | "sent" | "waiting" | "resolved" | "lost" | "archived"
+          message_body?: string | null
+          check_back_date?: string | null
+          follow_up_count?: number
+          notes?: string | null
+          is_demo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -404,7 +545,9 @@ export type Database = {
         | "Follow-up Needed"
         | "Follow-up Sent"
         | "Interested"
+        | "Accepted"
         | "Won"
+        | "Declined"
         | "Lost"
         | "Archived"
       invoice_status:
@@ -415,6 +558,14 @@ export type Database = {
         | "Payment Plan"
         | "Paid"
         | "Escalated"
+      job_request_status:
+        | "new"
+        | "reviewed"
+        | "estimate_created"
+        | "accepted"
+        | "declined"
+        | "closed"
+      job_request_urgency: "flexible" | "soon" | "urgent"
       payment_reliability: "Reliable" | "Slow payer" | "High risk" | "New client"
       recovery_action_status: "Pending" | "Completed" | "Skipped" | "Cancelled"
       recovery_stage:
@@ -424,6 +575,7 @@ export type Database = {
         | "final_notice"
         | "escalated"
         | "resolved"
+      user_role: "contractor" | "client"
     }
     CompositeTypes: {
       [_ in never]: never

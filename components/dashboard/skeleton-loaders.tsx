@@ -195,7 +195,7 @@ export function RecoveryQueuePageSkeleton() {
   return (
     <div className="grid gap-6">
       {/* Hero summary card */}
-      <Card className="border-2 border-green-100">
+      <Card className="border-2 border-green-100 dark:border-green-900/40">
         <CardContent className="p-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-2.5">
@@ -230,7 +230,7 @@ export function RecoveryQueuePageSkeleton() {
       </div>
 
       {/* Featured card */}
-      <Card className="border-2 border-green-100">
+      <Card className="border-2 border-green-100 dark:border-green-900/40">
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2.5">
@@ -245,7 +245,7 @@ export function RecoveryQueuePageSkeleton() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="rounded-lg border border-green-100 bg-green-50 p-4 space-y-2">
+          <div className="rounded-lg border border-green-100 bg-green-50 p-4 space-y-2 dark:border-green-900/50 dark:bg-green-950/30">
             <Skeleton className="h-3 w-36" />
             <Skeleton className="h-4 w-full" />
           </div>

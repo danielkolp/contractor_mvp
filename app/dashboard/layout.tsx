@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic"
 import { AppShell } from "@/components/dashboard/app-shell"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { createClient } from "@/lib/supabase/server"
+import { getProfileRole } from "@/lib/user-role"
 
 export default async function DashboardLayout({
   children,
@@ -21,6 +22,11 @@ export default async function DashboardLayout({
 
     if (!user) {
       redirect("/login")
+    }
+
+    const role = await getProfileRole(supabase, user.id, user.user_metadata)
+    if (role === "client") {
+      redirect("/client/dashboard")
     }
 
     userEmail = user.email ?? undefined

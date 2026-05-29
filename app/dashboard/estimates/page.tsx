@@ -8,14 +8,20 @@ import {
   useMemo,
   useState,
 } from "react"
+import { useRouter } from "next/navigation"
 import {
   CheckCircle2,
+  ExternalLink,
   FileText,
   MoreHorizontal,
   Pencil,
+  Printer,
   Plus,
+  Receipt,
   RefreshCw,
   Search,
+  Trash2,
+  X,
   XCircle,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -60,6 +66,87 @@ type EstimateRow = Database["public"]["Tables"]["estimates"]["Row"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
 type EstimateUpdate = Database["public"]["Tables"]["estimates"]["Update"]
 type EstimateStatus = Database["public"]["Enums"]["estimate_status"]
+type InvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"]
+
+// ─── Tax line helpers ─────────────────────────────────────────────────────────
+
+type TaxLine = {
+  id: string
+  name: string
+  rate: string
+}
+
+const TAX_PRESETS: { name: string; rate: string }[] = [
+  { name: "GST", rate: "5" },
+  { name: "HST", rate: "15" },
+  { name: "PST", rate: "7" },
+  { name: "QST", rate: "9.975" },
+]
+
+function newTaxLine(name = "", rate = ""): TaxLine {
+  return { id: Math.random().toString(36).slice(2), name, rate }
+}
+
+function serializeTaxLines(lines: TaxLine[]) {
+  return lines
+    .filter((t) => t.name.trim() || parseFloat(t.rate) > 0)
+    .map(({ name, rate }) => ({ name: name.trim(), rate: parseFloat(rate) || 0 }))
+}
+
+function deserializeTaxLines(raw: unknown): TaxLine[] {
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  return (raw as { name: string; rate: number }[]).map((t) => ({
+    id: Math.random().toString(36).slice(2),
+    name: String(t.name ?? ""),
+    rate: String(t.rate ?? "0"),
+  }))
+}
+
+// ─── Line item helpers ────────────────────────────────────────────────────────
+
+type LineItem = {
+  id: string
+  description: string
+  quantity: string
+  unit_price: string
+}
+
+function newLineItem(): LineItem {
+  return {
+    id: Math.random().toString(36).slice(2),
+    description: "",
+    quantity: "1",
+    unit_price: "",
+  }
+}
+
+function lineItemSubtotal(items: LineItem[]): number {
+  return items.reduce((sum, item) => {
+    const qty = parseFloat(item.quantity) || 0
+    const price = parseFloat(item.unit_price) || 0
+    return sum + qty * price
+  }, 0)
+}
+
+function serializeLineItems(items: LineItem[]) {
+  return items.map(({ description, quantity, unit_price }) => ({
+    description,
+    quantity: parseFloat(quantity) || 0,
+    unit_price: parseFloat(unit_price) || 0,
+  }))
+}
+
+function deserializeLineItems(raw: unknown): LineItem[] {
+  if (!raw || !Array.isArray(raw)) return []
+  return (raw as Record<string, unknown>[]).map((item) => ({
+    id: Math.random().toString(36).slice(2),
+    description: String(item.description ?? ""),
+    quantity: String(item.quantity ?? "1"),
+    unit_price: String(item.unit_price ?? ""),
+  }))
+}
+
+// ─── Estimate form type ───────────────────────────────────────────────────────
 
 type EstimateForm = {
   clientId: string
@@ -70,6 +157,8 @@ type EstimateForm = {
   sentDate: string
   followUpDate: string
   notes: string
+  lineItems: LineItem[]
+  taxLines: TaxLine[]
 }
 
 const estimateStatuses: EstimateStatus[] = [
@@ -78,7 +167,9 @@ const estimateStatuses: EstimateStatus[] = [
   "Follow-up Needed",
   "Follow-up Sent",
   "Interested",
+  "Accepted",
   "Won",
+  "Declined",
   "Lost",
   "Archived",
 ]
@@ -92,7 +183,9 @@ const statusTone: Record<
   "Follow-up Needed": "warning",
   "Follow-up Sent": "outline",
   Interested: "default",
+  Accepted: "success",
   Won: "success",
+  Declined: "muted",
   Lost: "muted",
   Archived: "muted",
 }
@@ -100,7 +193,7 @@ const statusTone: Record<
 const moneyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 2,
 })
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -183,9 +276,19 @@ const initialForm: EstimateForm = {
   sentDate: inputDate(),
   followUpDate: inputDate(3),
   notes: "",
+  lineItems: [],
+  taxLines: [],
 }
 
 function formFromEstimate(estimate: EstimateRow): EstimateForm {
+  // Prefer new tax_lines; fall back to legacy tax_rate for old records.
+  const taxLines =
+    deserializeTaxLines(estimate.tax_lines).length > 0
+      ? deserializeTaxLines(estimate.tax_lines)
+      : estimate.tax_rate > 0
+        ? [newTaxLine("Tax", String(estimate.tax_rate))]
+        : []
+
   return {
     clientId: estimate.client_id ?? "",
     clientName: estimate.client_name ?? "",
@@ -195,10 +298,13 @@ function formFromEstimate(estimate: EstimateRow): EstimateForm {
     sentDate: estimate.sent_date,
     followUpDate: estimate.follow_up_date ?? "",
     notes: estimate.notes ?? "",
+    lineItems: deserializeLineItems(estimate.line_items),
+    taxLines,
   }
 }
 
 export default function EstimatesPage() {
+  const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const [clients, setClients] = useState<ClientRow[]>([])
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
@@ -213,6 +319,20 @@ export default function EstimatesPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  // ─── Derived line item totals ────────────────────────────────────────────────
+  const subtotal = useMemo(() => lineItemSubtotal(form.lineItems), [form.lineItems])
+  const totalTaxAmount = useMemo(
+    () =>
+      form.taxLines.reduce(
+        (sum, t) => sum + subtotal * ((parseFloat(t.rate) || 0) / 100),
+        0
+      ),
+    [subtotal, form.taxLines]
+  )
+  const computedTotal = useMemo(() => subtotal + totalTaxAmount, [subtotal, totalTaxAmount])
+  const hasLineItems = form.lineItems.length > 0
+
+  // ─── Data loading ────────────────────────────────────────────────────────────
   const loadEstimates = useCallback(async () => {
     setIsLoading(true)
     setErrorMessage(null)
@@ -249,11 +369,7 @@ export default function EstimatesPage() {
     const firstError = clientsResult.error || estimatesResult.error
 
     if (firstError) {
-      setErrorMessage(
-        firstError.message.includes("estimates")
-          ? "The estimates table is not available yet. Apply supabase/apply_estimates.sql in Supabase, then refresh."
-          : firstError.message
-      )
+      setErrorMessage(firstError.message)
       setClients([])
       setEstimates([])
     } else {
@@ -268,14 +384,13 @@ export default function EstimatesPage() {
     const timeoutId = window.setTimeout(() => {
       void loadEstimates()
     }, 0)
-
     return () => window.clearTimeout(timeoutId)
   }, [loadEstimates])
 
+  // ─── Filtering ───────────────────────────────────────────────────────────────
   const filteredEstimates = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     if (!query) return estimates
-
     return estimates.filter(
       (estimate) =>
         estimate.estimate_number.toLowerCase().includes(query) ||
@@ -289,12 +404,15 @@ export default function EstimatesPage() {
       estimates.filter(
         (estimate) =>
           estimate.status !== "Won" &&
+          estimate.status !== "Accepted" &&
           estimate.status !== "Lost" &&
+          estimate.status !== "Declined" &&
           estimate.status !== "Archived"
       ),
     [estimates]
   )
 
+  // ─── Form helpers ─────────────────────────────────────────────────────────────
   function updateForm<Field extends keyof EstimateForm>(
     field: Field,
     value: EstimateForm[Field]
@@ -302,6 +420,57 @@ export default function EstimatesPage() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  function addLineItem() {
+    setForm((current) => ({
+      ...current,
+      lineItems: [...current.lineItems, newLineItem()],
+    }))
+  }
+
+  function removeLineItem(id: string) {
+    setForm((current) => ({
+      ...current,
+      lineItems: current.lineItems.filter((item) => item.id !== id),
+    }))
+  }
+
+  function updateLineItem(
+    id: string,
+    field: keyof Omit<LineItem, "id">,
+    value: string
+  ) {
+    setForm((current) => ({
+      ...current,
+      lineItems: current.lineItems.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      ),
+    }))
+  }
+
+  function addTaxLine(name = "", rate = "") {
+    setForm((current) => ({
+      ...current,
+      taxLines: [...current.taxLines, newTaxLine(name, rate)],
+    }))
+  }
+
+  function removeTaxLine(id: string) {
+    setForm((current) => ({
+      ...current,
+      taxLines: current.taxLines.filter((t) => t.id !== id),
+    }))
+  }
+
+  function updateTaxLine(id: string, field: "name" | "rate", value: string) {
+    setForm((current) => ({
+      ...current,
+      taxLines: current.taxLines.map((t) =>
+        t.id === id ? { ...t, [field]: value } : t
+      ),
+    }))
+  }
+
+  // ─── Dialog open/close ───────────────────────────────────────────────────────
   function openAddEstimate() {
     setEditingEstimate(null)
     setForm({
@@ -325,6 +494,7 @@ export default function EstimatesPage() {
     }
   }
 
+  // ─── Save estimate ────────────────────────────────────────────────────────────
   async function handleAddOrUpdateEstimate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -343,17 +513,24 @@ export default function EstimatesPage() {
       ? getClientLabel(selectedClient)
       : nullableText(form.clientName)
 
+    const finalAmount = hasLineItems ? computedTotal : parseAmount(form.amount)
+    const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
+    const serializedTaxLines = hasLineItems ? serializeTaxLines(form.taxLines) : []
+
     const payload: EstimateInsert = {
       user_id: userId,
       client_id: form.clientId || null,
       client_name: resolvedClientName,
       estimate_number:
         form.estimateNumber.trim() || `EST-${Date.now().toString().slice(-5)}`,
-      amount: parseAmount(form.amount),
+      amount: finalAmount,
       status: form.status,
       sent_date: form.sentDate || inputDate(),
       follow_up_date: nullableDate(form.followUpDate),
       notes: nullableText(form.notes),
+      line_items: serializedItems,
+      tax_rate: 0,
+      tax_lines: serializedTaxLines,
     }
 
     if (editingEstimate) {
@@ -366,6 +543,9 @@ export default function EstimatesPage() {
         sent_date: payload.sent_date,
         follow_up_date: payload.follow_up_date,
         notes: payload.notes,
+        line_items: payload.line_items,
+        tax_rate: 0,
+        tax_lines: payload.tax_lines,
       }
       const { data, error } = await supabase
         .from("estimates")
@@ -407,17 +587,13 @@ export default function EstimatesPage() {
     setIsSaving(false)
   }
 
+  // ─── Status update ────────────────────────────────────────────────────────────
   async function updateEstimateStatus(
     estimate: EstimateRow,
     status: EstimateStatus
   ) {
-    if (!userId) {
-      setErrorMessage("You must be logged in to update estimates.")
-      return
-    }
-
+    if (!userId) return
     setIsSaving(true)
-    setErrorMessage(null)
 
     const payload: EstimateUpdate = {
       status,
@@ -436,7 +612,6 @@ export default function EstimatesPage() {
       .single()
 
     if (error) {
-      setErrorMessage(error.message)
       toast.error("Could not update estimate")
     } else {
       setEstimates((current) =>
@@ -448,30 +623,110 @@ export default function EstimatesPage() {
     setIsSaving(false)
   }
 
+  // ─── Delete estimate ──────────────────────────────────────────────────────────
+  async function deleteEstimate(estimate: EstimateRow) {
+    if (!userId) return
+    const { error } = await supabase
+      .from("estimates")
+      .delete()
+      .eq("id", estimate.id)
+      .eq("user_id", userId)
+
+    if (error) {
+      toast.error("Could not delete estimate")
+    } else {
+      setEstimates((current) => current.filter((e) => e.id !== estimate.id))
+      toast.success("Estimate deleted")
+    }
+  }
+
+  // ─── Convert estimate → invoice ───────────────────────────────────────────────
+  async function convertToInvoice(estimate: EstimateRow) {
+    if (!userId) return
+    setIsSaving(true)
+
+    const today = inputDate()
+    const dueDate = inputDate(30)
+
+    const payload: InvoiceInsert = {
+      user_id: userId,
+      client_id: estimate.client_id,
+      job_request_id: estimate.job_request_id,
+      client_name: estimate.client_name,
+      invoice_number: `INV-${Date.now().toString().slice(-5)}`,
+      amount: estimate.amount,
+      issue_date: today,
+      due_date: dueDate,
+      status: "Draft",
+      notes: estimate.notes,
+      line_items: Array.isArray(estimate.line_items) ? estimate.line_items : [],
+      tax_rate: 0,
+      tax_lines: Array.isArray(estimate.tax_lines) ? estimate.tax_lines : [],
+    }
+
+    const { data, error } = await supabase
+      .from("invoices")
+      .insert(payload)
+      .select()
+      .single()
+
+    if (error) {
+      toast.error("Could not create invoice")
+      setIsSaving(false)
+      return
+    }
+
+    // Mark estimate Won
+    await supabase
+      .from("estimates")
+      .update({ status: "Won" })
+      .eq("id", estimate.id)
+      .eq("user_id", userId)
+
+    setEstimates((current) =>
+      current.map((e) =>
+        e.id === estimate.id ? { ...e, status: "Won" as EstimateStatus } : e
+      )
+    )
+
+    toast.success(`Invoice ${data.invoice_number} created`, {
+      description: "Estimate marked as Won.",
+      action: {
+        label: "View Invoices",
+        onClick: () => router.push("/dashboard/invoices"),
+      },
+    })
+
+    setIsSaving(false)
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <>
       <PageHeader
         title="Estimates"
-        description="Track quotes you sent and know when to ask if the customer wants to move forward."
+        description="Track quotes you've sent and know exactly when to follow up."
       >
         <Button onClick={openAddEstimate}>
           <Plus className="size-4" />
-          Add estimate
+          New estimate
         </Button>
       </PageHeader>
 
+      {/* ── Add / Edit Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={closeEstimateDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingEstimate ? "Edit estimate" : "Add estimate"}
+              {editingEstimate ? "Edit estimate" : "New estimate"}
             </DialogTitle>
             <DialogDescription>
-              Save the quote details and the next follow-up date.
+              Add line items for a professional PDF, or enter a flat amount.
             </DialogDescription>
           </DialogHeader>
 
-          <form className="grid gap-4" onSubmit={handleAddOrUpdateEstimate}>
+          <form className="grid gap-5" onSubmit={handleAddOrUpdateEstimate}>
+            {/* Client + number */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="estimate-client">Client</Label>
@@ -481,9 +736,7 @@ export default function EstimatesPage() {
                   onChange={(value) => {
                     const client = clients.find((item) => item.id === value)
                     updateForm("clientId", value)
-                    if (client) {
-                      updateForm("clientName", getClientLabel(client))
-                    }
+                    if (client) updateForm("clientName", getClientLabel(client))
                   }}
                   disabled={isSaving}
                 >
@@ -509,29 +762,17 @@ export default function EstimatesPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            {/* Number + status */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="estimate-number">Estimate number</Label>
+                <Label htmlFor="estimate-number">Estimate #</Label>
                 <Input
                   id="estimate-number"
                   value={form.estimateNumber}
                   onChange={(event) =>
                     updateForm("estimateNumber", event.target.value)
                   }
-                  placeholder="EST-1024"
-                  disabled={isSaving}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="estimate-amount">Amount</Label>
-                <Input
-                  id="estimate-amount"
-                  value={form.amount}
-                  onChange={(event) => updateForm("amount", event.target.value)}
-                  placeholder="4500"
-                  type="number"
-                  min="0"
-                  step="1"
+                  placeholder="EST-1001"
                   disabled={isSaving}
                 />
               </div>
@@ -554,6 +795,7 @@ export default function EstimatesPage() {
               </div>
             </div>
 
+            {/* Dates */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="estimate-sent-date">Sent date</Label>
@@ -579,14 +821,202 @@ export default function EstimatesPage() {
               </div>
             </div>
 
+            {/* ── Line items ── */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Line Items</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addLineItem}
+                  disabled={isSaving}
+                >
+                  <Plus className="size-3.5" />
+                  Add item
+                </Button>
+              </div>
+
+              {form.lineItems.length > 0 && (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-[1fr_56px_96px_28px] gap-2 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                    <span>Description</span>
+                    <span className="text-right">Qty</span>
+                    <span className="text-right">Unit Price</span>
+                    <span />
+                  </div>
+
+                  {/* Item rows */}
+                  {form.lineItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-[1fr_56px_96px_28px] gap-2 border-t border-border px-3 py-2"
+                    >
+                      <Input
+                        value={item.description}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "description", e.target.value)
+                        }
+                        placeholder="What's included"
+                        className="h-8 text-sm"
+                        disabled={isSaving}
+                      />
+                      <Input
+                        value={item.quantity}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "quantity", e.target.value)
+                        }
+                        type="number"
+                        min="0"
+                        step="any"
+                        className="h-8 text-sm text-right"
+                        disabled={isSaving}
+                      />
+                      <Input
+                        value={item.unit_price}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "unit_price", e.target.value)
+                        }
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="h-8 text-sm text-right"
+                        disabled={isSaving}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(item.id)}
+                        className="flex size-7 items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        disabled={isSaving}
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Totals */}
+                  <div className="border-t border-border bg-muted/30 px-3 py-3 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="tabular-nums">
+                        {moneyFormatter.format(subtotal)}
+                      </span>
+                    </div>
+
+                    {/* Tax lines */}
+                    {form.taxLines.map((taxLine) => (
+                      <div key={taxLine.id} className="flex items-center justify-between gap-2 text-sm">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Input
+                            value={taxLine.name}
+                            onChange={(e) => updateTaxLine(taxLine.id, "name", e.target.value)}
+                            placeholder="Tax name"
+                            className="h-7 w-20 text-sm"
+                            disabled={isSaving}
+                          />
+                          <Input
+                            value={taxLine.rate}
+                            onChange={(e) => updateTaxLine(taxLine.id, "rate", e.target.value)}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.001"
+                            className="h-7 w-16 text-sm text-right"
+                            disabled={isSaving}
+                          />
+                          <span className="shrink-0">%</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTaxLine(taxLine.id)}
+                            className="flex size-5 items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            disabled={isSaving}
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                        <span className="tabular-nums shrink-0">
+                          {moneyFormatter.format(subtotal * ((parseFloat(taxLine.rate) || 0) / 100))}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Quick-add tax presets */}
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      <span className="text-xs text-muted-foreground shrink-0">Add tax:</span>
+                      {TAX_PRESETS.map((preset) => (
+                        <button
+                          key={`${preset.name}-${preset.rate}`}
+                          type="button"
+                          onClick={() => addTaxLine(preset.name, preset.rate)}
+                          disabled={isSaving}
+                          className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+                        >
+                          {preset.name} {preset.rate}%
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => addTaxLine("", "")}
+                        disabled={isSaving}
+                        className="rounded border border-dashed border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+                      >
+                        + Custom
+                      </button>
+                    </div>
+
+                    {form.taxLines.length > 0 && (
+                      <div className="flex justify-between text-sm text-muted-foreground pt-0.5">
+                        <span>Total tax</span>
+                        <span className="tabular-nums">{moneyFormatter.format(totalTaxAmount)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
+                      <span>Total</span>
+                      <span className="tabular-nums text-green-700">
+                        {moneyFormatter.format(computedTotal)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!hasLineItems && (
+                <p className="text-xs text-muted-foreground">
+                  Add line items for a detailed PDF, or use the Amount field below
+                  for a quick flat total.
+                </p>
+              )}
+            </div>
+
+            {/* Flat amount — only relevant when no line items */}
+            {!hasLineItems && (
+              <div className="grid gap-2">
+                <Label htmlFor="estimate-amount">Amount</Label>
+                <Input
+                  id="estimate-amount"
+                  value={form.amount}
+                  onChange={(event) => updateForm("amount", event.target.value)}
+                  placeholder="4500"
+                  type="number"
+                  min="0"
+                  step="1"
+                  disabled={isSaving}
+                />
+              </div>
+            )}
+
+            {/* Notes */}
             <div className="grid gap-2">
               <Label htmlFor="estimate-notes">Notes</Label>
               <textarea
                 id="estimate-notes"
                 value={form.notes}
                 onChange={(event) => updateForm("notes", event.target.value)}
-                placeholder="Scope, customer concerns, or what to mention when you follow up."
-                className="min-h-24 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                placeholder="Scope, materials, terms, or anything to mention on the PDF."
+                className="min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 disabled={isSaving}
               />
             </div>
@@ -609,6 +1039,7 @@ export default function EstimatesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── List ── */}
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader className="gap-4">
@@ -620,8 +1051,7 @@ export default function EstimatesPage() {
                 </CardDescription>
               </div>
               <Badge variant="outline" className="w-fit">
-                {openEstimates.length} open estimate
-                {openEstimates.length === 1 ? "" : "s"}
+                {openEstimates.length} open
               </Badge>
             </div>
 
@@ -632,7 +1062,7 @@ export default function EstimatesPage() {
                   className="pl-9"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search client, estimate, or status"
+                  placeholder="Search client, number, or status"
                 />
               </div>
               <Button
@@ -649,7 +1079,7 @@ export default function EstimatesPage() {
           <CardContent>
             {errorMessage ? (
               <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-                <div className="font-medium">Estimate sync error</div>
+                <div className="font-medium">Error</div>
                 <p className="mt-1 leading-6">{errorMessage}</p>
               </div>
             ) : null}
@@ -658,26 +1088,9 @@ export default function EstimatesPage() {
               isLoading={isLoading}
               skeleton={<InvoiceListSkeleton rows={6} />}
             >
-              {errorMessage && estimates.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                  <h3 className="text-base font-semibold">
-                    Something didn&apos;t load
-                  </h3>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                    Apply the estimates migration, then refresh this page.
-                  </p>
-                  <Button
-                    className="mt-5"
-                    variant="outline"
-                    onClick={() => void loadEstimates()}
-                  >
-                    <RefreshCw className="size-4" />
-                    Try again
-                  </Button>
-                </div>
-              ) : filteredEstimates.length > 0 ? (
+              {filteredEstimates.length > 0 ? (
                 <div className="overflow-hidden rounded-lg border border-border">
-                  <div className="hidden grid-cols-[120px_1fr_120px_120px_130px_72px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
+                  <div className="hidden grid-cols-[120px_1fr_120px_120px_130px_80px] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground xl:grid">
                     <div>Estimate</div>
                     <div>Client</div>
                     <div>Follow-up</div>
@@ -688,7 +1101,7 @@ export default function EstimatesPage() {
                   <div className="divide-y divide-border">
                     {filteredEstimates.map((estimate) => (
                       <div key={estimate.id} className="min-w-0 px-4 py-3">
-                        <div className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_120px_120px_130px_72px] xl:items-center">
+                        <div className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_120px_120px_130px_80px] xl:items-center">
                           <div className="min-w-0">
                             <div className="truncate font-medium">
                               {estimate.estimate_number}
@@ -703,14 +1116,9 @@ export default function EstimatesPage() {
                             </div>
                           </div>
                           <div className="text-sm">
-                            <div className="flex items-center gap-2 xl:block">
-                              <span className="text-xs font-medium uppercase text-muted-foreground xl:hidden">
-                                Follow-up
-                              </span>
-                              <span>{formatDate(estimate.follow_up_date)}</span>
-                            </div>
+                            <span>{formatDate(estimate.follow_up_date)}</span>
                           </div>
-                          <div className="font-semibold">
+                          <div className="font-semibold tabular-nums">
                             {moneyFormatter.format(estimate.amount)}
                           </div>
                           <div>
@@ -730,24 +1138,51 @@ export default function EstimatesPage() {
                                   <MoreHorizontal className="size-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent>
+                              <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>
                                   {estimate.estimate_number}
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
+
                                 <DropdownMenuItem
                                   onSelect={() => openEditEstimate(estimate)}
                                 >
                                   <Pencil className="size-4" />
                                   Edit estimate
                                 </DropdownMenuItem>
+
+                                <DropdownMenuItem asChild>
+                                  <a
+                                    href={`/print/estimate/${estimate.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <Printer className="size-4" />
+                                    View / Print PDF
+                                    <ExternalLink className="ml-auto size-3 opacity-50" />
+                                  </a>
+                                </DropdownMenuItem>
+
+                                <DropdownMenuSeparator />
+
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    void convertToInvoice(estimate)
+                                  }
+                                >
+                                  <Receipt className="size-4" />
+                                  Convert to Invoice
+                                </DropdownMenuItem>
+
+                                <DropdownMenuSeparator />
+
                                 <DropdownMenuItem
                                   onSelect={() =>
                                     void updateEstimateStatus(estimate, "Won")
                                   }
                                 >
                                   <CheckCircle2 className="size-4" />
-                                  Mark won
+                                  Mark Won
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onSelect={() =>
@@ -755,7 +1190,17 @@ export default function EstimatesPage() {
                                   }
                                 >
                                   <XCircle className="size-4" />
-                                  Mark lost
+                                  Mark Lost
+                                </DropdownMenuItem>
+
+                                <DropdownMenuSeparator />
+
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() => void deleteEstimate(estimate)}
+                                >
+                                  <Trash2 className="size-4" />
+                                  Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -771,16 +1216,29 @@ export default function EstimatesPage() {
                     <FileText className="size-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">
-                    No estimates yet
+                    {searchQuery ? "No estimates match" : "No estimates yet"}
                   </h3>
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                    Add an estimate after you send a quote so the app can tell
-                    you when to follow up.
+                    {searchQuery
+                      ? "Try a different search."
+                      : "Add an estimate after you send a quote — the app will tell you when to follow up."}
                   </p>
-                  <Button className="mt-5" onClick={openAddEstimate}>
-                    <Plus className="size-4" />
-                    Add estimate
-                  </Button>
+                  {!searchQuery && (
+                    <Button className="mt-5" onClick={openAddEstimate}>
+                      <Plus className="size-4" />
+                      Add estimate
+                    </Button>
+                  )}
+                  {searchQuery && (
+                    <Button
+                      className="mt-5"
+                      variant="outline"
+                      onClick={() => setSearchQuery("")}
+                    >
+                      <RefreshCw className="size-4" />
+                      Clear search
+                    </Button>
+                  )}
                 </div>
               )}
             </ContentReveal>

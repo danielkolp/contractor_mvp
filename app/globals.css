@@ -109,40 +109,74 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  /* Forest-green dark palette — matches the invoices page atmosphere.
+     Key hex references: bg #0B0F0C, card #111714, border #1F2924,
+     text #F3F5F4, muted #9AA39C, primary #16A34A */
+  --background: oklch(0.065 0.008 148);   /* #0B0F0C */
+  --foreground: oklch(0.960 0.004 148);   /* #F3F5F4 */
 
-  /* Lighter forest green for dark mode */
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --card: oklch(0.100 0.012 148);         /* #111714 */
+  --card-foreground: oklch(0.960 0.004 148);
+  --popover: oklch(0.100 0.012 148);      /* #111714 */
+  --popover-foreground: oklch(0.960 0.004 148);
 
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  /* Green-600 (#16A34A) as the interactive primary */
+  --primary: oklch(0.520 0.180 148);
+  --primary-foreground: oklch(0.985 0 0);
+
+  --secondary: oklch(0.130 0.014 148);    /* #17201B */
+  --secondary-foreground: oklch(0.960 0.004 148);
+
+  --muted: oklch(0.120 0.012 148);        /* #151B18 */
+  --muted-foreground: oklch(0.655 0.012 148); /* #9AA39C */
+
+  --accent: oklch(0.130 0.014 148);       /* #17201B */
+  --accent-foreground: oklch(0.960 0.004 148);
+
+  --destructive: oklch(0.65 0.2 22);
+
+  --border: oklch(0.170 0.016 148);       /* #1F2924 */
+  --input: oklch(0.170 0.016 148);
+
+  --ring: oklch(0.520 0.180 148 / 55%);   /* #16A34A at 55% */
+
+  --chart-1: oklch(0.52 0.18 148);
+  --chart-2: oklch(0.64 0.15 160);
+  --chart-3: oklch(0.42 0.13 148);
+  --chart-4: oklch(0.35 0.10 148);
+  --chart-5: oklch(0.27 0.07 148);
+
+  --sidebar: oklch(0.100 0.012 148);      /* #111714 */
+  --sidebar-foreground: oklch(0.960 0.004 148);
+  --sidebar-primary: oklch(0.520 0.180 148);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-accent: oklch(0.130 0.014 148);
+  --sidebar-accent-foreground: oklch(0.960 0.004 148);
+  --sidebar-border: oklch(0.170 0.016 148);
+  --sidebar-ring: oklch(0.520 0.180 148 / 55%);
+}
+
+/* Forces light-mode CSS variables regardless of the global .dark class */
+.force-light {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
 }
 
 @layer base {
@@ -203,10 +237,38 @@
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.120 0.012 148) 25%,
+    oklch(0.160 0.014 148) 50%,
+    oklch(0.120 0.012 148) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Print: clean page with no browser chrome artifacts */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 14mm;
+  }
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton-shimmer {
     animation: none;
     background: oklch(0.93 0.01 95);
+  }
+
+  .dark .skeleton-shimmer {
+    background: oklch(0.120 0.012 148);
   }
 
   *,
