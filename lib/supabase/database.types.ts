@@ -544,6 +544,15 @@ export type Database = {
         Args: { contractor_user_id: string }
         Returns: boolean
       }
+      contractor_public_profile: {
+        Args: { contractor_user_id: string }
+        Returns: {
+          company_name: string | null
+          owner_name: string | null
+          trade: string | null
+          service_area: string | null
+        }[]
+      }
     }
     Enums: {
       contact_method: "Email" | "Phone" | "Text"

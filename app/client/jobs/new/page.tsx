@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useMemo, useState, useTransition } from "react"
+import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ImagePlus, Send } from "lucide-react"
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -40,6 +41,13 @@ const TRADES = [
   "Other",
 ] as const
 
+type ContractorProfile = {
+  company_name: string | null
+  owner_name: string | null
+  trade: string | null
+  service_area: string | null
+}
+
 function nullableNumber(value: FormDataEntryValue | null) {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
@@ -53,8 +61,28 @@ export default function NewClientJobPage() {
   const [isPending, startTransition] = useTransition()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [submittedTitle, setSubmittedTitle] = useState<string | null>(null)
+  const [contractorProfile, setContractorProfile] = useState<ContractorProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
+  const [contractorNotFound, setContractorNotFound] = useState(false)
 
-  // Block submission if no contractor ID was provided in the URL.
+  useEffect(() => {
+    if (!contractorId) {
+      setProfileLoading(false)
+      return
+    }
+    void (async () => {
+      const { data } = await supabase.rpc("contractor_public_profile", {
+        contractor_user_id: contractorId,
+      })
+      if (!data || data.length === 0) {
+        setContractorNotFound(true)
+      } else {
+        setContractorProfile(data[0])
+      }
+      setProfileLoading(false)
+    })()
+  }, [contractorId, supabase])
+
   if (!contractorId) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
@@ -66,6 +94,32 @@ export default function NewClientJobPage() {
       </div>
     )
   }
+
+  if (!profileLoading && contractorNotFound) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <p className="text-lg font-semibold text-foreground">Contractor not found</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This link does not match an active contractor. Please use the link
+          your contractor shared with you.
+        </p>
+      </div>
+    )
+  }
+
+  // Parse contractor trades: single value → hide field; multiple (comma-separated) → show subset; none → show full fallback list.
+  const contractorTrades = contractorProfile?.trade
+    ? contractorProfile.trade.split(",").map((t) => t.trim()).filter(Boolean)
+    : []
+
+  const contractorName =
+    contractorProfile?.company_name ||
+    contractorProfile?.owner_name ||
+    null
+
+  const pageTitle = contractorName
+    ? `Request an estimate from ${contractorName}`
+    : "Request an estimate"
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -80,21 +134,15 @@ export default function NewClientJobPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        setErrorMessage("You must be signed in to submit a job request.")
+        setErrorMessage("You must be signed in to submit a request.")
         return
       }
 
-      // Verify the contractor exists via the SECURITY DEFINER RPC so we don't
-      // require clients to have read access to the profiles table before a job
-      // request row exists (avoids RLS denial on the profiles table).
-      // contractorId is non-null here: guarded by the early return above.
-      const { data: contractorExists, error: contractorError } = await supabase
-        .rpc("contractor_exists", { contractor_user_id: contractorId! })
-
-      if (contractorError || !contractorExists) {
-        setErrorMessage("Contractor not found. Please use the link your contractor shared.")
-        return
-      }
+      // For single-trade contractors the field is hidden; inject the value directly.
+      const trade =
+        contractorTrades.length === 1
+          ? contractorTrades[0]
+          : String(formData.get("trade") ?? "").trim() || null
 
       const { data: clientProfile } = await supabase
         .from("profiles")
@@ -106,11 +154,7 @@ export default function NewClientJobPage() {
       const description = String(formData.get("description") ?? "").trim()
       const serviceArea = String(formData.get("service_area") ?? "").trim()
       const urgency = String(formData.get("urgency") ?? "flexible") as JobUrgency
-      const contactPreference = String(
-        formData.get("contact_preference") ?? "Email"
-      )
-
-      const trade = String(formData.get("trade") ?? "").trim() || null
+      const contactPreference = String(formData.get("contact_preference") ?? "Email")
 
       const payload: JobRequestInsert = {
         client_id: user.id,
@@ -119,7 +163,7 @@ export default function NewClientJobPage() {
         client_email: user.email ?? null,
         title,
         description,
-        trade,
+        trade: trade ?? null,
         service_area: serviceArea,
         urgency,
         budget_min: nullableNumber(formData.get("budget_min")),
@@ -137,7 +181,7 @@ export default function NewClientJobPage() {
       }
 
       setSubmittedTitle(title)
-      toast.success("Job request submitted")
+      toast.success("Estimate requested")
     })
   }
 
@@ -146,9 +190,11 @@ export default function NewClientJobPage() {
       <div className="mx-auto grid max-w-2xl gap-6 p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
-            <CardTitle>Job request submitted</CardTitle>
+            <CardTitle>Estimate requested</CardTitle>
             <CardDescription>
-              Your request has been sent for contractor review.
+              {contractorName
+                ? `${contractorName} will review your details and be in touch soon.`
+                : "Your contractor will review your details and be in touch soon."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -163,7 +209,7 @@ export default function NewClientJobPage() {
                 Return to dashboard
               </Button>
               <Button variant="outline" onClick={() => setSubmittedTitle(null)}>
-                Submit another job
+                Submit another request
               </Button>
             </div>
           </CardContent>
@@ -183,11 +229,19 @@ export default function NewClientJobPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Submit a Job</CardTitle>
-          <CardDescription>
-            Share the work you need quoted. This creates an incoming request for
-            contractor review.
-          </CardDescription>
+          {profileLoading ? (
+            <>
+              <Skeleton className="h-7 w-2/3" />
+              <Skeleton className="mt-2 h-4 w-full" />
+            </>
+          ) : (
+            <>
+              <CardTitle>{pageTitle}</CardTitle>
+              <CardDescription>
+                Share the details your contractor needs to prepare an estimate.
+              </CardDescription>
+            </>
+          )}
         </CardHeader>
         <CardContent>
           <form className="grid gap-5" onSubmit={handleSubmit}>
@@ -197,24 +251,27 @@ export default function NewClientJobPage() {
               </div>
             ) : null}
 
-            <div className="grid gap-2">
-              <Label htmlFor="trade">Type of work</Label>
-              <select
-                id="trade"
-                name="trade"
-                required
-                defaultValue=""
-                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <option value="" disabled>Select a trade…</option>
-                {TRADES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Helps match your request to the right contractors.
-              </p>
-            </div>
+            {/* Hidden when contractor has exactly one trade; that value is submitted programmatically. */}
+            {contractorTrades.length !== 1 ? (
+              <div className="grid gap-2">
+                <Label htmlFor="trade">Type of work</Label>
+                <select
+                  id="trade"
+                  name="trade"
+                  required
+                  defaultValue=""
+                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <option value="" disabled>Select a trade…</option>
+                  {(contractorTrades.length > 1 ? contractorTrades : TRADES).map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Helps your contractor understand what kind of work you need.
+                </p>
+              </div>
+            ) : null}
 
             <div className="grid gap-2">
               <Label htmlFor="title">Job title</Label>
@@ -232,7 +289,7 @@ export default function NewClientJobPage() {
                 id="description"
                 name="description"
                 className="min-h-32 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                placeholder="Describe the work, measurements, access details, preferred timing, and anything the contractor should know."
+                placeholder="Describe the work, measurements, access details, preferred timing, and anything your contractor should know."
                 required
               />
             </div>
@@ -312,7 +369,7 @@ export default function NewClientJobPage() {
                     <p className="text-sm font-medium">Share photo details</p>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
                       Photo uploads are not available yet. Describe any photos
-                      or files you can share with the contractor later.
+                      or files you can share with your contractor later.
                     </p>
                     <textarea
                       id="photo_notes"
@@ -327,11 +384,11 @@ export default function NewClientJobPage() {
 
             <Button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || profileLoading}
               className="bg-green-700 text-white hover:bg-green-800"
             >
               <Send className="size-4" />
-              {isPending ? "Submitting..." : "Submit job request"}
+              {isPending ? "Sending..." : "Request estimate"}
             </Button>
           </form>
         </CardContent>

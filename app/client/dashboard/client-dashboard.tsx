@@ -202,7 +202,7 @@ export function ClientDashboardPage() {
               </p>
             </div>
             <p className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground sm:text-right">
-              Use the request link your contractor shared to submit a new job.
+              Need a new estimate? Use the request link your contractor shared with you.
             </p>
           </div>
         </section>
@@ -212,7 +212,7 @@ export function ClientDashboardPage() {
             <CardHeader>
               <CardTitle>Submitted Job Requests</CardTitle>
               <CardDescription>
-                Requests you have sent for contractor review.
+                Requests you have sent to your contractor.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -243,8 +243,8 @@ export function ClientDashboardPage() {
               ) : (
                 <EmptyState
                   icon={Inbox}
-                  title="No job requests yet"
-                  description="Submit a job request when you are ready to share the work you need quoted."
+                  title="No requests yet"
+                  description="Use the request link your contractor shared with you to send your first request."
                 />
               )}
             </CardContent>
