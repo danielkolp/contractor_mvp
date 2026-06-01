@@ -8,6 +8,8 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardCopy,
+  ClipboardList,
+  FileText,
   Mail,
   MessageSquare,
   MoreHorizontal,
@@ -65,30 +67,12 @@ function relativeDateFromIso(iso: string): string {
 
 function sourceTypeLabel(reason: RecoveryItemReason | null): string {
   switch (reason) {
-    case "invoice_overdue":  return "Invoice"
+    case "invoice_overdue":   return "Invoice"
     case "estimate_no_reply": return "Estimate"
-    case "work_not_paid":    return "Unpaid job"
-    case "maybe_later":      return "Prospect"
-    default:                 return "Other"
+    case "work_not_paid":     return "Unpaid job"
+    case "maybe_later":       return "Prospect"
+    default:                  return "Other"
   }
-}
-
-function suggestedNextStep(status: RecoveryItem["status"], followUpCount: number, hasEmail: boolean): string {
-  if (status === "needs_follow_up") {
-    if (followUpCount === 0)
-      return hasEmail
-        ? "Review the message below, then send it directly from here."
-        : "Review the message below, copy it, and send it manually."
-    return hasEmail
-      ? "A new follow-up message is ready. Review and send."
-      : "A new follow-up message is ready. Copy and send manually."
-  }
-  if (status === "message_ready") {
-    return hasEmail
-      ? "Send the follow-up email directly, or copy it to send yourself."
-      : "Copy the message and send it, then log it as sent manually."
-  }
-  return "Follow up with this customer."
 }
 
 function StatusPill({
@@ -149,7 +133,7 @@ function ReplyBanner({
     : null
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2.5 dark:border-blue-900/50 dark:bg-blue-950/20">
+    <div className="rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 dark:border-blue-900/50 dark:bg-blue-950/20">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <MessageSquare className="size-3.5 text-blue-600 dark:text-blue-400" />
@@ -214,46 +198,48 @@ function StandardCard({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const accentColor = isMessageReady
-    ? "before:bg-ef-sky"
-    : "before:bg-amber-400"
+  const accentBar = isMessageReady ? "before:bg-ef-sky" : "before:bg-amber-400"
+  const iconCls   = isMessageReady
+    ? "bg-ef-mist text-ef-ocean dark:bg-ef-ink/40 dark:text-ef-cyan"
+    : "bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400"
+  const ItemIcon  = item.reason === "estimate_no_reply" ? ClipboardList : FileText
 
   return (
     <div
       className={cn(
         "relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md",
         "before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
-        accentColor
+        accentBar
       )}
     >
-      <div className="flex flex-col gap-4 py-4 pl-5 pr-4">
-        {/* Header: status pill + amount */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill status={item.status} isCheckIn={false} />
-            <span className="text-xs text-muted-foreground">
+      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
+        {/* Compact main row */}
+        <div className="flex items-center gap-3">
+          <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", iconCls)}>
+            <ItemIcon className="size-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="truncate text-sm font-semibold text-foreground">
+                {item.client_name}
+              </p>
+              <StatusPill status={item.status} isCheckIn={false} />
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {sourceTypeLabel(item.reason as RecoveryItemReason)}
               {item.contacted_date ? ` · ${relativeDate(item.contacted_date)}` : ""}
-            </span>
+              {item.client_email
+                ? ` · ${item.client_email}`
+                : item.client_phone
+                ? ` · ${item.client_phone}`
+                : ""}
+            </p>
           </div>
-          <div className="shrink-0 text-right">
-            <span className="text-xl font-bold tabular-nums text-foreground">
+          <div className="shrink-0">
+            <span className="text-base font-bold tabular-nums text-foreground">
               {money.format(item.amount)}
             </span>
           </div>
-        </div>
-
-        {/* Customer info */}
-        <div className="-mt-2">
-          <p className="text-base font-semibold leading-snug text-foreground">
-            {item.client_name}
-          </p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {reasonLabel(item.reason as RecoveryItemReason)}
-            {item.client_email || item.client_phone
-              ? ` · ${item.client_email ?? item.client_phone}`
-              : ""}
-          </p>
         </div>
 
         {/* Client replied banner */}
@@ -263,12 +249,6 @@ function StandardCard({
             onViewReplies={() => onViewReplies(item)}
           />
         )}
-
-        {/* Suggested next step */}
-        <p className="rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-          <span className="font-medium text-foreground">Suggested: </span>
-          {suggestedNextStep(item.status, item.follow_up_count, hasEmail)}
-        </p>
 
         {/* Message preview */}
         {item.message_body ? (
@@ -293,10 +273,10 @@ function StandardCard({
           </div>
         ) : null}
 
-        {/* No-email hint when message is ready */}
+        {/* No-email hint */}
         {isMessageReady && !hasEmail && (
           <p className="text-xs text-muted-foreground">
-            Add a client email to this item to enable direct sending.
+            Add a client email to enable direct sending.
           </p>
         )}
 
@@ -304,10 +284,9 @@ function StandardCard({
         <div className="flex flex-wrap items-center gap-2">
           {isMessageReady ? (
             hasEmail ? (
-              /* Primary: email send */
               <Button
                 size="sm"
-                className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+                className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
                 onClick={() => onSendFollowUp(item)}
                 disabled={isSaving}
               >
@@ -315,10 +294,9 @@ function StandardCard({
                 Send follow-up email
               </Button>
             ) : (
-              /* Primary fallback: copy when no email */
               <Button
                 size="sm"
-                className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+                className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
                 onClick={() => void handleCopy()}
                 disabled={isSaving}
               >
@@ -331,10 +309,9 @@ function StandardCard({
               </Button>
             )
           ) : (
-            /* needs_follow_up primary */
             <Button
               size="sm"
-              className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+              className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
               onClick={() => setMsgOpen(true)}
               disabled={isSaving}
             >
@@ -342,7 +319,6 @@ function StandardCard({
             </Button>
           )}
 
-          {/* Copy-only secondary when we have email + message ready */}
           {isMessageReady && hasEmail && item.message_body && (
             <Button
               size="sm"
@@ -360,7 +336,6 @@ function StandardCard({
             </Button>
           )}
 
-          {/* Manual mark-sent for needs_follow_up */}
           {!isMessageReady && (
             <Button
               size="sm"
@@ -373,7 +348,6 @@ function StandardCard({
             </Button>
           )}
 
-          {/* Overflow menu */}
           <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -454,35 +428,33 @@ function CheckInCard({
 }) {
   return (
     <div className="relative overflow-hidden rounded-xl border-2 border-sky-200 bg-sky-50/30 shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/50 dark:bg-sky-950/10 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-sky-400">
-      <div className="flex flex-col gap-4 py-4 pl-5 pr-4">
-        {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill status={item.status} isCheckIn />
-            <span className="text-xs text-muted-foreground">
-              {sourceTypeLabel(item.reason as RecoveryItemReason)}
-              {item.contacted_date ? ` · sent ${relativeDate(item.contacted_date)}` : ""}
-            </span>
+      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
+        {/* Compact main row */}
+        <div className="flex items-center gap-3">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-900/25 dark:text-sky-400">
+            <Bell className="size-3.5" />
           </div>
-          <span className="shrink-0 text-xl font-bold tabular-nums text-foreground">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-sm font-semibold text-foreground">
+                Did {item.client_name} respond?
+              </p>
+              <StatusPill status={item.status} isCheckIn />
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {reasonLabel(item.reason as RecoveryItemReason)}
+              {item.contacted_date ? ` · sent ${relativeDate(item.contacted_date)}` : ""}
+              {item.client_email || item.client_phone
+                ? ` · ${item.client_email ?? item.client_phone}`
+                : ""}
+            </p>
+          </div>
+          <span className="shrink-0 text-base font-bold tabular-nums text-foreground">
             {money.format(item.amount)}
           </span>
         </div>
 
-        {/* Question */}
-        <div className="-mt-2">
-          <p className="text-base font-semibold leading-snug">
-            Did {item.client_name} respond?
-          </p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {reasonLabel(item.reason as RecoveryItemReason)}
-            {item.client_email || item.client_phone
-              ? ` · ${item.client_email ?? item.client_phone}`
-              : ""}
-          </p>
-        </div>
-
-        {/* Client replied banner */}
+        {/* Reply banner */}
         {replyInfo && replyInfo.count > 0 && (
           <ReplyBanner
             replyInfo={replyInfo}
@@ -494,7 +466,7 @@ function CheckInCard({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+            className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
             onClick={() => onPaid(item)}
             disabled={isSaving}
           >
@@ -600,11 +572,11 @@ function WaitingCard({
         ? "border-blue-200 before:bg-blue-500 dark:border-blue-900/50"
         : "opacity-80 before:bg-blue-300 dark:before:bg-blue-700"
     )}>
-      <div className="flex flex-col gap-3 py-4 pl-5 pr-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
+      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <StatusPill status={item.status} isCheckIn={false} />
                 {hasReplies && (
                   <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200">
@@ -612,17 +584,15 @@ function WaitingCard({
                     Client replied
                   </Badge>
                 )}
-                <span className="text-xs text-muted-foreground">
-                  {sourceTypeLabel(item.reason as RecoveryItemReason)}
-                  {checkBackFormatted ? ` · check in ${checkBackFormatted}` : ""}
-                </span>
               </div>
-              <p className="mt-1.5 font-semibold text-foreground">
+              <p className="mt-1 text-sm font-semibold text-foreground">
                 {item.client_name}
               </p>
-              <p className="text-sm text-muted-foreground">
-                {money.format(item.amount)} ·{" "}
+              <p className="text-xs text-muted-foreground">
+                {money.format(item.amount)}
+                {" · "}
                 {reasonLabel(item.reason as RecoveryItemReason)}
+                {checkBackFormatted ? ` · check in ${checkBackFormatted}` : ""}
               </p>
             </div>
           </div>

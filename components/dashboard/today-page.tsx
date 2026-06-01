@@ -553,7 +553,7 @@ export function TodayPage() {
           ) : totalActionCount === 0 ? (
             <AllCaughtUp atRisk={atRisk} waitingCount={waitingItems.length} onAdd={() => setAddOpen(true)} />
           ) : (
-            <div className="grid gap-6">
+            <div className="grid gap-4">
               {/* Hero summary */}
               <HeroSummary
                 actionCount={totalActionCount}
@@ -564,7 +564,7 @@ export function TodayPage() {
                 }
               />
 
-              <div ref={actionSectionRef} className="grid gap-8">
+              <div ref={actionSectionRef} className="grid gap-6">
                 {/* Section 1: Needs action now */}
                 {(checkInDueItems.length > 0 ||
                   needsActionItems.length > 0 ||
@@ -683,19 +683,19 @@ function HeroSummary({
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <div className="absolute inset-0 bg-gradient-to-br from-ef-sky/5 via-transparent to-transparent" />
-      <div className="relative flex flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+            <div className="flex size-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
               <span className="text-xs font-bold tabular-nums text-amber-700 dark:text-amber-400">
                 {actionCount}
               </span>
             </div>
-            <h2 className="text-lg font-semibold text-foreground">
+            <h2 className="text-base font-semibold text-foreground">
               Today&apos;s follow-ups
             </h2>
           </div>
-          <p className="mt-1.5 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {actionCount === 1
               ? "1 person needs attention."
               : `${actionCount} people need attention.`}{" "}
@@ -707,7 +707,7 @@ function HeroSummary({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
-            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+            className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
             onClick={onStartHighestValue}
           >
             <TrendingUp className="size-4" />
@@ -782,11 +782,11 @@ function InvoiceActionCard({
         isOverdue ? "before:bg-orange-500" : "before:bg-amber-400"
       )}
     >
-      <div className="flex flex-col gap-3 py-4 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
+      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div
             className={cn(
-              "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
+              "flex size-8 shrink-0 items-center justify-center rounded-lg",
               isOverdue
                 ? "bg-orange-100 dark:bg-orange-900/25"
                 : "bg-amber-100 dark:bg-amber-900/25"
@@ -803,7 +803,7 @@ function InvoiceActionCard({
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <p className="truncate font-semibold text-foreground">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {invoice.client_name || "No client"}
               </p>
               <span
@@ -817,21 +817,21 @@ function InvoiceActionCard({
                 {isOverdue ? `${days}d overdue` : "due today"}
               </span>
             </div>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {invoice.invoice_number}
               {" · "}
               <span className="font-medium tabular-nums text-foreground">
                 {money.format(invoice.amount ?? 0)}
               </span>
               {" · "}
-              <span className="text-muted-foreground">Invoice</span>
+              Invoice
             </p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button
             size="sm"
-            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+            className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
             disabled={isSaving}
             onClick={() => onAddToQueue(invoice)}
           >
@@ -869,35 +869,35 @@ function EstimateActionCard({
 }) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan">
-      <div className="flex flex-col gap-3 py-4 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
+      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
             <ClipboardList className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <p className="truncate font-semibold text-foreground">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {estimate.client_name || "No client"}
               </p>
               <span className="shrink-0 rounded-full bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300">
                 follow-up due
               </span>
             </div>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {estimate.estimate_number}
               {" · "}
               <span className="font-medium tabular-nums text-foreground">
                 {money.format(estimate.amount ?? 0)}
               </span>
               {" · "}
-              <span className="text-muted-foreground">Estimate</span>
+              Estimate
             </p>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="bg-ef-ocean text-white hover:bg-ef-ocean"
+            className="bg-ef-orange text-white hover:bg-ef-orange"
             disabled={isSaving}
             onClick={() => onWon(estimate)}
           >
@@ -931,34 +931,34 @@ function EstimateActionCard({
 function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-ocean">
-      <div className="flex flex-col gap-3 py-4 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
+      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
             <ClipboardList className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <p className="truncate font-semibold text-foreground">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {estimate.client_name || "No client"}
               </p>
               <span className="shrink-0 rounded-full bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300">
                 accepted
               </span>
             </div>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {estimate.estimate_number}
-              {" - "}
+              {" · "}
               <span className="font-medium tabular-nums text-foreground">
                 {money.format(estimate.amount ?? 0)}
               </span>
-              {" - "}
-              <span className="text-muted-foreground">Create invoice next</span>
+              {" · "}
+              Create invoice next
             </p>
           </div>
         </div>
         <Button
           size="sm"
-          className="bg-ef-ocean text-white hover:bg-ef-ocean"
+          className="bg-ef-orange text-white hover:bg-ef-orange"
           asChild
         >
           <Link href="/dashboard/estimates">Open estimate</Link>
@@ -991,7 +991,7 @@ function OnboardingState({
       </p>
       <div className="mt-8 flex flex-col gap-3">
         <Button
-          className="w-full gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
+          className="w-full gap-2 bg-ef-orange text-white hover:bg-ef-orange"
           onClick={onAdd}
         >
           <Plus className="size-4" />
@@ -1053,7 +1053,7 @@ function AllCaughtUp({
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button
-            className="gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
+            className="gap-2 bg-ef-orange text-white hover:bg-ef-orange"
             onClick={onAdd}
           >
             <Plus className="size-4" />

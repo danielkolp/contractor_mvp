@@ -92,7 +92,7 @@ function isActivePath(pathname: string, href: string) {
 function NotificationBadge({ count }: { count: number }) {
   if (count === 0) return null
   return (
-    <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+    <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-ef-orange px-1 text-[10px] font-bold leading-none text-white">
       {count > 99 ? "99+" : count}
     </span>
   )
