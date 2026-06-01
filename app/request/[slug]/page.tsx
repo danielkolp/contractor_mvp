@@ -114,6 +114,7 @@ function ContactPreference({
         <button
           key={option}
           type="button"
+          data-testid={`request-contact-${option.toLowerCase()}`}
           onClick={() => onChange(option)}
           className={cn(
             "flex-1 py-3 text-sm font-medium transition",
@@ -136,7 +137,7 @@ function PhotoThumbnail({ file, onRemove }: { file: File; onRemove: () => void }
   useEffect(() => () => URL.revokeObjectURL(url), [url])
 
   return (
-    <div className="relative aspect-square">
+    <div className="relative aspect-square" data-testid="request-photo-thumbnail">
       <img
         src={url}
         alt={file.name}
@@ -144,6 +145,7 @@ function PhotoThumbnail({ file, onRemove }: { file: File; onRemove: () => void }
       />
       <button
         type="button"
+        aria-label={`Remove ${file.name}`}
         onClick={onRemove}
         className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-ef-ink text-white shadow-sm"
       >
@@ -196,6 +198,7 @@ function PhotoUpload({
       {files.length < MAX_PHOTOS && (
         <button
           type="button"
+          data-testid="request-add-photos"
           onClick={() => inputRef.current?.click()}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ef-200 bg-ef-mist/30 py-4 text-sm font-medium text-ef-ocean transition hover:border-ef-sky hover:bg-ef-mist/60"
         >
@@ -207,6 +210,7 @@ function PhotoUpload({
       <input
         ref={inputRef}
         id="photos"
+        data-testid="request-photo-input"
         type="file"
         accept={PHOTO_ACCEPT}
         multiple
@@ -225,7 +229,10 @@ function ConfirmedScreen({
   emailSent: boolean
 }) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-16 text-center">
+    <div
+      className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-16 text-center"
+      data-testid="request-confirmed"
+    >
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-ef-mist">
         <CheckCircle2 className="h-10 w-10 text-ef-ocean" />
       </div>
@@ -415,7 +422,7 @@ export default function RequestPage({
         </div>
 
         <div className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-md sm:p-8">
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit} data-testid="request-form">
             {error && <ErrorMessage message={error} />}
 
             {/* Contact info */}
@@ -487,12 +494,13 @@ export default function RequestPage({
               <div>
                 <FieldLabel htmlFor="trade">Type of work</FieldLabel>
                 <select
-                  id="trade"
-                  name="trade"
-                  required
-                  defaultValue=""
-                  className={cn(inputClass, "appearance-none cursor-pointer")}
-                >
+  id="trade"
+  name="trade"
+  data-testid="request-trade-select"
+  required
+  defaultValue=""
+  className={cn(inputClass, "appearance-none cursor-pointer")}
+>
                   <option value="" disabled>Select a trade...</option>
                   {(trades.length > 1 ? trades : CONTRACTOR_TRADES).map((t) => (
                     <option key={t} value={t}>{t}</option>
@@ -500,7 +508,12 @@ export default function RequestPage({
                 </select>
               </div>
             ) : (
-              <input type="hidden" name="trade" value={trades[0]} />
+              <input
+  type="hidden"
+  name="trade"
+  value={trades[0]}
+  data-testid="request-trade-hidden"
+/>
             )}
 
             <div>
@@ -570,6 +583,7 @@ export default function RequestPage({
 
             <button
               type="submit"
+              data-testid="request-submit-button"
               disabled={isPending || profileLoading}
               className={cn(
                 "mt-2 flex w-full items-center justify-center gap-2.5 rounded-xl px-6 py-3.5",

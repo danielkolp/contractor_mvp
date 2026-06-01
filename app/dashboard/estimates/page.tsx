@@ -647,7 +647,7 @@ export default function EstimatesPage() {
 
     const { data, error } = await supabase
       .from("estimates")
-      .update({ status: "Sent" })
+      .update({ status: "Sent", sent_date: inputDate() })
       .eq("id", estimate.id)
       .eq("user_id", userId)
       .select()
@@ -656,9 +656,23 @@ export default function EstimatesPage() {
     if (error) {
       toast.error("Could not share estimate")
     } else {
+      if (estimate.job_request_id) {
+        const { error: requestError } = await supabase
+          .from("job_requests")
+          .update({ status: "estimate_created" })
+          .eq("id", estimate.job_request_id)
+
+        if (requestError) {
+          toast.error("Estimate was sent, but the request status could not be updated.")
+          setIsSaving(false)
+          return
+        }
+      }
+
       setEstimates((current) =>
         current.map((e) => (e.id === estimate.id ? data : e))
       )
+      window.dispatchEvent(new Event("estg:badge-refresh"))
       toast.success("Estimate shared with client")
     }
 

@@ -126,7 +126,10 @@ export default async function EstimatePrintPage({
       <PrintToolbar backHref={role === "client" ? "/client/dashboard" : "/dashboard/estimates"} />
 
       <div className="pt-14 print:pt-0 min-h-screen bg-zinc-200 print:bg-white">
-        <div className="mx-auto w-[794px] print:w-full my-6 print:my-0 bg-white shadow-2xl print:shadow-none">
+        <div
+          className="mx-auto w-[794px] print:w-full my-6 print:my-0 bg-white shadow-2xl print:shadow-none"
+          data-testid="estimate-print-page"
+        >
 
           {/* ── Top accent ── */}
           <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />

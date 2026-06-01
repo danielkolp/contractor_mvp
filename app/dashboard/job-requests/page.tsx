@@ -1,6 +1,7 @@
 "use client"
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import {
   Check,
@@ -16,6 +17,8 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Trash2,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -34,6 +37,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -45,7 +49,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
@@ -53,8 +60,45 @@ import type { Database } from "@/lib/supabase/database.types"
 type JobRequest     = Database["public"]["Tables"]["job_requests"]["Row"]
 type JobRequestUpdate = Database["public"]["Tables"]["job_requests"]["Update"]
 type ClientInsert   = Database["public"]["Tables"]["clients"]["Insert"]
+type EstimateRow    = Database["public"]["Tables"]["estimates"]["Row"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
+type EstimateStatus = Database["public"]["Enums"]["estimate_status"]
 type Message        = Database["public"]["Tables"]["client_messages"]["Row"]
+
+type EstimateLineItem = {
+  id: string
+  description: string
+  quantity: string
+  unit_price: string
+}
+
+type EstimateTaxLine = {
+  id: string
+  name: string
+  rate: string
+}
+
+type EstimateDraftForm = {
+  clientName: string
+  estimateNumber: string
+  flatAmount: string
+  status: EstimateStatus
+  followUpDate: string
+  notes: string
+  lineItems: EstimateLineItem[]
+  taxLines: EstimateTaxLine[]
+}
+
+const emptyEstimateDraftForm: EstimateDraftForm = {
+  clientName: "",
+  estimateNumber: "",
+  flatAmount: "",
+  status: "Draft",
+  followUpDate: "",
+  notes: "",
+  lineItems: [],
+  taxLines: [],
+}
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
@@ -96,6 +140,9 @@ function requestNotes(request: JobRequest) {
     "",
     request.description,
     "",
+    request.client_name ? `Client: ${request.client_name}` : null,
+    request.client_email ? `Email: ${request.client_email}` : null,
+    request.client_phone ? `Phone: ${request.client_phone}` : null,
     `Service area: ${request.service_area}`,
     `Urgency: ${labelFromSlug(request.urgency)}`,
     `Budget: ${budgetLabel(request)}`,
@@ -106,30 +153,243 @@ function requestNotes(request: JobRequest) {
     .join("\n")
 }
 
+function nullableText(value: string) {
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function nullableDate(value: string) {
+  return value || null
+}
+
+function parseAmount(value: string) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function newLineItem(): EstimateLineItem {
+  return {
+    id: Math.random().toString(36).slice(2),
+    description: "",
+    quantity: "1",
+    unit_price: "",
+  }
+}
+
+function newTaxLine(name = "", rate = ""): EstimateTaxLine {
+  return {
+    id: Math.random().toString(36).slice(2),
+    name,
+    rate,
+  }
+}
+
+function serializeLineItems(items: EstimateLineItem[]) {
+  return items
+    .filter((item) => item.description.trim() || parseAmount(item.unit_price) > 0)
+    .map(({ description, quantity, unit_price }) => ({
+      description: description.trim(),
+      quantity: parseAmount(quantity),
+      unit_price: parseAmount(unit_price),
+    }))
+}
+
+function serializeTaxLines(lines: EstimateTaxLine[]) {
+  return lines
+    .filter((line) => line.name.trim() || parseAmount(line.rate) > 0)
+    .map(({ name, rate }) => ({
+      name: name.trim() || "Tax",
+      rate: parseAmount(rate),
+    }))
+}
+
+function lineItemSubtotal(items: EstimateLineItem[]) {
+  return serializeLineItems(items).reduce(
+    (sum, item) => sum + item.quantity * item.unit_price,
+    0
+  )
+}
+
+function requestPhotoUrls(request: JobRequest) {
+  return Array.isArray(request.photo_urls)
+    ? request.photo_urls.filter((url) => url.trim().length > 0)
+    : []
+}
+
+function RequestPhotos({ request }: { request: JobRequest }) {
+  const photos = requestPhotoUrls(request)
+  if (photos.length === 0) return null
+
+  return (
+    <div data-testid="job-request-photos">
+      <div className="text-xs font-medium uppercase text-muted-foreground">
+        Photos
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {photos.map((url, index) => (
+          <a
+            key={`${url}-${index}`}
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="job-request-photo-link"
+            className="group overflow-hidden rounded-lg border border-border bg-muted/30"
+          >
+            <Image
+              src={url}
+              alt={`${request.title} uploaded photo ${index + 1}`}
+              data-testid="job-request-photo"
+              width={320}
+              height={240}
+              unoptimized
+              className="aspect-[4/3] w-full object-cover transition group-hover:scale-105"
+            />
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RequestContext({ request }: { request: JobRequest }) {
+  return (
+    <div
+      className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 text-sm"
+      data-testid="job-request-context"
+    >
+      <div>
+        <div className="text-xs font-medium uppercase text-muted-foreground">
+          Request
+        </div>
+        <div className="mt-1 font-medium" data-testid="job-request-title-value">
+          {request.title}
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Client name
+          </div>
+          <div className="mt-1" data-testid="job-request-client-name-value">
+            {request.client_name || "Not provided"}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Service area
+          </div>
+          <div className="mt-1" data-testid="job-request-service-area-value">
+            {request.service_area}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Urgency
+          </div>
+          <div className="mt-1">{labelFromSlug(request.urgency)}</div>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Budget
+          </div>
+          <div className="mt-1">{budgetLabel(request)}</div>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Contact preference
+          </div>
+          <div className="mt-1" data-testid="job-request-contact-preference-value">
+            {request.contact_preference}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Client email
+          </div>
+          <div className="mt-1 break-words" data-testid="job-request-client-email-value">
+            {request.client_email || "Not provided"}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Client phone
+          </div>
+          <div className="mt-1" data-testid="job-request-client-phone-value">
+            {request.client_phone || "Not provided"}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="text-xs font-medium uppercase text-muted-foreground">
+          Description
+        </div>
+        <p
+          className="mt-2 whitespace-pre-wrap leading-6"
+          data-testid="job-request-description-value"
+        >
+          {request.description}
+        </p>
+      </div>
+      {request.photo_notes ? (
+        <div>
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Photo notes
+          </div>
+          <p
+            className="mt-2 whitespace-pre-wrap leading-6"
+            data-testid="job-request-photo-notes-value"
+          >
+            {request.photo_notes}
+          </p>
+        </div>
+      ) : null}
+      <RequestPhotos request={request} />
+    </div>
+  )
+}
+
 function EstimateActionButton({
   request,
-  estimateId,
+  estimate,
   isSaving,
   onCreateEstimate,
+  onShareEstimate,
 }: {
   request: JobRequest
-  estimateId: string | undefined
+  estimate: EstimateRow | undefined
   isSaving: boolean
   onCreateEstimate: (r: JobRequest) => void
+  onShareEstimate: (estimate: EstimateRow, request: JobRequest) => void
 }) {
   const hasEstimate =
     request.status === "estimate_created" ||
     request.status === "accepted" ||
     request.status === "declined"
 
-  if (estimateId) {
+  if (estimate) {
     return (
-      <Button variant="outline" asChild>
-        <Link href={`/dashboard/estimates?highlight=${estimateId}`}>
-          <FileText className="size-4" />
-          View estimate
-        </Link>
-      </Button>
+      <>
+        <Button variant="outline" asChild>
+          <Link
+            href={`/dashboard/estimates?highlight=${estimate.id}`}
+            data-testid="job-request-view-estimate"
+          >
+            <FileText className="size-4" />
+            View estimate
+          </Link>
+        </Button>
+        {estimate.status === "Draft" ? (
+          <Button
+            data-testid="job-request-share-estimate"
+            className="bg-ef-ocean text-white hover:bg-ef-ocean"
+            disabled={isSaving}
+            onClick={() => onShareEstimate(estimate, request)}
+          >
+            <Send className="size-4" />
+            Share with client
+          </Button>
+        ) : null}
+      </>
     )
   }
   if (hasEstimate) {
@@ -142,6 +402,7 @@ function EstimateActionButton({
   }
   return (
     <Button
+      data-testid="job-request-create-estimate"
       className="bg-ef-ocean text-white hover:bg-ef-ocean"
       disabled={isSaving}
       onClick={() => onCreateEstimate(request)}
@@ -168,6 +429,10 @@ export default function ContractorJobRequestsPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [requestSlug, setRequestSlug] = useState<string | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<JobRequest | null>(null)
+  const [estimateRequest, setEstimateRequest] = useState<JobRequest | null>(null)
+  const [estimateForm, setEstimateForm] = useState<EstimateDraftForm>(
+    emptyEstimateDraftForm
+  )
   const [messagingRequest, setMessagingRequest] = useState<JobRequest | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [messageBody, setMessageBody] = useState("")
@@ -176,8 +441,24 @@ export default function ContractorJobRequestsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  // Maps job_request.id → estimate.id for requests that already have an estimate.
-  const [estimateIdByRequestId, setEstimateIdByRequestId] = useState<Record<string, string>>({})
+  const [estimateByRequestId, setEstimateByRequestId] = useState<Record<string, EstimateRow>>({})
+
+  const estimateSubtotal = useMemo(
+    () => lineItemSubtotal(estimateForm.lineItems),
+    [estimateForm.lineItems]
+  )
+  const estimateTaxTotal = useMemo(
+    () =>
+      estimateForm.taxLines.reduce(
+        (sum, line) => sum + estimateSubtotal * (parseAmount(line.rate) / 100),
+        0
+      ),
+    [estimateForm.taxLines, estimateSubtotal]
+  )
+  const hasEstimateLineItems = estimateForm.lineItems.length > 0
+  const estimateTotal = hasEstimateLineItems
+    ? estimateSubtotal + estimateTaxTotal
+    : parseAmount(estimateForm.flatAmount)
 
   const shareableLink = requestSlug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${requestSlug}`
@@ -263,30 +544,26 @@ export default function ContractorJobRequestsPage() {
       const rows = data ?? []
       setRequests(rows)
 
-      // Back-fill estimate IDs for requests that already have one so the
-      // "View estimate" button appears correctly on first load.
-      const linkedIds = rows
-        .filter(
-          (r) =>
-            r.status === "estimate_created" ||
-            r.status === "accepted" ||
-            r.status === "declined"
-        )
-        .map((r) => r.id)
+      const requestIds = rows.map((r) => r.id)
 
-      if (linkedIds.length > 0) {
+      if (requestIds.length > 0) {
         const { data: estimateRows } = await supabase
           .from("estimates")
-          .select("id, job_request_id")
-          .in("job_request_id", linkedIds)
+          .select("*")
+          .in("job_request_id", requestIds)
+          .order("created_at", { ascending: false })
 
         if (estimateRows) {
-          const map: Record<string, string> = {}
+          const map: Record<string, EstimateRow> = {}
           for (const row of estimateRows) {
-            if (row.job_request_id) map[row.job_request_id] = row.id
+            if (row.job_request_id && !map[row.job_request_id]) {
+              map[row.job_request_id] = row
+            }
           }
-          setEstimateIdByRequestId(map)
+          setEstimateByRequestId(map)
         }
+      } else {
+        setEstimateByRequestId({})
       }
     }
 
@@ -321,7 +598,10 @@ export default function ContractorJobRequestsPage() {
     return data
   }
 
-  async function ensureClientForRequest(request: JobRequest) {
+  async function ensureClientForRequest(
+    request: JobRequest,
+    clientNameOverride?: string
+  ) {
     if (!userId) return null
 
     if (request.client_email) {
@@ -336,12 +616,16 @@ export default function ContractorJobRequestsPage() {
     }
 
     const clientName =
-      request.client_name || request.client_email || "Client from job request"
+      nullableText(clientNameOverride ?? "") ||
+      request.client_name ||
+      request.client_email ||
+      "Client from job request"
     const payload: ClientInsert = {
       user_id: userId,
       name: clientName,
       company: clientName,
       email: request.client_email,
+      phone: request.client_phone,
       notes: `Created from job request: ${request.title}`,
       payment_reliability: "New client",
     }
@@ -360,31 +644,128 @@ export default function ContractorJobRequestsPage() {
     return data
   }
 
-  async function createEstimateFromRequest(request: JobRequest) {
-    if (!userId || isSaving) return
+  function openCreateEstimate(request: JobRequest) {
+    setSelectedRequest(null)
+    setEstimateRequest(request)
+    setEstimateForm({
+      clientName: request.client_name || request.client_email || "",
+      estimateNumber: `EST-${Date.now().toString().slice(-5)}`,
+      flatAmount: "",
+      status: "Draft",
+      followUpDate: inputDate(3),
+      notes: requestNotes(request),
+      lineItems: [],
+      taxLines: [],
+    })
+  }
+
+  function closeEstimateDialog(open: boolean) {
+    if (!open) {
+      setEstimateRequest(null)
+      setEstimateForm(emptyEstimateDraftForm)
+    }
+  }
+
+  function updateEstimateForm<Field extends keyof EstimateDraftForm>(
+    field: Field,
+    value: EstimateDraftForm[Field]
+  ) {
+    setEstimateForm((current) => ({ ...current, [field]: value }))
+  }
+
+  function addEstimateLineItem() {
+    setEstimateForm((current) => ({
+      ...current,
+      lineItems: [...current.lineItems, newLineItem()],
+    }))
+  }
+
+  function updateEstimateLineItem(
+    id: string,
+    field: "description" | "quantity" | "unit_price",
+    value: string
+  ) {
+    setEstimateForm((current) => ({
+      ...current,
+      lineItems: current.lineItems.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      ),
+    }))
+  }
+
+  function removeEstimateLineItem(id: string) {
+    setEstimateForm((current) => ({
+      ...current,
+      lineItems: current.lineItems.filter((item) => item.id !== id),
+    }))
+  }
+
+  function addEstimateTaxLine(name = "", rate = "") {
+    setEstimateForm((current) => ({
+      ...current,
+      taxLines: [...current.taxLines, newTaxLine(name, rate)],
+    }))
+  }
+
+  function updateEstimateTaxLine(
+    id: string,
+    field: "name" | "rate",
+    value: string
+  ) {
+    setEstimateForm((current) => ({
+      ...current,
+      taxLines: current.taxLines.map((line) =>
+        line.id === id ? { ...line, [field]: value } : line
+      ),
+    }))
+  }
+
+  function removeEstimateTaxLine(id: string) {
+    setEstimateForm((current) => ({
+      ...current,
+      taxLines: current.taxLines.filter((line) => line.id !== id),
+    }))
+  }
+
+  async function saveEstimateDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!userId || !estimateRequest || isSaving) return
     setIsSaving(true)
 
-    const client = await ensureClientForRequest(request)
-    const amount = request.budget_max ?? request.budget_min ?? 0
+    const serializedItems = serializeLineItems(estimateForm.lineItems)
+    const serializedTaxLines =
+      estimateForm.lineItems.length > 0 ? serializeTaxLines(estimateForm.taxLines) : []
+    const finalAmount =
+      estimateForm.lineItems.length > 0
+        ? estimateTotal
+        : parseAmount(estimateForm.flatAmount)
+    const client = await ensureClientForRequest(
+      estimateRequest,
+      estimateForm.clientName
+    )
 
     const payload: EstimateInsert = {
       user_id: userId,
       client_id: client?.id ?? null,
-      job_request_id: request.id,
+      job_request_id: estimateRequest.id,
       client_name:
         client?.company ||
         client?.name ||
-        request.client_name ||
-        request.client_email ||
+        nullableText(estimateForm.clientName) ||
+        estimateRequest.client_name ||
+        estimateRequest.client_email ||
         null,
-      estimate_number: `EST-${Date.now().toString().slice(-5)}`,
-      amount,
+      estimate_number:
+        estimateForm.estimateNumber.trim() ||
+        `EST-${Date.now().toString().slice(-5)}`,
+      amount: finalAmount,
       status: "Draft",
       sent_date: inputDate(),
-      follow_up_date: inputDate(3),
-      notes: requestNotes(request),
-      line_items: [],
+      follow_up_date: nullableDate(estimateForm.followUpDate),
+      notes: nullableText(estimateForm.notes),
+      line_items: serializedItems,
       tax_rate: 0,
+      tax_lines: serializedTaxLines,
     }
 
     const { data, error } = await supabase
@@ -399,12 +780,54 @@ export default function ContractorJobRequestsPage() {
       return
     }
 
-    await updateRequestStatus(request, { status: "estimate_created" })
-
-    setEstimateIdByRequestId((prev) => ({ ...prev, [request.id]: data.id }))
+    setEstimateByRequestId((prev) => ({
+      ...prev,
+      [estimateRequest.id]: data,
+    }))
     window.dispatchEvent(new Event("estg:badge-refresh"))
+    toast.success(`Estimate ${data.estimate_number} saved as draft`)
+    closeEstimateDialog(false)
+    setIsSaving(false)
+  }
 
-    toast.success(`Estimate ${data.estimate_number} created`)
+  async function shareEstimateWithClient(
+    estimate: EstimateRow,
+    request: JobRequest
+  ) {
+    if (estimate.amount <= 0) {
+      toast.error("Add an amount before sharing this estimate.")
+      return
+    }
+    if (!userId || isSaving) return
+    setIsSaving(true)
+
+    const { data, error } = await supabase
+      .from("estimates")
+      .update({ status: "Sent", sent_date: inputDate() })
+      .eq("id", estimate.id)
+      .eq("user_id", userId)
+      .select()
+      .single()
+
+    if (error) {
+      toast.error("Could not share estimate")
+      setIsSaving(false)
+      return
+    }
+
+    setEstimateByRequestId((prev) => ({
+      ...prev,
+      [request.id]: data,
+    }))
+
+    const updatedRequest = await updateRequestStatus(request, {
+      status: "estimate_created",
+    })
+
+    if (updatedRequest) {
+      window.dispatchEvent(new Event("estg:badge-refresh"))
+      toast.success("Estimate shared with client")
+    }
 
     setIsSaving(false)
   }
@@ -417,7 +840,11 @@ export default function ContractorJobRequestsPage() {
         title="Job Requests"
         description="Review incoming client requests and turn them into estimates."
       >
-        <Button variant="outline" onClick={() => void load()}>
+        <Button
+          variant="outline"
+          onClick={() => void load()}
+          data-testid="job-requests-refresh"
+        >
           <RefreshCw className="size-4" />
           Refresh
         </Button>
@@ -485,12 +912,358 @@ export default function ContractorJobRequestsPage() {
       </Dialog>
 
       <Dialog
+        open={estimateRequest !== null}
+        onOpenChange={closeEstimateDialog}
+      >
+        <DialogContent className="max-w-4xl" data-testid="create-estimate-dialog">
+          {estimateRequest ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Create estimate</DialogTitle>
+                <DialogDescription>
+                  {estimateRequest.client_name ||
+                    estimateRequest.client_email ||
+                    "Client"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <form
+                className="grid gap-5"
+                onSubmit={saveEstimateDraft}
+                data-testid="create-estimate-form"
+              >
+                <RequestContext request={estimateRequest} />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="estimate-client-name">Client name</Label>
+                    <Input
+                      id="estimate-client-name"
+                      data-testid="estimate-client-name-input"
+                      value={estimateForm.clientName}
+                      onChange={(event) =>
+                        updateEstimateForm("clientName", event.target.value)
+                      }
+                      placeholder="Homeowner or company"
+                      disabled={isSaving}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="estimate-number">Estimate number</Label>
+                    <Input
+                      id="estimate-number"
+                      data-testid="estimate-number-input"
+                      value={estimateForm.estimateNumber}
+                      onChange={(event) =>
+                        updateEstimateForm("estimateNumber", event.target.value)
+                      }
+                      placeholder="EST-1001"
+                      disabled={isSaving}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="estimate-status">Status</Label>
+                    <Input
+                      id="estimate-status"
+                      data-testid="estimate-status-input"
+                      value={estimateForm.status}
+                      disabled
+                      readOnly
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="estimate-follow-up-date">Follow-up date</Label>
+                    <Input
+                      id="estimate-follow-up-date"
+                      data-testid="estimate-follow-up-date-input"
+                      type="date"
+                      value={estimateForm.followUpDate}
+                      onChange={(event) =>
+                        updateEstimateForm("followUpDate", event.target.value)
+                      }
+                      disabled={isSaving}
+                    />
+                  </div>
+                  {estimateForm.lineItems.length === 0 ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor="estimate-flat-amount">Flat amount</Label>
+                      <Input
+                        id="estimate-flat-amount"
+                        data-testid="estimate-flat-amount-input"
+                        value={estimateForm.flatAmount}
+                        onChange={(event) =>
+                          updateEstimateForm("flatAmount", event.target.value)
+                        }
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        disabled={isSaving}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Line items</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addEstimateLineItem}
+                      disabled={isSaving}
+                      data-testid="estimate-add-line-item"
+                    >
+                      <Plus className="size-3.5" />
+                      Add item
+                    </Button>
+                  </div>
+
+                  {estimateForm.lineItems.length > 0 ? (
+                    <div className="overflow-hidden rounded-lg border border-border">
+                      <div className="hidden grid-cols-[1fr_72px_112px_36px] gap-2 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
+                        <span>Description</span>
+                        <span className="text-right">Qty</span>
+                        <span className="text-right">Unit price</span>
+                        <span />
+                      </div>
+                      {estimateForm.lineItems.map((item) => (
+                        <div
+                          key={item.id}
+                          data-testid="estimate-line-item-row"
+                          className="grid gap-2 border-t border-border px-3 py-3 sm:grid-cols-[1fr_72px_112px_36px]"
+                        >
+                          <Input
+                            data-testid="estimate-line-item-description"
+                            value={item.description}
+                            onChange={(event) =>
+                              updateEstimateLineItem(
+                                item.id,
+                                "description",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Description"
+                            disabled={isSaving}
+                          />
+                          <Input
+                            data-testid="estimate-line-item-quantity"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              updateEstimateLineItem(
+                                item.id,
+                                "quantity",
+                                event.target.value
+                              )
+                            }
+                            type="number"
+                            min="0"
+                            step="any"
+                            className="sm:text-right"
+                            disabled={isSaving}
+                          />
+                          <Input
+                            data-testid="estimate-line-item-unit-price"
+                            value={item.unit_price}
+                            onChange={(event) =>
+                              updateEstimateLineItem(
+                                item.id,
+                                "unit_price",
+                                event.target.value
+                              )
+                            }
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            className="sm:text-right"
+                            disabled={isSaving}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeEstimateLineItem(item.id)}
+                            disabled={isSaving}
+                            aria-label="Remove line item"
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      <div className="grid gap-2 border-t border-border bg-muted/30 px-3 py-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="tabular-nums">
+                            {money.format(estimateSubtotal)}
+                          </span>
+                        </div>
+                        {estimateForm.taxLines.map((line) => (
+                          <div
+                            key={line.id}
+                            className="grid gap-2 sm:grid-cols-[1fr_96px_100px_36px] sm:items-center"
+                          >
+                            <Input
+                              data-testid="estimate-tax-name"
+                              value={line.name}
+                              onChange={(event) =>
+                                updateEstimateTaxLine(
+                                  line.id,
+                                  "name",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Tax name"
+                              disabled={isSaving}
+                            />
+                            <Input
+                              data-testid="estimate-tax-rate"
+                              value={line.rate}
+                              onChange={(event) =>
+                                updateEstimateTaxLine(
+                                  line.id,
+                                  "rate",
+                                  event.target.value
+                                )
+                              }
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.001"
+                              className="sm:text-right"
+                              disabled={isSaving}
+                            />
+                            <div className="text-right tabular-nums">
+                              {money.format(
+                                estimateSubtotal * (parseAmount(line.rate) / 100)
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeEstimateTaxLine(line.id)}
+                              disabled={isSaving}
+                              aria-label="Remove tax line"
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            Add tax:
+                          </span>
+                          {[
+                            ["GST", "5"],
+                            ["HST", "15"],
+                            ["PST", "7"],
+                          ].map(([name, rate]) => (
+                            <Button
+                              key={name}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addEstimateTaxLine(name, rate)}
+                              disabled={isSaving}
+                              data-testid={`estimate-add-tax-${name.toLowerCase()}`}
+                            >
+                              {name} {rate}%
+                            </Button>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addEstimateTaxLine()}
+                            disabled={isSaving}
+                          >
+                            Custom
+                          </Button>
+                        </div>
+                        {estimateForm.taxLines.length > 0 ? (
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Total tax</span>
+                            <span className="tabular-nums">
+                              {money.format(estimateTaxTotal)}
+                            </span>
+                          </div>
+                        ) : null}
+                        <div className="flex justify-between border-t border-border pt-2 font-semibold">
+                          <span>Total</span>
+                          <span className="tabular-nums text-ef-ocean">
+                            {money.format(estimateTotal)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="estimate-notes">Notes</Label>
+                  <Textarea
+                    id="estimate-notes"
+                    data-testid="estimate-notes-input"
+                    value={estimateForm.notes}
+                    onChange={(event) =>
+                      updateEstimateForm("notes", event.target.value)
+                    }
+                    className="min-h-32"
+                    disabled={isSaving}
+                  />
+                </div>
+
+                {estimateForm.lineItems.length === 0 ? (
+                  <div className="flex justify-between rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm font-semibold">
+                    <span>Total</span>
+                    <span className="tabular-nums text-ef-ocean">
+                      {money.format(estimateTotal)}
+                    </span>
+                  </div>
+                ) : null}
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => closeEstimateDialog(false)}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                    disabled={isSaving}
+                    data-testid="estimate-save-draft"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <FileText className="size-4" />
+                    )}
+                    Save draft
+                  </Button>
+                </DialogFooter>
+              </form>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={selectedRequest !== null}
         onOpenChange={(open) => {
           if (!open) setSelectedRequest(null)
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl" data-testid="job-request-detail-dialog">
           {selectedRequest ? (
             <>
               <DialogHeader>
@@ -503,54 +1276,7 @@ export default function ContractorJobRequestsPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
-                <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4 text-sm sm:grid-cols-2">
-                  <div>
-                    <div className="text-xs font-medium uppercase text-muted-foreground">
-                      Service area
-                    </div>
-                    <div className="mt-1">{selectedRequest.service_area}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium uppercase text-muted-foreground">
-                      Urgency
-                    </div>
-                    <div className="mt-1">
-                      {labelFromSlug(selectedRequest.urgency)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium uppercase text-muted-foreground">
-                      Budget
-                    </div>
-                    <div className="mt-1">{budgetLabel(selectedRequest)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium uppercase text-muted-foreground">
-                      Contact preference
-                    </div>
-                    <div className="mt-1">
-                      {selectedRequest.contact_preference}
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">
-                    Description
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                    {selectedRequest.description}
-                  </p>
-                </div>
-                {selectedRequest.photo_notes ? (
-                  <div>
-                    <div className="text-xs font-medium uppercase text-muted-foreground">
-                      Photo notes
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                      {selectedRequest.photo_notes}
-                    </p>
-                  </div>
-                ) : null}
+                <RequestContext request={selectedRequest} />
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     variant="outline"
@@ -575,9 +1301,12 @@ export default function ContractorJobRequestsPage() {
                   </Button>
                   <EstimateActionButton
                     request={selectedRequest}
-                    estimateId={estimateIdByRequestId[selectedRequest.id]}
+                    estimate={estimateByRequestId[selectedRequest.id]}
                     isSaving={isSaving}
-                    onCreateEstimate={(r) => void createEstimateFromRequest(r)}
+                    onCreateEstimate={openCreateEstimate}
+                    onShareEstimate={(estimate, request) =>
+                      void shareEstimateWithClient(estimate, request)
+                    }
                   />
                 </div>
               </div>
@@ -595,7 +1324,10 @@ export default function ContractorJobRequestsPage() {
                 <Link2 className="size-4 shrink-0" />
                 Your client request link
               </div>
-              <p className="mt-0.5 truncate text-xs text-ef-ocean dark:text-ef-300">
+              <p
+                className="mt-0.5 truncate text-xs text-ef-ocean dark:text-ef-300"
+                data-testid="contractor-request-link"
+              >
                 {shareableLink}
               </p>
               <p className="mt-1 text-xs text-ef-ocean/70 dark:text-ef-cyan">
@@ -615,7 +1347,12 @@ export default function ContractorJobRequestsPage() {
               <Button size="sm" variant="outline" asChild
                 className="border-ef-300 bg-white text-ef-ocean hover:bg-ef-mist dark:border-ef-ocean dark:bg-transparent dark:text-ef-200"
               >
-                <a href={shareableLink} target="_blank" rel="noreferrer">
+                <a
+                  href={shareableLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="public-request-preview-link"
+                >
                   <ExternalLink className="size-3.5" />
                   Preview
                 </a>
@@ -651,6 +1388,8 @@ export default function ContractorJobRequestsPage() {
                   {requests.map((request) => (
                     <div
                       key={request.id}
+                      data-testid="job-request-card"
+                      data-request-id={request.id}
                       className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -687,15 +1426,19 @@ export default function ContractorJobRequestsPage() {
                           <Button
                             variant="outline"
                             onClick={() => setSelectedRequest(request)}
+                            data-testid="job-request-view-details"
                           >
                             <FileText className="size-4" />
                             View details
                           </Button>
                           <EstimateActionButton
                             request={request}
-                            estimateId={estimateIdByRequestId[request.id]}
+                            estimate={estimateByRequestId[request.id]}
                             isSaving={isSaving}
-                            onCreateEstimate={(r) => void createEstimateFromRequest(r)}
+                            onCreateEstimate={openCreateEstimate}
+                            onShareEstimate={(estimate, request) =>
+                              void shareEstimateWithClient(estimate, request)
+                            }
                           />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

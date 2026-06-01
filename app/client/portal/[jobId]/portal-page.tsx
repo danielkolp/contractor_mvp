@@ -265,11 +265,17 @@ function StatusCard({ job, hasEstimate }: { job: JobRequest; hasEstimate: boolea
   const nextMsg = STATUS_NEXT[status] ?? ""
 
   return (
-    <div className={`rounded-2xl border ${c.border} ${c.bg} p-6`}>
+    <div
+      className={`rounded-2xl border ${c.border} ${c.bg} p-6`}
+      data-testid="client-portal-status-card"
+    >
       {/* Status badge */}
       <div className="flex items-center gap-2">
         <span className={`h-2.5 w-2.5 rounded-full ${c.dot}`} />
-        <span className={`text-xs font-bold uppercase tracking-widest ${c.text}`}>
+        <span
+          className={`text-xs font-bold uppercase tracking-widest ${c.text}`}
+          data-testid="client-portal-status"
+        >
           {label}
         </span>
       </div>
@@ -487,7 +493,7 @@ function EstimatesSection({
   if (estimates.length === 0) return null
 
   return (
-    <div className="space-y-3" id="estimates">
+    <div className="space-y-3" id="estimates" data-testid="client-portal-estimates">
       <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">
         Estimates
       </h3>
@@ -499,7 +505,12 @@ function EstimatesSection({
           est.status !== "Lost"
 
         return (
-          <div key={est.id} className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div
+            key={est.id}
+            className="rounded-2xl border border-gray-200 bg-white p-5"
+            data-testid="client-portal-estimate-card"
+            data-estimate-id={est.id}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-gray-900">{est.estimate_number}</p>
@@ -528,7 +539,12 @@ function EstimatesSection({
 
             <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="outline" size="sm" asChild>
-                <a href={`/print/estimate/${est.id}`} target="_blank" rel="noreferrer">
+                <a
+                  href={`/print/estimate/${est.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="estimate-pdf-link"
+                >
                   <Printer className="h-3.5 w-3.5" />
                   View PDF
                 </a>
@@ -540,6 +556,7 @@ function EstimatesSection({
                     size="sm"
                     disabled={isSaving}
                     className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                    data-testid="estimate-accept-button"
                     onClick={() => {
                       setIsSaving(true)
                       onRespond(est, "Accepted")
@@ -552,6 +569,7 @@ function EstimatesSection({
                     size="sm"
                     variant="outline"
                     disabled={isSaving}
+                    data-testid="estimate-decline-button"
                     onClick={() => {
                       setIsSaving(true)
                       onRespond(est, "Declined")
