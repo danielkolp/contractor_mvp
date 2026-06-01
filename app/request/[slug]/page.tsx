@@ -35,11 +35,33 @@ type SubmitResult = {
 type ContactOption = "Text" | "Call" | "Email"
 
 const CONTACT_OPTIONS: ContactOption[] = ["Text", "Call", "Email"]
+const MAX_PHOTOS = 6
+const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024
+const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
+const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp"
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return classes.filter(Boolean).join(" ")
+}
+
+function validatePhotoFiles(files: File[]) {
+  if (files.length > MAX_PHOTOS) {
+    return `Add up to ${MAX_PHOTOS} photos.`
+  }
+
+  const invalidType = files.find((file) => !ALLOWED_PHOTO_TYPES.has(file.type))
+  if (invalidType) {
+    return "Photos must be JPEG, PNG, or WebP images."
+  }
+
+  const oversized = files.find((file) => file.size > MAX_PHOTO_SIZE_BYTES)
+  if (oversized) {
+    return "Each photo must be 5MB or smaller."
+  }
+
+  return null
 }
 
 // â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -134,15 +156,27 @@ function PhotoThumbnail({ file, onRemove }: { file: File; onRemove: () => void }
 function PhotoUpload({
   files,
   onChange,
+  onError,
 }: {
   files: File[]
   onChange: (files: File[]) => void
+  onError: (message: string | null) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? [])
-    onChange([...files, ...selected].slice(0, 6))
+    const nextFiles = [...files, ...selected]
+    const validationError = validatePhotoFiles(nextFiles)
+
+    if (validationError) {
+      onError(validationError)
+      if (inputRef.current) inputRef.current.value = ""
+      return
+    }
+
+    onError(null)
+    onChange(nextFiles)
     if (inputRef.current) inputRef.current.value = ""
   }
 
@@ -159,7 +193,7 @@ function PhotoUpload({
           ))}
         </div>
       )}
-      {files.length < 6 && (
+      {files.length < MAX_PHOTOS && (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -167,14 +201,14 @@ function PhotoUpload({
         >
           <Upload className="size-4" />
           {files.length === 0 ? "Add photos" : "Add more"}
-          <span className="text-xs text-gray-400">({files.length}/6)</span>
+          <span className="text-xs text-gray-400">({files.length}/{MAX_PHOTOS})</span>
         </button>
       )}
       <input
         ref={inputRef}
         id="photos"
         type="file"
-        accept="image/*"
+        accept={PHOTO_ACCEPT}
         multiple
         className="hidden"
         onChange={handleFileChange}
@@ -302,6 +336,12 @@ export default function RequestPage({
     e.preventDefault()
     setError(null)
 
+    const validationError = validatePhotoFiles(photoFiles)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
     const fd = new FormData(e.currentTarget)
 
     const trade =
@@ -311,47 +351,22 @@ export default function RequestPage({
 
     startTransition(async () => {
       try {
-        let photoUrls: string[] = []
-
-        if (photoFiles.length > 0) {
-          const supabase = createClient()
-          const results = await Promise.all(
-            photoFiles.map(async (file) => {
-              const ext = file.name.split(".").pop() ?? "jpg"
-              const path = `${slug}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-              const { error: uploadError } = await supabase.storage
-                .from("job-request-photos")
-                .upload(path, file, { contentType: file.type })
-
-              if (uploadError) return null
-
-              const { data } = supabase.storage
-                .from("job-request-photos")
-                .getPublicUrl(path)
-
-              return data.publicUrl
-            })
-          )
-
-          photoUrls = results.filter((url): url is string => url !== null)
-        }
+        const payload = new FormData()
+        payload.append("request_slug", slug)
+        payload.append("name", String(fd.get("name") ?? "").trim())
+        payload.append("email", String(fd.get("email") ?? "").trim())
+        payload.append("phone", String(fd.get("phone") ?? "").trim())
+        payload.append("title", trade || String(fd.get("title") ?? "").trim())
+        payload.append("description", String(fd.get("description") ?? "").trim())
+        payload.append("address_street", String(fd.get("address_street") ?? "").trim())
+        payload.append("location", String(fd.get("city") ?? "").trim())
+        payload.append("contact_preference", contactPref)
+        payload.append("photo_notes", String(fd.get("photo_notes") ?? "").trim())
+        photoFiles.forEach((file) => payload.append("photos", file))
 
         const res = await fetch("/api/client-request", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({
-            request_slug:       slug,
-            name:               String(fd.get("name") ?? "").trim(),
-            email:              String(fd.get("email") ?? "").trim(),
-            phone:              String(fd.get("phone") ?? "").trim() || null,
-            title:              trade || String(fd.get("title") ?? "").trim(),
-            description:        String(fd.get("description") ?? "").trim(),
-            address_street:     String(fd.get("address_street") ?? "").trim() || null,
-            location:           String(fd.get("city") ?? "").trim() || null,
-            contact_preference: contactPref,
-            photo_notes:        String(fd.get("photo_notes") ?? "").trim() || null,
-            photo_urls:         photoUrls,
-          }),
+          method: "POST",
+          body:   payload,
         })
 
         const json = (await res.json()) as
@@ -535,7 +550,11 @@ export default function RequestPage({
               <p className="mt-1 text-xs text-gray-400">
                 Up to 6 photos. Helps your contractor prepare a more accurate estimate.
               </p>
-              <PhotoUpload files={photoFiles} onChange={setPhotoFiles} />
+              <PhotoUpload
+                files={photoFiles}
+                onChange={setPhotoFiles}
+                onError={setError}
+              />
             </div>
 
             <div>

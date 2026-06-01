@@ -92,12 +92,12 @@ function nullableText(value: string) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function ClientRequestLinkCard({ userId }: { userId: string }) {
+function ClientRequestLinkCard({ requestSlug }: { requestSlug: string }) {
   const [copied, setCopied] = useState(false)
   const link =
     typeof window !== "undefined"
-      ? `${window.location.origin}/client/jobs/new?contractor=${userId}`
-      : `/client/jobs/new?contractor=${userId}`
+      ? `${window.location.origin}/request/${requestSlug}`
+      : `/request/${requestSlug}`
 
   async function handleCopy() {
     await navigator.clipboard.writeText(link)
@@ -656,8 +656,8 @@ export default function SettingsPage() {
         </form>
 
         {/* ── Client request link ── */}
-        {userId && (
-          <ClientRequestLinkCard userId={userId} />
+        {profile?.request_slug && (
+          <ClientRequestLinkCard requestSlug={profile.request_slug} />
         )}
 
         {/* ── Account ── */}

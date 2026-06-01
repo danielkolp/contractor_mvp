@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto"
 import { type NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
 
@@ -22,40 +23,195 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const CONTACT_OPTIONS = new Set(["Text", "Call", "Email"])
+const PHOTO_BUCKET = "job-request-photos"
+const MAX_PHOTOS = 6
+const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024
+const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
+const PHOTO_UPLOAD_ERROR =
+  "Your request was not submitted because one or more photos failed to upload. Please try again or remove the photos."
+
+type ParsedClientRequest = {
+  name: string
+  email: string
+  phone: string | null
+  title: string
+  description: string
+  location: string
+  requestSlug: string
+  addressStreet: string | null
+  photoNotes: string | null
+  contactPreference: string
+  photoUrls: string[]
+  photos: File[]
+}
+
+function optionalText(value: string) {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function contactPreferenceFrom(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : ""
+  return CONTACT_OPTIONS.has(raw) ? raw : "Email"
+}
+
+function getStringField(formData: FormData, key: string) {
+  const value = formData.get(key)
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function isUploadFile(value: FormDataEntryValue): value is File {
+  return value instanceof File && value.size > 0
+}
+
+function parseJsonBody(body: Record<string, unknown>): ParsedClientRequest {
+  const requestSlug =
+    typeof body.request_slug === "string"
+      ? body.request_slug.trim()
+      : typeof body.contractor_id === "string"
+        ? body.contractor_id.trim()
+        : ""
+
+  return {
+    name: typeof body.name === "string" ? body.name.trim() : "",
+    email: typeof body.email === "string" ? body.email.trim().toLowerCase() : "",
+    phone: typeof body.phone === "string" ? optionalText(body.phone) : null,
+    title: typeof body.title === "string" ? body.title.trim() : "",
+    description: typeof body.description === "string" ? body.description.trim() : "",
+    location: typeof body.location === "string" ? body.location.trim() : "",
+    requestSlug,
+    addressStreet:
+      typeof body.address_street === "string" ? optionalText(body.address_street) : null,
+    photoNotes: typeof body.photo_notes === "string" ? optionalText(body.photo_notes) : null,
+    contactPreference: contactPreferenceFrom(body.contact_preference),
+    photoUrls: Array.isArray(body.photo_urls)
+      ? body.photo_urls
+          .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+          .map((url) => url.trim())
+      : [],
+    photos: [],
+  }
+}
+
+function parseFormBody(formData: FormData): ParsedClientRequest {
+  const location = getStringField(formData, "location") || getStringField(formData, "city")
+  const requestSlug =
+    getStringField(formData, "request_slug") || getStringField(formData, "contractor_id")
+
+  return {
+    name: getStringField(formData, "name"),
+    email: getStringField(formData, "email").toLowerCase(),
+    phone: optionalText(getStringField(formData, "phone")),
+    title: getStringField(formData, "title"),
+    description: getStringField(formData, "description"),
+    location,
+    requestSlug,
+    addressStreet: optionalText(getStringField(formData, "address_street")),
+    photoNotes: optionalText(getStringField(formData, "photo_notes")),
+    contactPreference: contactPreferenceFrom(getStringField(formData, "contact_preference")),
+    photoUrls: [],
+    photos: formData.getAll("photos").filter(isUploadFile),
+  }
+}
+
+function validatePhotos(photos: File[]) {
+  if (photos.length > MAX_PHOTOS) {
+    return `Upload up to ${MAX_PHOTOS} photos.`
+  }
+
+  if (photos.some((photo) => !ALLOWED_PHOTO_TYPES.has(photo.type))) {
+    return "Photos must be JPEG, PNG, or WebP images."
+  }
+
+  if (photos.some((photo) => photo.size > MAX_PHOTO_SIZE_BYTES)) {
+    return "Each photo must be 5MB or smaller."
+  }
+
+  return null
+}
+
+function extensionForPhoto(photo: File) {
+  if (photo.type === "image/png") return "png"
+  if (photo.type === "image/webp") return "webp"
+  return "jpg"
+}
+
+function storageFolderForRequestSlug(requestSlug: string) {
+  return (
+    requestSlug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80) || "job-temp"
+  )
+}
+
+async function uploadPhotos(
+  supabase: ReturnType<typeof createServiceClient>,
+  photos: File[],
+  requestSlug: string
+) {
+  const folder = storageFolderForRequestSlug(requestSlug)
+  const photoUrls: string[] = []
+
+  for (const photo of photos) {
+    const ext = extensionForPhoto(photo)
+    const path = `${folder}/${Date.now()}-${randomUUID()}.${ext}`
+    const { error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .upload(path, await photo.arrayBuffer(), {
+        contentType: photo.type,
+        cacheControl: "31536000",
+        upsert: false,
+      })
+
+    if (error) {
+      throw error
+    }
+
+    const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+    photoUrls.push(data.publicUrl)
+  }
+
+  return photoUrls
+}
 
 export async function POST(req: NextRequest) {
   // ── Parse body ──────────────────────────────────────────────────────────────
-  let raw: unknown
+  let parsed: ParsedClientRequest
+  const contentType = req.headers.get("content-type") ?? ""
+
   try {
-    raw = await req.json()
+    if (contentType.includes("multipart/form-data")) {
+      parsed = parseFormBody(await req.formData())
+    } else {
+      parsed = parseJsonBody((await req.json()) as Record<string, unknown>)
+    }
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    return NextResponse.json(
+      {
+        error: contentType.includes("multipart/form-data")
+          ? "Invalid form body"
+          : "Invalid JSON body",
+      },
+      { status: 400 }
+    )
   }
 
-  const body          = raw as Record<string, unknown>
-  const name          = typeof body.name         === "string" ? body.name.trim()         : ""
-  const email         = typeof body.email        === "string" ? body.email.trim().toLowerCase() : ""
-  const phone         = typeof body.phone        === "string" && body.phone.trim() ? body.phone.trim() : null
-  const title         = typeof body.title        === "string" ? body.title.trim()        : ""
-  const description   = typeof body.description  === "string" ? body.description.trim()  : ""
-  const location      = typeof body.location     === "string" ? body.location.trim()     : ""
-  const requestSlug   = typeof body.request_slug === "string" ? body.request_slug.trim() : ""
-  const addressStreet = typeof body.address_street === "string" && body.address_street.trim()
-    ? body.address_street.trim()
-    : null
-  const photoNotes    = typeof body.photo_notes  === "string" && body.photo_notes.trim()
-    ? body.photo_notes.trim()
-    : null
-  const rawContactPreference =
-    typeof body.contact_preference === "string" ? body.contact_preference.trim() : ""
-  const contactPreference = CONTACT_OPTIONS.has(rawContactPreference)
-    ? rawContactPreference
-    : "Email"
-  const photoUrls = Array.isArray(body.photo_urls)
-    ? body.photo_urls
-        .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
-        .map((url) => url.trim())
-    : []
+  const {
+    name,
+    email,
+    phone,
+    title,
+    description,
+    location,
+    requestSlug,
+    addressStreet,
+    photoNotes,
+    contactPreference,
+    photos,
+  } = parsed
 
   if (!name)         return NextResponse.json({ error: "Full name is required" },      { status: 400 })
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
@@ -63,6 +219,11 @@ export async function POST(req: NextRequest) {
   if (!title)        return NextResponse.json({ error: "Project type is required" },    { status: 400 })
   if (!description)  return NextResponse.json({ error: "Description is required" },    { status: 400 })
   if (!requestSlug)  return NextResponse.json({ error: "Contractor link is invalid" }, { status: 400 })
+
+  const photoValidationError = validatePhotos(photos)
+  if (photoValidationError) {
+    return NextResponse.json({ error: photoValidationError }, { status: 400 })
+  }
 
   const supabase = createServiceClient()
   const appUrl   = getAppUrl(req)
@@ -95,6 +256,16 @@ export async function POST(req: NextRequest) {
     contractorProfile.company_name ||
     contractorProfile.owner_name ||
     "Your contractor"
+
+  let photoUrls = parsed.photoUrls
+  if (photos.length > 0) {
+    try {
+      photoUrls = await uploadPhotos(supabase, photos, requestSlug)
+    } catch (uploadError) {
+      console.error("[client-request] photo upload error:", uploadError)
+      return NextResponse.json({ error: PHOTO_UPLOAD_ERROR }, { status: 500 })
+    }
+  }
 
   // ── 2. Find or create client auth account ───────────────────────────────────
   let clientUserId: string
