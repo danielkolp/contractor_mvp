@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Euroflo — A job that flows the way it should</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="landing/landing.css">
+</head>
+<body>
+
+<!-- NAV -->
+<header class="nav">
+  <div class="wrap row">
+    <a class="brand" href="#top">
+      <img src="assets/euroflo-mark.svg" alt="Euroflo">
+      <span class="wm">Euroflo</span>
+    </a>
+    <nav class="nav-actions">
+      <a class="nav-link" href="#flow">How it flows</a>
+      <a class="nav-link" href="#product">Product</a>
+      <a class="nav-link" href="#pricing">Pricing</a>
+      <a class="btn btn-accent btn-sm" data-magnetic href="ui_kits/dashboard/index.html"><span class="mag"><i data-lucide="arrow-right"></i>Get started free</span></a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" id="top" data-screen-label="Hero">
+  <canvas class="hero-canvas" id="heroCanvas" aria-hidden="true"></canvas>
+  <div class="veil"></div>
+  <div class="dots"></div>
+
+  <div class="wrap grid">
+    <div class="r-hero">
+      <span class="eyebrow-chip anim d1"><span class="live"></span>Built for trades owners</span>
+      <h1 class="anim d2">Turn quiet quotes and unpaid invoices into <span class="flow">a job that flows.</span></h1>
+      <p class="lede anim d3">Euroflo shows which clients need a follow-up, drafts the message, and keeps every estimate and invoice moving — without you chasing people from memory.</p>
+      <div class="cta anim d4">
+        <a class="btn btn-accent" data-magnetic href="ui_kits/dashboard/index.html"><span class="mag"><i data-lucide="search"></i>Find missed follow-ups</span></a>
+        <a class="btn btn-outline" href="#product">View demo queue</a>
+      </div>
+      <div class="trust anim d5">
+        <span class="t"><i data-lucide="check-circle-2"></i>Nothing sent without your approval</span>
+        <span class="t"><i data-lucide="check-circle-2"></i>Plain-English follow-ups</span>
+      </div>
+    </div>
+
+    <div class="preview-wrap anim d4">
+      <div class="float-chip fc1"><span class="fdot" style="background:var(--ef-overdue)"></span><span><span class="l">INV-1048</span> <span class="s">· 7d overdue</span></span></div>
+      <div class="float-chip fc2"><span class="fdot" style="background:var(--ef-paid)"></span><span><span class="l">Paid</span> <span class="s">· $9,100</span></span></div>
+      <div class="float-chip fc3"><span class="fdot" style="background:var(--ef-due)"></span><span><span class="l">EST-2211</span> <span class="s">· follow up</span></span></div>
+      <div class="preview">
+        <div class="ph">
+          <div><div class="t">Recovery queue</div><div class="s">Ranked by urgency and value</div></div>
+          <span class="chip"><span class="live" style="background:var(--ef-paid)"></span><span class="tnum" data-count="18420" data-prefix="$">$0</span> this month</span>
+        </div>
+        <div class="prow">
+          <span class="rk">#1</span>
+          <div><div class="nm">Mason &amp; Co.</div><div class="sub">Invoice INV-1031 · 21d overdue</div>
+            <div class="bar"><i data-w="91"></i></div></div>
+          <span class="amt tnum">$12,600</span>
+        </div>
+        <div class="prow">
+          <span class="rk">#2</span>
+          <div><div class="nm">Harbor View HOA</div><div class="sub">Estimate EST-2211 · no reply</div>
+            <div class="bar"><i data-w="64"></i></div></div>
+          <span class="amt tnum">$8,300</span>
+        </div>
+        <div class="prow">
+          <span class="rk">#3</span>
+          <div><div class="nm">North Ridge Homes</div><div class="sub">Invoice INV-1048 · 7d overdue</div>
+            <div class="bar"><i data-w="82"></i></div></div>
+          <span class="amt tnum">$4,850</span>
+        </div>
+        <div class="draft-bar">
+          <div class="ic"><i data-lucide="sparkles"></i></div>
+          <div><div class="t">Follow-up drafted, ready for review</div>
+            <div class="q">“Hi Sam, quick reminder on invoice INV-1048…”</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-waves" aria-hidden="true">
+    <div class="wlayer w-a"></div>
+    <div class="wlayer w-b"></div>
+    <div class="wlayer w-c"></div>
+  </div>
+  <svg class="hero-divider" viewBox="0 0 1440 110" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,58 C240,108 480,14 720,40 C960,66 1200,112 1440,52 L1440,110 L0,110 Z"></path>
+  </svg>
+</section>
+
+<!-- PROBLEM (why) -->
+<section class="band band-tint after-hero" data-screen-label="Problem">
+  <div class="wrap">
+    <div class="sec-head r">
+      <div class="eyebrow"><i data-lucide="sparkles"></i>The work is done</div>
+      <h2>The money is still scattered across texts, quotes, and old customers.</h2>
+      <p>Euroflo turns scattered follow-up into a clear daily list, so the next action is always obvious.</p>
+    </div>
+    <div class="cards3">
+      <div class="pcard r">
+        <div class="blob"></div>
+        <div class="top"><div class="ic"><i data-lucide="file-warning"></i></div>
+          <div class="metric"><div class="v tnum"><span data-count="6.2" data-prefix="$" data-suffix="k" data-decimals="1">$0</span></div><div class="l">waiting estimate</div></div></div>
+        <h3>Quiet quotes</h3>
+        <p>A customer said they were interested, then the estimate disappeared under the next job.</p>
+      </div>
+      <div class="pcard r" style="transition-delay:.08s">
+        <div class="blob"></div>
+        <div class="top"><div class="ic"><i data-lucide="clipboard-check"></i></div>
+          <div class="metric"><div class="v tnum"><span data-count="17" data-suffix=" days">0 days</span></div><div class="l">past due</div></div></div>
+        <h3>Unpaid invoices</h3>
+        <p>The work is finished. The reminder still needs to be clear, polite, and actually sent.</p>
+      </div>
+      <div class="pcard r" style="transition-delay:.16s">
+        <div class="blob"></div>
+        <div class="top"><div class="ic"><i data-lucide="users-round"></i></div>
+          <div class="metric"><div class="v tnum"><span data-count="48">0</span></div><div class="l">ready to re-engage</div></div></div>
+        <h3>Past customers</h3>
+        <p>The easiest repeat work often comes from people who already trust the crew.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FLOW BAND (scroll-driven signature — the promise) -->
+<section class="flowband" id="flow" data-screen-label="Flow band">
+  <div class="glow"></div>
+  <div class="wrap">
+    <h2 class="r">Every step in order. Nothing falls through the cracks.</h2>
+    <p class="sub r">From the first request to the final payment, Euroflo keeps the whole job moving downstream — and tells you the moment something stalls. Scroll to follow it.</p>
+    <div class="flow">
+      <div class="track"><div class="fill"></div></div>
+      <div class="fstep"><div class="node"><i data-lucide="clipboard-list"></i></div><div class="lab">Request</div><div class="d">Client submits via your link</div></div>
+      <div class="fstep"><div class="node"><i data-lucide="file-text"></i></div><div class="lab">Estimate</div><div class="d">You send the quote</div></div>
+      <div class="fstep"><div class="node"><i data-lucide="check-circle-2"></i></div><div class="lab">Approved</div><div class="d">Client accepts in the portal</div></div>
+      <div class="fstep"><div class="node"><i data-lucide="hard-hat"></i></div><div class="lab">Job done</div><div class="d">Work gets finished</div></div>
+      <div class="fstep"><div class="node"><i data-lucide="receipt"></i></div><div class="lab">Paid</div><div class="d">Invoice clears</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRODUCT SHOWCASE (the tool) -->
+<section class="band showcase" id="product" data-screen-label="Product preview">
+  <div class="wrap">
+    <div class="sec-head r">
+      <div class="eyebrow"><i data-lucide="layout-dashboard"></i>Inside the workspace</div>
+      <h2>One calm place to run the whole job.</h2>
+      <p>What needs doing today, the estimates you've sent, the invoices you're owed — and a follow-up drafted for every one. Nothing sends without your approval.</p>
+    </div>
+
+    <div class="tabwrap r">
+      <div class="tabbar">
+        <button class="tab active" data-tab="today"><i data-lucide="calendar-check-2"></i>Today</button>
+        <button class="tab" data-tab="estimates"><i data-lucide="file-text"></i>Estimates</button>
+        <button class="tab" data-tab="invoices"><i data-lucide="receipt"></i>Invoices</button>
+      </div>
+
+      <div class="appframe">
+        <div class="appbar">
+          <span class="dot" style="background:#ff5f57"></span>
+          <span class="dot" style="background:#febc2e"></span>
+          <span class="dot" style="background:#28c840"></span>
+          <span class="label">app.euroflo.com — Tidewater Renovations</span>
+        </div>
+        <div class="appbody">
+          <aside class="appside">
+            <div class="sb-brand"><img src="assets/euroflo-mark.svg" alt=""><span>Euroflo</span></div>
+            <div class="sb-item active" data-nav="today"><i data-lucide="calendar-check-2"></i>Today</div>
+            <div class="sb-item" data-nav="estimates"><i data-lucide="file-text"></i>Estimates</div>
+            <div class="sb-item" data-nav="invoices"><i data-lucide="receipt"></i>Invoices</div>
+            <div class="sb-item"><i data-lucide="users-round"></i>Clients</div>
+            <div class="sb-item"><i data-lucide="rotate-ccw"></i>Recovery</div>
+            <div class="sb-reassure">
+              <div class="rt"><i data-lucide="shield-check"></i>You stay in control</div>
+              <p>Every follow-up is drafted for your review. Nothing sends without your approval.</p>
+            </div>
+          </aside>
+          <div class="appmain">
+
+            <!-- TODAY -->
+            <div class="panel show" data-panel="today">
+              <div class="panel-head">
+                <div><h4>Today</h4><div class="ph-sub">3 things need action · <span class="tnum">$25,750</span> at risk</div></div>
+                <span class="pill s-overdue">2 overdue</span>
+              </div>
+              <div class="qcard s-overdue">
+                <div class="qic"><i data-lucide="file-text"></i></div>
+                <div><div class="nm">Mason &amp; Co.</div><div class="sub">Invoice INV-1031 · 21 days overdue</div></div>
+                <div class="amt"><div class="tnum">$12,600</div></div>
+                <span class="pill s-overdue">21d overdue</span>
+              </div>
+              <div class="qcard s-due">
+                <div class="qic"><i data-lucide="clipboard-list"></i></div>
+                <div><div class="nm">Harbor View HOA</div><div class="sub">Estimate EST-2211 · follow-up due</div></div>
+                <div class="amt"><div class="tnum">$8,300</div></div>
+                <span class="pill s-due">due today</span>
+              </div>
+              <div class="qcard s-overdue">
+                <div class="qic"><i data-lucide="file-text"></i></div>
+                <div><div class="nm">North Ridge Homes</div><div class="sub">Invoice INV-1048 · 7 days overdue</div></div>
+                <div class="amt"><div class="tnum">$4,850</div></div>
+                <span class="pill s-overdue">7d overdue</span>
+              </div>
+              <div class="approve-bar" id="ddraft">
+                <div class="ic"><i data-lucide="sparkles"></i></div>
+                <div class="txt"><div class="t" id="ddraft-t">Follow-up drafted for North Ridge Homes</div>
+                  <div class="q" id="ddraft-q">“Hi Sam, quick follow-up on invoice INV-1048 for $4,850…”</div></div>
+                <button class="approve-btn" id="dapprove"><i data-lucide="send"></i>Approve &amp; send</button>
+              </div>
+            </div>
+
+            <!-- ESTIMATES -->
+            <div class="panel" data-panel="estimates">
+              <div class="panel-head">
+                <div><h4>Estimates</h4><div class="ph-sub">5 active · <span class="tnum">$33,200</span> in the pipeline</div></div>
+                <span class="pill s-accepted">1 accepted</span>
+              </div>
+              <table class="etable">
+                <thead><tr><th>Ref</th><th>Client</th><th>Sent</th><th class="r">Amount</th><th class="r">Status</th></tr></thead>
+                <tbody>
+                  <tr><td class="ref">EST-2211</td><td class="cl">Harbor View HOA</td><td>May 18</td><td class="r tnum">$8,300</td><td class="r"><span class="pill s-due">Follow-up due</span></td></tr>
+                  <tr><td class="ref">EST-2188</td><td class="cl">Lakeside Cafe</td><td>May 09</td><td class="r tnum">$3,400</td><td class="r"><span class="pill s-followup">No reply</span></td></tr>
+                  <tr><td class="ref">EST-2150</td><td class="cl">Birch &amp; Vine Bakery</td><td>May 02</td><td class="r tnum">$2,100</td><td class="r"><span class="pill s-waiting">Follow-up sent</span></td></tr>
+                  <tr><td class="ref">EST-2205</td><td class="cl">Summit Builders</td><td>May 20</td><td class="r tnum">$11,800</td><td class="r"><span class="pill s-accepted">Accepted</span></td></tr>
+                  <tr><td class="ref">EST-2199</td><td class="cl">Riverside Clinic</td><td>May 15</td><td class="r tnum">$7,600</td><td class="r"><span class="pill s-draft">Draft</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- INVOICES -->
+            <div class="panel" data-panel="invoices">
+              <div class="panel-head">
+                <div><h4>Invoices</h4><div class="ph-sub">Outstanding, overdue, and paid</div></div>
+              </div>
+              <div class="stat-tiles">
+                <div class="stat-tile"><div class="l">Outstanding</div><div class="v tnum" style="color:var(--ef-ocean)"><span data-count="22650" data-prefix="$">$0</span></div></div>
+                <div class="stat-tile"><div class="l">Overdue</div><div class="v tnum" style="color:var(--ef-overdue)"><span data-count="17450" data-prefix="$">$0</span></div></div>
+                <div class="stat-tile"><div class="l">Paid this month</div><div class="v tnum" style="color:var(--ef-paid)"><span data-count="24500" data-prefix="$">$0</span></div></div>
+              </div>
+              <table class="etable">
+                <thead><tr><th>Ref</th><th>Client</th><th>Due</th><th class="r">Amount</th><th class="r">Status</th></tr></thead>
+                <tbody>
+                  <tr><td class="ref">INV-1031</td><td class="cl">Mason &amp; Co.</td><td>May 03</td><td class="r tnum">$12,600</td><td class="r"><span class="pill s-overdue">Overdue</span></td></tr>
+                  <tr><td class="ref">INV-1048</td><td class="cl">North Ridge Homes</td><td>May 17</td><td class="r tnum">$4,850</td><td class="r"><span class="pill s-overdue">Overdue</span></td></tr>
+                  <tr><td class="ref">INV-1019</td><td class="cl">Glenwood Property Mgmt</td><td>May 24</td><td class="r tnum">$5,200</td><td class="r"><span class="pill s-waiting">Follow-up sent</span></td></tr>
+                  <tr><td class="ref">INV-1052</td><td class="cl">Cedar Park Dental</td><td>Jun 04</td><td class="r tnum">$6,200</td><td class="r"><span class="pill s-due">Due soon</span></td></tr>
+                  <tr><td class="ref">INV-1044</td><td class="cl">Summit Builders</td><td>May 30</td><td class="r tnum">$9,100</td><td class="r"><span class="pill s-paid">Paid</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RANKING (the mechanic) -->
+<section class="band band-tint" data-screen-label="Ranked queue">
+  <div class="wrap">
+    <div class="sortwrap">
+      <div class="copy r">
+        <div class="eyebrow" style="justify-content:flex-start"><i data-lucide="list-ordered"></i>Always ranked</div>
+        <h2>Scattered follow-ups, sorted into one clear order.</h2>
+        <p>Overdue invoices, quiet estimates, and win-backs land in a single queue — ranked by what's most worth your time right now. No spreadsheet, no guessing.</p>
+        <button class="sortbtn"><i data-lucide="rotate-ccw"></i>Re-sort the queue</button>
+      </div>
+      <div class="sortstage r">
+        <div class="sortlist">
+          <div class="scard"><span class="rk">1</span><div><div class="nm">Mason &amp; Co.</div><div class="sub">INV-1031 · 21d overdue</div></div><span class="pill s-overdue">overdue</span><span class="amt tnum">$12,600</span></div>
+          <div class="scard"><span class="rk">2</span><div><div class="nm">Harbor View HOA</div><div class="sub">EST-2211 · no reply</div></div><span class="pill s-due">follow up</span><span class="amt tnum">$8,300</span></div>
+          <div class="scard"><span class="rk">3</span><div><div class="nm">Cedar Park Dental</div><div class="sub">Win-back · repeat work</div></div><span class="pill s-followup">ready</span><span class="amt tnum">$6,200</span></div>
+          <div class="scard"><span class="rk">4</span><div><div class="nm">North Ridge Homes</div><div class="sub">INV-1048 · 7d overdue</div></div><span class="pill s-overdue">overdue</span><span class="amt tnum">$4,850</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="price-band" id="pricing" data-screen-label="Pricing">
+  <div class="glow"></div>
+  <div class="wrap price-grid">
+    <div class="r">
+      <div class="eyebrow"><i data-lucide="circle-dollar-sign"></i>Early access pricing</div>
+      <h2>Start with the invoices you already know are overdue.</h2>
+      <p class="lede">A focused workspace for estimates, invoices, clients, and drafted follow-ups. It only needs to recover one missed payment to make the math obvious.</p>
+      <div class="minis">
+        <span class="mini"><span class="dot"></span>3 follow-ups ready</span>
+        <span class="mini"><span class="dot"></span>Quote follow-up due</span>
+        <span class="mini"><span class="dot"></span>Invoice reminder drafted</span>
+      </div>
+    </div>
+    <div class="r pcardbox" style="transition-delay:.1s">
+      <div class="top">
+        <div><h3>Early access</h3><p class="desc">For contractors who want the recovery workflow before full integrations.</p></div>
+        <span class="beta">beta</span>
+      </div>
+      <div class="pr"><span class="n tnum">$49</span><span class="per">per month</span></div>
+      <div class="plist">
+        <div class="li"><i data-lucide="check-circle-2"></i>Recovery queue &amp; ranked follow-ups</div>
+        <div class="li"><i data-lucide="check-circle-2"></i>Drafted text &amp; email messages</div>
+        <div class="li"><i data-lucide="check-circle-2"></i>Invoice and estimate tracking</div>
+        <div class="li"><i data-lucide="check-circle-2"></i>Cancel any time</div>
+      </div>
+      <a class="btn btn-accent" data-magnetic href="ui_kits/dashboard/index.html" style="width:100%;margin-top:24px"><span class="mag">Start recovering revenue</span></a>
+      <p style="text-align:center;font-size:12.5px;color:var(--ef-500);margin:14px 0 0">No credit card required to try.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="band band-tint" data-screen-label="FAQ">
+  <div class="wrap">
+    <div class="sec-head r">
+      <div class="eyebrow"><i data-lucide="help-circle"></i>Questions</div>
+      <h2>The straight answers.</h2>
+    </div>
+    <div class="faq">
+      <div class="fitem r">
+        <button class="fq">Will this send texts without me approving them?<i data-lucide="chevron-down"></i></button>
+        <div class="fa"><p>No. Euroflo drafts the message, but you decide what gets sent. You can edit, approve, skip, or leave it for later.</p></div>
+      </div>
+      <div class="fitem r">
+        <button class="fq">Does it sound like a real contractor?<i data-lucide="chevron-down"></i></button>
+        <div class="fa"><p>Yes. The copy is short, plain, and respectful. It's built for real customer conversations, not accounting jargon.</p></div>
+      </div>
+      <div class="fitem r">
+        <button class="fq">Can I start without a full integration?<i data-lucide="chevron-down"></i></button>
+        <div class="fa"><p>Yes. Start by tracking invoices, estimates, and clients in the workspace, then connect more tools as the workflow grows.</p></div>
+      </div>
+      <div class="fitem r">
+        <button class="fq">Who is this for?<i data-lucide="chevron-down"></i></button>
+        <div class="fa"><p>Small trade businesses and contractors who want a simple way to recover missed money without hiring an admin team.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final" data-screen-label="Final CTA">
+  <div class="glow"></div>
+  <div class="wrap">
+    <h2 class="r">Stop letting good jobs disappear <span class="hl">after the estimate.</span></h2>
+    <p class="r">Euroflo shows which clients need a follow-up, drafts the message, and keeps every invoice and estimate moving.</p>
+    <div class="cta r">
+      <a class="btn btn-accent" data-magnetic href="ui_kits/dashboard/index.html"><span class="mag"><i data-lucide="arrow-right"></i>Start finding missed follow-ups</span></a>
+      <a class="btn btn-dark" href="#product">View demo queue</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="frow">
+      <div class="brand"><img src="assets/euroflo-mark.svg" alt=""><span class="wm">Euroflo</span></div>
+      <div class="links">
+        <a href="#flow">How it flows</a>
+        <a href="#pricing">Pricing</a>
+        <a href="ui_kits/dashboard/index.html">Dashboard</a>
+        <a href="ui_kits/client-portal/index.html">Client portal</a>
+      </div>
+    </div>
+    <div class="copy">A job that flows the way it should. © Euroflo. Default currency CAD.</div>
+  </div>
+</footer>
+
+<div id="tweaks-root"></div>
+
+<!-- icons + 3D ocean + interactions -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="landing/ocean.js"></script>
+<script src="landing/landing.js"></script>
+
+<!-- Tweaks panel (React) -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="landing/tweaks-panel.jsx"></script>
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "motion": "balanced",
+  "heroPalette": "deep",
+  "sky": "day",
+  "accent": "orange",
+  "showWaves": true
+}/*EDITMODE-END*/;
+
+function TweaksApp() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(() => { if (window.applyTweaks) window.applyTweaks(t); }, [t]);
+  return (
+    <TweaksPanel>
+      <TweakSection label="Motion" />
+      <TweakRadio label="Intensity" value={t.motion}
+                  options={['calm', 'balanced', 'showy']}
+                  onChange={(v) => setTweak('motion', v)} />
+      <TweakToggle label="Hero waves" value={t.showWaves}
+                   onChange={(v) => setTweak('showWaves', v)} />
+      <TweakSection label="Hero ocean" />
+      <TweakRadio label="Sky" value={t.sky}
+                  options={['day', 'night']}
+                  onChange={(v) => setTweak('sky', v)} />
+      <TweakRadio label="Water" value={t.heroPalette}
+                  options={['ocean', 'deep', 'crest']}
+                  onChange={(v) => setTweak('heroPalette', v)} />
+      <TweakSection label="Accent" />
+      <TweakRadio label="CTA color" value={t.accent}
+                  options={['orange', 'cyan', 'ocean']}
+                  onChange={(v) => setTweak('accent', v)} />
+    </TweaksPanel>
+  );
+}
+ReactDOM.createRoot(document.getElementById('tweaks-root')).render(<TweaksApp />);
+</script>
+</body>
+</html>

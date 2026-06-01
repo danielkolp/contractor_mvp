@@ -1,0 +1,213 @@
+/* ============================================================================
+   EUROFLO — Colors & Type
+   "A job that flows the way it should."
+   ----------------------------------------------------------------------------
+   Foundation tokens for the Euroflo brand + product. Import this file, then use
+   the CSS variables below. Fonts load from Google Fonts (substitutions noted in
+   README ▸ VISUAL FOUNDATIONS). Product UI is built on a shadcn/ui base, recolored
+   to the Euroflo ocean palette.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Reem+Kufi+Fun:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ───────────────────────── BRAND — Ocean ─────────────────────────
+     Pulled from the Euroflo wave mark + the source Figma palette.
+     Deep navy → ocean blue → sky → cyan crest. The "flow" gradient. */
+  --ef-ink:        #002453;  /* deepest navy — the wave's shadow / brand ink   */
+  --ef-navy:       #033258;  /* primary dark surface, headers                  */
+  --ef-deep:       #003967;  /* deep ocean                                     */
+  --ef-ocean:      #024D8B;  /* PRIMARY — buttons, links, active nav           */
+  --ef-ocean-600:  #1B6DA4;  /* ocean mid                                      */
+  --ef-blue:       #2CA7FF;  /* bright sky blue — highlights, focus            */
+  --ef-blue-400:   #3FACFA;  /* sky                                            */
+  --ef-cyan:       #41CDE9;  /* cyan — the wave crest                          */
+  --ef-cyan-300:   #45D6F0;  /* bright cyan, flow accents / progress           */
+  --ef-foam:       #C7E8FF;  /* pale foam — soft fills, chips                  */
+  --ef-mist:       #EAF4FD;  /* lightest blue tint — section backgrounds       */
+  --ef-tint:       #F2F7FB;  /* app canvas tint (cool off-white)               */
+
+  /* ───────────────────────── ACTION — Current ─────────────────────
+     The energetic "get it done / get paid" accent. Use sparingly, for the
+     single most important action and money-positive moments. */
+  --ef-orange:     #FF6A00;  /* primary action accent                          */
+  --ef-orange-600: #E85D00;  /* hover                                          */
+  --ef-orange-50:  #FFF1E8;  /* tint                                           */
+
+  /* ───────────────────────── NEUTRALS ─────────────────────────────
+     Cool-leaning zinc ramp (matches the product's shadcn base). */
+  --ef-white:   #FFFFFF;
+  --ef-50:      #F8FAFC;
+  --ef-100:     #F1F5F9;
+  --ef-200:     #E5EBF1;   /* borders                                          */
+  --ef-300:     #CBD5E1;
+  --ef-400:     #94A3B8;   /* muted icon                                       */
+  --ef-500:     #64748B;   /* muted text                                       */
+  --ef-600:     #475569;
+  --ef-700:     #334155;
+  --ef-800:     #1E293B;
+  --ef-900:     #0F1B2D;   /* near-black ink, cool                             */
+
+  /* ───────────────────────── SEMANTIC ─────────────────────────────
+     The product is a money/flow tracker; semantic colors carry meaning. */
+  --ef-paid:        #15966B;  /* paid / won / resolved (calm teal-green)       */
+  --ef-paid-50:     #E7F6EF;
+  --ef-due:         #F59E0B;  /* due today / review (amber)                    */
+  --ef-due-50:      #FEF6E7;
+  --ef-overdue:     #F0590B;  /* overdue (deep orange — distinct from accent)  */
+  --ef-overdue-50:  #FEEEE3;
+  --ef-danger:      #DC2A3A;  /* destructive                                   */
+  --ef-danger-50:   #FCEBEC;
+  --ef-waiting:     #2CA7FF;  /* waiting for reply (brand sky blue)            */
+
+  /* ───────────────────────── SEMANTIC ROLES (product) ─────────────
+     shadcn-style roles, recolored. Light theme. */
+  --background:        var(--ef-tint);
+  --surface:           var(--ef-white);   /* cards, popovers                   */
+  --foreground:        var(--ef-900);
+  --muted-foreground:  var(--ef-500);
+  --primary:           var(--ef-ocean);
+  --primary-foreground:#FFFFFF;
+  --accent:            var(--ef-orange);
+  --accent-foreground: #FFFFFF;
+  --border:            var(--ef-200);
+  --input:             var(--ef-200);
+  --ring:              var(--ef-blue);
+  --sidebar:           #FFFFFF;
+  --nav-active-bg:     var(--ef-mist);
+  --nav-active-fg:     var(--ef-ocean);
+
+  /* ───────────────────────── TYPE ─────────────────────────────────
+     Display/brand = Reem Kufi Fun (the Euroflo wordmark face — rounded, friendly,
+     geometric). UI/body = Geist. Handwritten accent = Caveat. Mono = Geist Mono. */
+  --font-display: 'Reem Kufi Fun', system-ui, sans-serif;
+  --font-sans:    'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-accent:  'Caveat', cursive;
+  --font-mono:    'Geist Mono', 'SFMono-Regular', Consolas, monospace;
+
+  /* Fluid-ish type scale (product runs at 16px base, marketing goes larger) */
+  --text-xs:   12px;   /* meta, badges, table caption  */
+  --text-sm:   14px;   /* secondary, dense UI          */
+  --text-base: 16px;   /* body                         */
+  --text-lg:   18px;
+  --text-xl:   20px;   /* card titles                  */
+  --text-2xl:  24px;   /* section heads                */
+  --text-3xl:  30px;
+  --text-4xl:  38px;   /* page hero                    */
+  --text-5xl:  52px;   /* marketing display            */
+  --text-6xl:  68px;
+
+  --leading-tight: 1.1;
+  --leading-snug:  1.3;
+  --leading-body:  1.6;
+
+  /* Weights — product UI leans 500/600; marketing display uses 700 + Reem 700 */
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold:600;
+  --fw-bold:    700;
+
+  /* ───────────────────────── SHAPE & DEPTH ────────────────────────
+     Product radius scale derives from --radius (0.625rem = 10px), shadcn-style.
+     Cards = xl (14px), buttons/inputs = lg (10px), badges = md (8px), pills = full. */
+  --radius:     10px;
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  10px;
+  --radius-xl:  14px;
+  --radius-2xl: 18px;
+  --radius-full:9999px;
+
+  /* Soft, cool-tinted elevation. Shadows lean navy, never neutral-black. */
+  --shadow-xs: 0 1px 2px rgba(2,36,83,0.06);
+  --shadow-sm: 0 1px 3px rgba(2,36,83,0.08), 0 1px 2px rgba(2,36,83,0.04);
+  --shadow-md: 0 4px 12px rgba(2,36,83,0.08), 0 2px 4px rgba(2,36,83,0.05);
+  --shadow-lg: 0 12px 28px rgba(2,36,83,0.12), 0 4px 8px rgba(2,36,83,0.06);
+  --shadow-xl: 0 24px 48px rgba(2,36,83,0.16);
+  /* Glow for the brand sky-blue focus ring */
+  --ring-glow: 0 0 0 3px rgba(44,167,255,0.30);
+
+  /* Signature flow gradient — the wave, left→right */
+  --grad-flow:  linear-gradient(100deg, var(--ef-navy) 0%, var(--ef-ocean) 45%, var(--ef-blue) 80%, var(--ef-cyan) 100%);
+  --grad-deep:  linear-gradient(160deg, var(--ef-ink) 0%, var(--ef-navy) 55%, var(--ef-deep) 100%);
+  --grad-foam:  linear-gradient(180deg, var(--ef-mist) 0%, var(--ef-white) 100%);
+}
+
+/* ============================================================================
+   SEMANTIC TYPE CLASSES — apply directly to elements
+   ========================================================================== */
+.ef-display {            /* marketing hero / brand moments */
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--text-6xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.ef-h1 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--text-4xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.ef-h2 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-2xl);
+  line-height: var(--leading-snug);
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.ef-h3 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  color: var(--foreground);
+}
+.ef-title {              /* card title */
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-base);
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  color: var(--foreground);
+}
+.ef-body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  color: var(--foreground);
+}
+.ef-small {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+.ef-eyebrow {            /* section label — uppercase, tracked */
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.ef-accent {             /* handwritten flourish */
+  font-family: var(--font-accent);
+  font-weight: var(--fw-bold);
+  color: var(--ef-ocean);
+}
+.ef-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: -0.01em;
+}
+.ef-num {                /* tabular figures — money, counts */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}

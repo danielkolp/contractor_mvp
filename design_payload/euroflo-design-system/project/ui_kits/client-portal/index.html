@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Euroflo — Client portal</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<link rel="stylesheet" href="portal.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+const CONTRACTOR = "Tidewater Renovations";
+
+function Icon({ name, style }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && window.lucide) {
+      ref.current.innerHTML = "";
+      const el = document.createElement("i");
+      el.setAttribute("data-lucide", name);
+      ref.current.appendChild(el);
+      window.lucide.createIcons();
+    }
+  }, [name]);
+  return <span ref={ref} style={{ display: "inline-flex", ...style }}></span>;
+}
+
+function toast(msg) { window.dispatchEvent(new CustomEvent("ef:toast", { detail: msg })); }
+function Toasts() {
+  const [ts, setTs] = useState([]);
+  useEffect(() => {
+    function on(e) {
+      const id = Math.random().toString(36).slice(2);
+      setTs((t) => [...t, { id, msg: e.detail }]);
+      setTimeout(() => setTs((t) => t.filter((x) => x.id !== id)), 2800);
+    }
+    window.addEventListener("ef:toast", on);
+    return () => window.removeEventListener("ef:toast", on);
+  }, []);
+  return <div className="toasts">{ts.map((t) => <div className="toast" key={t.id}><Icon name="check-circle-2" />{t.msg}</div>)}</div>;
+}
+
+function ClientHead() {
+  return (
+    <div className="chead">
+      <img src="../../assets/euroflo-mark.svg" alt="" />
+      <div>
+        <div className="co">{CONTRACTOR}</div>
+        <div className="by"><Icon name="waves" />Powered by Euroflo</div>
+      </div>
+    </div>
+  );
+}
+
+// Flow steps for the portal status bar
+const STEPS = [
+  { id: "request", lab: "Request", icon: "clipboard-list" },
+  { id: "estimate", lab: "Estimate", icon: "file-text" },
+  { id: "approved", lab: "Approved", icon: "check-circle-2" },
+  { id: "job", lab: "Job", icon: "hard-hat" },
+  { id: "paid", lab: "Paid", icon: "receipt" },
+];
+function FlowBar({ stage }) {
+  // stage = index of the ACTIVE step
+  return (
+    <div className="flowbar">
+      {STEPS.map((s, i) => (
+        <React.Fragment key={s.id}>
+          {i > 0 && <div className={"fb-conn" + (i <= stage ? " fill" : "")}></div>}
+          <div className={"fb-step " + (i < stage ? "done" : i === stage ? "active" : "")}>
+            <div className="fb-node"><Icon name={i < stage ? "check" : s.icon} /></div>
+            <div className="fb-lab">{s.lab}</div>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+const TRADES = ["Kitchen", "Bathroom", "Deck / outdoor", "Full reno", "Roofing", "Other"];
+
+// ── Screen 1: Request form ──
+function RequestForm({ onSubmit }) {
+  const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", trade: "Kitchen", budget: "$25–50k", desc: "" });
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const valid = form.name && form.email && form.address && form.desc;
+  return (
+    <div className="card card-pad reveal">
+      <h1 className="title">Tell us about your project</h1>
+      <p className="subtitle">Share a few details and {CONTRACTOR} will get back to you with an estimate. Takes about a minute.</p>
+      <div className="form">
+        <div className="frow">
+          <label>Your name</label>
+          <input className="input" placeholder="Aisha Rahman" value={form.name} onChange={set("name")} />
+        </div>
+        <div className="frow two">
+          <div className="frow"><label>Email</label><input className="input" placeholder="you@email.com" value={form.email} onChange={set("email")} /></div>
+          <div className="frow"><label>Phone <span className="opt">(optional)</span></label><input className="input" placeholder="(604) 555-0148" value={form.phone} onChange={set("phone")} /></div>
+        </div>
+        <div className="frow">
+          <label>Job address</label>
+          <input className="input" placeholder="142 Marine Dr, North Vancouver, BC" value={form.address} onChange={set("address")} />
+        </div>
+        <div className="frow">
+          <label>Project type</label>
+          <div className="chips">
+            {TRADES.map((t) => (
+              <button key={t} className={"chip-opt" + (form.trade === t ? " on" : "")} onClick={() => setForm({ ...form, trade: t })}>{t}</button>
+            ))}
+          </div>
+        </div>
+        <div className="frow">
+          <label>Rough budget</label>
+          <select className="select" value={form.budget} onChange={set("budget")}>
+            <option>Not sure yet</option>
+            <option>$5–10k</option>
+            <option>$10–25k</option>
+            <option>$25–50k</option>
+            <option>$50k+</option>
+          </select>
+        </div>
+        <div className="frow">
+          <label>What do you need done?</label>
+          <textarea className="textarea" placeholder="Looking to redo our kitchen — cabinets, counters, and flooring. Roughly 180 sq ft." value={form.desc} onChange={set("desc")}></textarea>
+        </div>
+        <div className="frow">
+          <label>Photos <span className="opt">(optional)</span></label>
+          <div className="dropzone"><div><Icon name="image-up" /></div>Drag photos here, or tap to add</div>
+        </div>
+        <button className="btn btn-accent" disabled={!valid} style={{ opacity: valid ? 1 : .55 }} onClick={() => onSubmit(form)}>
+          <Icon name="send" />Submit request
+        </button>
+        <div className="foot-note"><Icon name="shield-check" />Your details go straight to {CONTRACTOR}. No account needed.</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Screen 2: Success ──
+function Success({ form, onTrack }) {
+  return (
+    <div className="card card-pad card-narrow success reveal">
+      <div className="ring"><Icon name="check" /></div>
+      <h1 className="title">Request sent!</h1>
+      <p className="subtitle">Your request has been submitted to <span className="co-name">{CONTRACTOR}</span>. We've emailed you a secure link so you can track it any time.</p>
+      <div className="recap">
+        <div className="li"><span className="k">Project</span><span className="v">{form.trade} · {form.budget}</span></div>
+        <div className="li"><span className="k">Address</span><span className="v">{form.address}</span></div>
+        <div className="li"><span className="k">From</span><span className="v">{form.name}</span></div>
+        <div className="li"><span className="k">Contact</span><span className="v">{form.email}</span></div>
+      </div>
+      <div className="btn-row">
+        <button className="btn btn-primary" onClick={onTrack}><Icon name="arrow-right" />Track my request</button>
+      </div>
+      <div className="foot-note"><Icon name="mail" />Check your inbox for the tracking link.</div>
+    </div>
+  );
+}
+
+// ── Screen 3: Portal ──
+const LINE_ITEMS = [
+  { d: "Demolition & disposal", a: 1200 },
+  { d: "Cabinetry — supply & install", a: 6800 },
+  { d: "Quartz countertops", a: 3200 },
+  { d: "Flooring (luxury vinyl)", a: 1900 },
+  { d: "Labour & finishing", a: 2400 },
+];
+function Portal({ form }) {
+  const [stage, setStage] = useState(2); // estimate ready, awaiting approval (active=approved step)
+  const [approved, setApproved] = useState(false);
+  const [paid, setPaid] = useState(false);
+  const subtotal = LINE_ITEMS.reduce((s, i) => s + i.a, 0);
+  const tax = Math.round(subtotal * 0.12);
+  const total = subtotal + tax;
+
+  function approve() { setApproved(true); setStage(3); toast("Estimate approved — work can begin!"); }
+  function pay() { setPaid(true); setStage(5); toast("Payment sent. Thank you!"); }
+
+  return (
+    <>
+      <FlowBar stage={paid ? 5 : approved ? 3 : 2} />
+      <div className="portal-grid">
+        <div className="card-pad" style={{ background: "#fff", border: "1px solid var(--ef-200)", borderRadius: "var(--radius-2xl)", boxShadow: "var(--shadow-sm)" }}>
+          <h1 className="title" style={{ fontSize: 22 }}>Hi {form.name.split(" ")[0] || "there"} 👋</h1>
+          <p className="subtitle">Here's where your {form.trade.toLowerCase()} project stands with {CONTRACTOR}.</p>
+        </div>
+
+        {/* Estimate */}
+        <div className="section-card reveal">
+          <div className="sc-head">
+            <div className="ic"><Icon name="file-text" /></div>
+            <div className="t">Estimate EST-2240</div>
+            <span className={"tag " + (approved ? "paid" : "review")}>{approved ? "Approved" : "Awaiting your approval"}</span>
+          </div>
+          <div className="sc-body">
+            <div className="li-rows">
+              {LINE_ITEMS.map((it) => (
+                <div className="line" key={it.d}><span className="k">{it.d}</span><span className="v tnum">${it.a.toLocaleString("en-CA")}</span></div>
+              ))}
+            </div>
+            <div className="line" style={{ marginTop: 6 }}><span className="k">Subtotal</span><span className="v tnum">${subtotal.toLocaleString("en-CA")}</span></div>
+            <div className="line"><span className="k">GST/PST (12%)</span><span className="v tnum">${tax.toLocaleString("en-CA")}</span></div>
+            <div className="estimate-total"><span className="k">Total estimate</span><span className="v tnum">${total.toLocaleString("en-CA")}</span></div>
+            {!approved && (
+              <div className="btn-row" style={{ marginTop: 18 }}>
+                <button className="btn btn-accent" onClick={approve}><Icon name="check-circle-2" />Approve estimate</button>
+                <button className="btn btn-outline auto" onClick={() => toast("We'll let " + CONTRACTOR + " know you have questions.")}><Icon name="message-circle" />Ask a question</button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Invoice — appears after approval */}
+        {approved && (
+          <div className="section-card reveal">
+            <div className="sc-head">
+              <div className="ic"><Icon name="receipt" /></div>
+              <div className="t">Invoice INV-1061</div>
+              <span className={"tag " + (paid ? "paid" : "wait")}>{paid ? "Paid" : "Due on completion"}</span>
+            </div>
+            <div className="sc-body">
+              <div className="line"><span className="k">Amount due</span><span className="v big tnum">${total.toLocaleString("en-CA")}</span></div>
+              <div className="line"><span className="k">Due date</span><span className="v">On job completion</span></div>
+              {!paid && (
+                <div className="btn-row" style={{ marginTop: 16 }}>
+                  <button className="btn btn-primary" onClick={pay}><Icon name="credit-card" />Pay invoice</button>
+                </div>
+              )}
+              {paid && <div className="foot-note" style={{ justifyContent: "flex-start", marginTop: 12 }}><Icon name="check-circle-2" />Paid in full. Thank you for working with {CONTRACTOR}!</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function App() {
+  const [screen, setScreen] = useState("form");
+  const [form, setForm] = useState({ name: "", email: "", phone: "", trade: "Kitchen", desc: "" });
+  return (
+    <div className="shell">
+      <ClientHead />
+      {screen === "form" && <RequestForm onSubmit={(f) => { setForm(f); setScreen("success"); }} />}
+      {screen === "success" && <Success form={form} onTrack={() => setScreen("portal")} />}
+      {screen === "portal" && <Portal form={form} />}
+      {screen !== "form" && (
+        <button className="btn btn-outline auto" style={{ marginTop: 24 }} onClick={() => setScreen("form")}>
+          <Icon name="rotate-ccw" />Restart demo
+        </button>
+      )}
+      <Toasts />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

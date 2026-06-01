@@ -1,0 +1,28 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;background:var(--ef-white);font-family:var(--font-sans);padding:26px 32px;box-sizing:border-box;display:flex;gap:22px}
+  .col{flex:1;display:flex;flex-direction:column;gap:7px}
+  label{font-size:13px;font-weight:600;color:var(--ef-700)}
+  .field{height:40px;border:1px solid var(--ef-200);border-radius:var(--radius-lg);padding:0 13px;font-size:14px;
+    font-family:var(--font-sans);color:var(--ef-900);display:flex;align-items:center;background:#fff}
+  .field.ph{color:var(--ef-400)}
+  .field.focus{border-color:var(--ef-blue);box-shadow:var(--ring-glow)}
+  .hint{font-size:12px;color:var(--ef-500)}
+  .toggle{width:42px;height:24px;border-radius:9999px;background:var(--ef-ocean);position:relative}
+  .toggle::after{content:"";position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+  .togrow{display:flex;align-items:center;gap:10px;margin-top:2px}
+</style></head><body>
+  <div class="col">
+    <label>Client email</label>
+    <div class="field focus">sam@northridge.ca</div>
+    <div class="hint">Used for the follow-up &amp; reply tracking.</div>
+  </div>
+  <div class="col">
+    <label>Project type</label>
+    <div class="field ph">Select a trade…</div>
+    <div class="togrow"><div class="toggle"></div><span class="hint">Send when I approve</span></div>
+  </div>
+</body></html>

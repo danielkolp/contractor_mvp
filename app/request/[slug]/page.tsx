@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { type FormEvent, useEffect, useState, useTransition } from "react"
+import { type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { use } from "react"
 import {
   ArrowRight,
@@ -9,7 +9,9 @@ import {
   MapPin,
   MessageSquare,
   Unlink,
+  Upload,
   User,
+  X,
 } from "lucide-react"
 
 import { CONTRACTOR_TRADES } from "@/components/ui/trade-multi-select"
@@ -29,6 +31,10 @@ type SubmitResult = {
   contractorName: string
   emailSent:      boolean
 }
+
+type ContactOption = "Text" | "Call" | "Email"
+
+const CONTACT_OPTIONS: ContactOption[] = ["Text", "Call", "Email"]
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -72,6 +78,110 @@ function ErrorMessage({ message }: { message: string }) {
 }
 
 // â”€â”€ Confirmed screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function ContactPreference({
+  value,
+  onChange,
+}: {
+  value: ContactOption
+  onChange: (value: ContactOption) => void
+}) {
+  return (
+    <div id="contact_preference" className="mt-1.5 flex overflow-hidden rounded-xl border border-gray-200">
+      {CONTACT_OPTIONS.map((option, index) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={cn(
+            "flex-1 py-3 text-sm font-medium transition",
+            index > 0 && "border-l border-gray-200",
+            value === option
+              ? "bg-ef-ocean text-white"
+              : "bg-white text-gray-600 hover:bg-ef-mist/40"
+          )}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function PhotoThumbnail({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file])
+
+  useEffect(() => () => URL.revokeObjectURL(url), [url])
+
+  return (
+    <div className="relative aspect-square">
+      <img
+        src={url}
+        alt={file.name}
+        className="h-full w-full rounded-xl border border-gray-200 object-cover"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-ef-ink text-white shadow-sm"
+      >
+        <X className="size-3" />
+      </button>
+    </div>
+  )
+}
+
+function PhotoUpload({
+  files,
+  onChange,
+}: {
+  files: File[]
+  onChange: (files: File[]) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? [])
+    onChange([...files, ...selected].slice(0, 6))
+    if (inputRef.current) inputRef.current.value = ""
+  }
+
+  return (
+    <div className="mt-1.5 space-y-3">
+      {files.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {files.map((file, index) => (
+            <PhotoThumbnail
+              key={`${file.name}-${index}`}
+              file={file}
+              onRemove={() => onChange(files.filter((_, itemIndex) => itemIndex !== index))}
+            />
+          ))}
+        </div>
+      )}
+      {files.length < 6 && (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ef-200 bg-ef-mist/30 py-4 text-sm font-medium text-ef-ocean transition hover:border-ef-sky hover:bg-ef-mist/60"
+        >
+          <Upload className="size-4" />
+          {files.length === 0 ? "Add photos" : "Add more"}
+          <span className="text-xs text-gray-400">({files.length}/6)</span>
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        id="photos"
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
 
 function ConfirmedScreen({
   contractorName,
@@ -130,6 +240,8 @@ export default function RequestPage({
   const [error, setError]            = useState<string | null>(null)
   const [result, setResult]          = useState<SubmitResult | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [contactPref, setContactPref] = useState<ContactOption>("Email")
+  const [photoFiles, setPhotoFiles]  = useState<File[]>([])
 
   useEffect(() => {
     const supabase = createClient()
@@ -199,18 +311,46 @@ export default function RequestPage({
 
     startTransition(async () => {
       try {
+        let photoUrls: string[] = []
+
+        if (photoFiles.length > 0) {
+          const supabase = createClient()
+          const results = await Promise.all(
+            photoFiles.map(async (file) => {
+              const ext = file.name.split(".").pop() ?? "jpg"
+              const path = `${slug}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+              const { error: uploadError } = await supabase.storage
+                .from("job-request-photos")
+                .upload(path, file, { contentType: file.type })
+
+              if (uploadError) return null
+
+              const { data } = supabase.storage
+                .from("job-request-photos")
+                .getPublicUrl(path)
+
+              return data.publicUrl
+            })
+          )
+
+          photoUrls = results.filter((url): url is string => url !== null)
+        }
+
         const res = await fetch("/api/client-request", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({
-            request_slug:  slug,
-            name:          String(fd.get("name") ?? "").trim(),
-            email:         String(fd.get("email") ?? "").trim(),
-            phone:         String(fd.get("phone") ?? "").trim() || null,
-            title:         trade || String(fd.get("title") ?? "").trim(),
-            description:   String(fd.get("description") ?? "").trim(),
-            location:      String(fd.get("location") ?? "").trim() || null,
-            photo_notes:   String(fd.get("photo_notes") ?? "").trim() || null,
+            request_slug:       slug,
+            name:               String(fd.get("name") ?? "").trim(),
+            email:              String(fd.get("email") ?? "").trim(),
+            phone:              String(fd.get("phone") ?? "").trim() || null,
+            title:              trade || String(fd.get("title") ?? "").trim(),
+            description:        String(fd.get("description") ?? "").trim(),
+            address_street:     String(fd.get("address_street") ?? "").trim() || null,
+            location:           String(fd.get("city") ?? "").trim() || null,
+            contact_preference: contactPref,
+            photo_notes:        String(fd.get("photo_notes") ?? "").trim() || null,
+            photo_urls:         photoUrls,
           }),
         })
 
@@ -313,6 +453,11 @@ export default function RequestPage({
               </p>
             </div>
 
+            <div>
+              <FieldLabel htmlFor="contact_preference">Preferred contact method</FieldLabel>
+              <ContactPreference value={contactPref} onChange={setContactPref} />
+            </div>
+
             <div className="my-2 border-t border-gray-100" />
 
             {/* Project info */}
@@ -355,20 +500,42 @@ export default function RequestPage({
               />
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <FieldLabel htmlFor="address_street" optional>
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                    Street address
+                  </span>
+                </FieldLabel>
+                <input
+                  id="address_street"
+                  name="address_street"
+                  type="text"
+                  autoComplete="street-address"
+                  placeholder="123 Main St"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <FieldLabel htmlFor="city" optional>City</FieldLabel>
+                <input
+                  id="city"
+                  name="city"
+                  type="text"
+                  autoComplete="address-level2"
+                  placeholder="Vancouver, BC"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
             <div>
-              <FieldLabel htmlFor="location" optional>
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                  City or neighborhood
-                </span>
-              </FieldLabel>
-              <input
-                id="location"
-                name="location"
-                type="text"
-                placeholder="Vancouver, BC"
-                className={inputClass}
-              />
+              <FieldLabel htmlFor="photos" optional>Photos</FieldLabel>
+              <p className="mt-1 text-xs text-gray-400">
+                Up to 6 photos. Helps your contractor prepare a more accurate estimate.
+              </p>
+              <PhotoUpload files={photoFiles} onChange={setPhotoFiles} />
             </div>
 
             <div>

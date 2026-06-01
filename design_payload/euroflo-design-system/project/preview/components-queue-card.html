@@ -1,0 +1,36 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;background:var(--ef-tint);font-family:var(--font-sans);padding:26px 30px;box-sizing:border-box}
+  .card{position:relative;overflow:hidden;background:#fff;border:1px solid var(--ef-200);border-radius:var(--radius-xl);
+    box-shadow:var(--shadow-sm);padding:18px 20px 18px 22px;display:flex;align-items:center;gap:14px}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ef-overdue)}
+  .ic{width:38px;height:38px;border-radius:10px;background:var(--ef-overdue-50);display:grid;place-items:center;flex-shrink:0}
+  .ic svg{width:18px;height:18px;color:var(--ef-overdue)}
+  .body{flex:1;min-width:0}
+  .top{display:flex;align-items:baseline;gap:9px}
+  .name{font-weight:600;font-size:16px;color:var(--ef-900)}
+  .tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px;background:var(--ef-overdue-50);color:var(--ef-overdue)}
+  .meta{font-size:13px;color:var(--ef-500);margin-top:3px}
+  .meta b{color:var(--ef-800);font-variant-numeric:tabular-nums}
+  .acts{display:flex;gap:8px;flex-shrink:0}
+  .btn{height:32px;padding:0 12px;border-radius:var(--radius-md);font-weight:600;font-size:13px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+  .btn svg{width:14px;height:14px}
+  .acc{background:var(--ef-orange);color:#fff}
+  .out{background:#fff;color:var(--ef-700);border-color:var(--ef-200)}
+</style></head><body>
+  <div class="card">
+    <div class="ic"><i data-lucide="file-text"></i></div>
+    <div class="body">
+      <div class="top"><span class="name">North Ridge Homes</span><span class="tag">7d overdue</span></div>
+      <div class="meta">INV-1048 · <b>$4,850</b> · Invoice</div>
+    </div>
+    <div class="acts">
+      <button class="btn acc"><i data-lucide="send"></i>Generate follow-up</button>
+      <button class="btn out">Mark paid</button>
+    </div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

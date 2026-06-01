@@ -1,0 +1,30 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;background:var(--ef-white);font-family:var(--font-sans);padding:28px 32px;box-sizing:border-box;display:flex;flex-direction:column;gap:18px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:var(--radius-md);font-size:12px;font-weight:600;border:1px solid transparent}
+  .pill{border-radius:9999px;padding:3px 11px}
+  .dot{width:7px;height:7px;border-radius:50%}
+  .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ef-400);font-weight:600;width:64px}
+</style></head><body>
+  <div class="row"><span class="lbl">Status</span>
+    <span class="badge" style="background:var(--ef-paid-50);color:var(--ef-paid);border-color:#bfe6d4">Paid</span>
+    <span class="badge" style="background:var(--ef-due-50);color:#B26A00;border-color:#fae3b0">Due today</span>
+    <span class="badge" style="background:var(--ef-overdue-50);color:var(--ef-overdue);border-color:#fbd1bb">7d overdue</span>
+    <span class="badge" style="background:var(--ef-mist);color:var(--ef-ocean);border-color:#c7e1f6">Accepted</span>
+    <span class="badge" style="background:var(--ef-100);color:var(--ef-600);border-color:var(--ef-200)">Draft</span>
+  </div>
+  <div class="row"><span class="lbl">Pills</span>
+    <span class="badge pill" style="background:var(--ef-mist);color:var(--ef-ocean)"><span class="dot" style="background:var(--ef-waiting)"></span>Waiting for reply</span>
+    <span class="badge pill" style="background:var(--ef-paid-50);color:var(--ef-paid)"><span class="dot" style="background:var(--ef-paid)"></span>Won</span>
+    <span class="badge pill" style="background:var(--ef-ocean);color:#fff">3</span>
+  </div>
+  <div class="row"><span class="lbl">Section</span>
+    <span style="display:inline-flex;align-items:center;gap:8px"><span class="dot" style="background:var(--ef-due);width:8px;height:8px"></span>
+    <span style="font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ef-500)">Needs action now</span>
+    <span class="badge pill" style="background:var(--ef-100);color:var(--ef-600);padding:1px 8px">4</span></span>
+  </div>
+</body></html>

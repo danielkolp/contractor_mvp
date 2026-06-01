@@ -1,0 +1,31 @@
+<!-- @dsCard group="Colors" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;background:var(--ef-white);font-family:var(--font-sans);padding:24px 30px;box-sizing:border-box}
+  .grid{display:flex;gap:10px}
+  .cell{flex:1;border:1px solid var(--ef-200);border-radius:12px;padding:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px}
+  .dot{width:18px;height:18px;border-radius:50%}
+  .pill{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:3px 10px;border-radius:9999px;font-size:11px;font-weight:600}
+  .nm{font-size:12px;font-weight:600;color:var(--ef-800)}
+  .hx{font-family:var(--font-mono);font-size:10px;color:var(--ef-500)}
+</style></head><body>
+  <div class="grid">
+    <div class="cell"><div class="dot" style="background:var(--ef-paid)"></div>
+      <span class="pill" style="background:var(--ef-paid-50);color:var(--ef-paid)">Paid</span>
+      <div><div class="nm">Paid / Won</div><div class="hx">#15966B</div></div></div>
+    <div class="cell"><div class="dot" style="background:var(--ef-due)"></div>
+      <span class="pill" style="background:var(--ef-due-50);color:#B26A00">Due today</span>
+      <div><div class="nm">Due / Review</div><div class="hx">#F59E0B</div></div></div>
+    <div class="cell"><div class="dot" style="background:var(--ef-overdue)"></div>
+      <span class="pill" style="background:var(--ef-overdue-50);color:var(--ef-overdue)">7d overdue</span>
+      <div><div class="nm">Overdue</div><div class="hx">#F0590B</div></div></div>
+    <div class="cell"><div class="dot" style="background:var(--ef-waiting)"></div>
+      <span class="pill" style="background:var(--ef-mist);color:var(--ef-ocean)">Waiting</span>
+      <div><div class="nm">Waiting</div><div class="hx">#2CA7FF</div></div></div>
+    <div class="cell"><div class="dot" style="background:var(--ef-danger)"></div>
+      <span class="pill" style="background:var(--ef-danger-50);color:var(--ef-danger)">Delete</span>
+      <div><div class="nm">Destructive</div><div class="hx">#DC2A3A</div></div></div>
+  </div>
+</body></html>

@@ -223,6 +223,7 @@ export type Database = {
           client_phone: string | null
           title: string
           description: string
+          address_street: string | null
           trade: string | null
           service_area: string
           urgency: Database["public"]["Enums"]["job_request_urgency"]
@@ -230,6 +231,7 @@ export type Database = {
           budget_max: number | null
           contact_preference: string
           photo_notes: string | null
+          photo_urls: string[]
           status: Database["public"]["Enums"]["job_request_status"]
           created_at: string
           updated_at: string
@@ -243,6 +245,7 @@ export type Database = {
           client_phone?: string | null
           title: string
           description: string
+          address_street?: string | null
           trade?: string | null
           service_area: string
           urgency?: Database["public"]["Enums"]["job_request_urgency"]
@@ -250,6 +253,7 @@ export type Database = {
           budget_max?: number | null
           contact_preference?: string
           photo_notes?: string | null
+          photo_urls?: string[]
           status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string
@@ -263,6 +267,7 @@ export type Database = {
           client_phone?: string | null
           title?: string
           description?: string
+          address_street?: string | null
           trade?: string | null
           service_area?: string
           urgency?: Database["public"]["Enums"]["job_request_urgency"]
@@ -270,6 +275,7 @@ export type Database = {
           budget_max?: number | null
           contact_preference?: string
           photo_notes?: string | null
+          photo_urls?: string[]
           status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string

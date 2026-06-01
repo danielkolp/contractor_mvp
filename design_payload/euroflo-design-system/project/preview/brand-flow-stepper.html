@@ -1,0 +1,32 @@
+<!-- @dsCard group="Brand" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;background:var(--ef-white);font-family:var(--font-sans);padding:30px 26px;box-sizing:border-box}
+  .flow{display:flex;align-items:center}
+  .step{display:flex;flex-direction:column;align-items:center;gap:9px;width:84px}
+  .node{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--ef-mist);border:2px solid #c7e1f6}
+  .node svg{width:21px;height:21px;color:var(--ef-ocean)}
+  .step.done .node{background:var(--ef-ocean);border-color:var(--ef-ocean)}
+  .step.done .node svg{color:#fff}
+  .step.now .node{background:var(--ef-orange);border-color:var(--ef-orange);box-shadow:0 0 0 5px rgba(255,106,0,.16)}
+  .step.now .node svg{color:#fff}
+  .lab{font-size:12px;font-weight:600;color:var(--ef-700);text-align:center}
+  .step.now .lab{color:var(--ef-orange)}
+  .conn{height:3px;flex:1;border-radius:2px;background:var(--ef-200);margin-bottom:30px}
+  .conn.fill{background:var(--ef-ocean)}
+</style></head><body>
+  <div class="flow">
+    <div class="step done"><div class="node"><i data-lucide="clipboard-list"></i></div><div class="lab">Request</div></div>
+    <div class="conn fill"></div>
+    <div class="step done"><div class="node"><i data-lucide="file-text"></i></div><div class="lab">Estimate</div></div>
+    <div class="conn fill"></div>
+    <div class="step now"><div class="node"><i data-lucide="check-circle-2"></i></div><div class="lab">Approved</div></div>
+    <div class="conn"></div>
+    <div class="step"><div class="node"><i data-lucide="hard-hat"></i></div><div class="lab">Job done</div></div>
+    <div class="conn"></div>
+    <div class="step"><div class="node"><i data-lucide="receipt"></i></div><div class="lab">Paid</div></div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

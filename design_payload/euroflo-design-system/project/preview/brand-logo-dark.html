@@ -1,0 +1,33 @@
+<!-- @dsCard group="Brand" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;font-family:var(--font-sans);box-sizing:border-box;overflow:hidden}
+  .stage{position:relative;background:var(--grad-deep);padding:36px 40px;box-sizing:border-box;overflow:hidden}
+  /* layered flow crests */
+  .wave{position:absolute;border-radius:50%;filter:blur(2px);opacity:.5}
+  .w1{width:520px;height:520px;right:-180px;top:-260px;background:radial-gradient(circle at 50% 50%,rgba(65,205,233,.55),transparent 62%)}
+  .w2{width:420px;height:420px;right:-90px;bottom:-280px;background:radial-gradient(circle at 50% 50%,rgba(44,167,255,.45),transparent 64%)}
+  .lines{position:absolute;right:30px;top:0;bottom:0;width:300px;opacity:.5}
+  .lock{position:relative;display:flex;align-items:center;gap:18px}
+  .lock img{width:64px;height:64px;border-radius:14px;box-shadow:0 8px 22px rgba(0,16,40,.45)}
+  .wm{font-family:var(--font-display);font-weight:700;font-size:42px;color:#fff;letter-spacing:-.01em;line-height:1}
+  .tag{position:relative;margin-top:20px;font-family:var(--font-sans);font-weight:500;font-size:15px;
+    letter-spacing:.02em;color:var(--ef-foam);display:flex;align-items:center;gap:12px}
+  .tag .crest{height:2px;width:34px;background:linear-gradient(90deg,var(--ef-cyan),transparent);border-radius:2px}
+</style></head><body>
+  <div class="stage">
+    <div class="wave w1"></div>
+    <div class="wave w2"></div>
+    <svg class="lines" viewBox="0 0 300 200" fill="none" preserveAspectRatio="none">
+      <path d="M-10 150 C 70 110, 130 190, 210 140 S 320 120, 360 150" stroke="rgba(199,232,255,.35)" stroke-width="2"/>
+      <path d="M-10 170 C 80 135, 140 205, 220 160 S 330 145, 370 172" stroke="rgba(65,205,233,.30)" stroke-width="2"/>
+    </svg>
+    <div class="lock">
+      <img src="../assets/euroflo-mark.svg" alt="Euroflo">
+      <div class="wm">Euroflo</div>
+    </div>
+    <div class="tag"><span class="crest"></span>A job that flows the way it should</div>
+  </div>
+</body></html>

@@ -1,0 +1,73 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{width:700px;background:var(--ef-tint);font-family:var(--font-sans);padding:0;box-sizing:border-box;
+    background-image:radial-gradient(circle,rgba(2,77,139,.05) 1px,transparent 1px);background-size:26px 26px}
+  .frame{display:flex;height:380px;overflow:hidden}
+  /* sidebar */
+  .sb{width:236px;flex-shrink:0;background:#fff;border-right:1px solid var(--ef-200);display:flex;flex-direction:column}
+  .sb-brand{display:flex;align-items:center;gap:10px;padding:18px 20px 12px}
+  .sb-brand img{width:30px;height:30px;border-radius:8px}
+  .sb-brand .wm{font-family:var(--font-display);font-weight:700;font-size:19px;color:var(--ef-navy)}
+  .sb-nav{display:flex;flex-direction:column;gap:2px;padding:6px 12px;flex:1}
+  .ni{display:flex;align-items:center;gap:11px;height:34px;padding:0 11px;border-radius:var(--radius-lg);
+    font-size:13.5px;font-weight:500;color:var(--ef-500)}
+  .ni svg{width:16px;height:16px}
+  .ni.active{background:var(--nav-active-bg);color:var(--ef-ocean);font-weight:600}
+  .ni.active svg{color:var(--ef-ocean)}
+  .ni .ct{margin-left:auto;background:var(--ef-orange);color:#fff;font-size:10px;font-weight:700;border-radius:9999px;min-width:17px;height:17px;display:grid;place-items:center;padding:0 5px}
+  .promo{margin:4px 12px 14px;background:var(--ef-mist);border:1px solid #c7e1f6;border-radius:var(--radius-lg);padding:13px}
+  .promo .h{display:flex;align-items:center;gap:7px;font-weight:600;font-size:12.5px;color:var(--ef-navy)}
+  .promo .h svg{width:14px;height:14px;color:var(--ef-ocean)}
+  .promo p{margin:6px 0 0;font-size:11px;line-height:1.45;color:var(--ef-ocean-600)}
+  /* content peek */
+  .peek{flex:1;display:flex;flex-direction:column}
+  .pbar{height:52px;border-bottom:1px solid var(--ef-200);background:rgba(255,255,255,.85);display:flex;align-items:center;gap:10px;padding:0 18px}
+  .pbar .pt{font-weight:600;font-size:15px;color:var(--ef-900)}
+  .pbar .sp{flex:1}
+  .pbar .ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--ef-200);background:#fff;display:grid;place-items:center;color:var(--ef-500)}
+  .pbar .ib svg{width:15px;height:15px}
+  .pbar .av{width:28px;height:28px;border-radius:50%;background:var(--ef-mist);border:1px solid #c7e1f6;color:var(--ef-ocean);font-size:10px;font-weight:700;display:grid;place-items:center}
+  .pbody{padding:18px;flex:1}
+  .ghost-card{background:#fff;border:1px solid var(--ef-200);border-radius:12px;box-shadow:var(--shadow-xs);height:54px;margin-bottom:10px;position:relative;overflow:hidden}
+  .ghost-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ef-overdue)}
+  .ghost-card.g2::before{background:var(--ef-due)}
+  .ghost-card.g3::before{background:var(--ef-paid)}
+  .gl{position:absolute;left:18px;top:13px;height:9px;border-radius:3px;background:var(--ef-200)}
+  .gl.a{width:120px}.gl.b{top:30px;width:80px;background:var(--ef-100)}
+</style></head><body>
+  <div class="frame">
+    <aside class="sb">
+      <div class="sb-brand"><img src="../assets/euroflo-mark.svg" alt=""><span class="wm">Euroflo</span></div>
+      <nav class="sb-nav">
+        <div class="ni active"><i data-lucide="calendar-check-2"></i>Today</div>
+        <div class="ni"><i data-lucide="file-text"></i>Estimates</div>
+        <div class="ni"><i data-lucide="receipt"></i>Invoices</div>
+        <div class="ni"><i data-lucide="users-round"></i>Clients</div>
+        <div class="ni"><i data-lucide="clipboard-list"></i>Job Requests<span class="ct">3</span></div>
+        <div class="ni"><i data-lucide="rotate-ccw"></i>Recovery</div>
+        <div class="ni"><i data-lucide="settings"></i>Settings</div>
+      </nav>
+      <div class="promo">
+        <div class="h"><i data-lucide="shield-check"></i>You stay in control</div>
+        <p>Every follow-up is drafted for your review.</p>
+      </div>
+    </aside>
+    <section class="peek">
+      <div class="pbar">
+        <span class="pt">Today</span><span class="sp"></span>
+        <div class="ib"><i data-lucide="search"></i></div>
+        <div class="ib"><i data-lucide="bell"></i></div>
+        <div class="av">MT</div>
+      </div>
+      <div class="pbody">
+        <div class="ghost-card"><div class="gl a"></div><div class="gl b"></div></div>
+        <div class="ghost-card g2"><div class="gl a"></div><div class="gl b"></div></div>
+        <div class="ghost-card g3"><div class="gl a"></div><div class="gl b"></div></div>
+      </div>
+    </section>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

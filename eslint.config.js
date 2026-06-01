@@ -4,6 +4,9 @@ import nextConfig from "eslint-config-next"
 // state reset on open, theme hydration from localStorage). Full refactors
 // to key-based resets or useSyncExternalStore are out of scope here.
 const config = [
+  {
+    ignores: ["design_payload/**"],
+  },
   ...nextConfig,
   {
     rules: {

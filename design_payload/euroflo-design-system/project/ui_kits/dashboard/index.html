@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Euroflo — Dashboard</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<link rel="stylesheet" href="kit.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div id="root"></div>
+<script src="data.js"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+
+const TITLES = {
+  today: "Today", estimates: "Estimates", invoices: "Invoices",
+  clients: "Clients", requests: "Job Requests", recovery: "Recovery", settings: "Settings",
+};
+
+function App() {
+  const [route, setRoute] = useState("today");
+  let screen;
+  if (route === "today") screen = <TodayScreen />;
+  else if (route === "invoices") screen = <InvoicesScreen />;
+  else if (route === "estimates") screen = <EstimatesScreen />;
+  else if (route === "clients") screen = <ClientsScreen />;
+  else if (route === "requests") screen = <JobRequestsScreen />;
+  else if (route === "recovery") screen = (
+    <SimpleScreen title="Recovery" sub="Every follow-up, won and lost — your full recovery history.">
+      <div className="card card-pad" style={{ color: "var(--ef-500)", fontSize: 14, lineHeight: 1.6 }}>
+        The recovery history mirrors the Today queue with closed items. Open <b style={{color:"var(--ef-ocean)"}}>Today</b> to work the live queue.
+      </div>
+    </SimpleScreen>
+  );
+  else screen = (
+    <SimpleScreen title="Settings" sub="Business profile, invoice defaults, and your client request link.">
+      <div className="card card-pad" style={{ color: "var(--ef-500)", fontSize: 14, lineHeight: 1.6 }}>
+        Profile, currency (CAD), follow-up timing, and the shareable request link live here.
+      </div>
+    </SimpleScreen>
+  );
+
+  return (
+    <div className="app">
+      <Sidebar route={route} setRoute={setRoute} />
+      <div className="main">
+        <TopBar title={TITLES[route]} />
+        {screen}
+      </div>
+      <Toasts />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

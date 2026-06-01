@@ -18,6 +18,11 @@ function getAppUrl(req: NextRequest): string {
   return `${url.protocol}//${url.host}`
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const CONTACT_OPTIONS = new Set(["Text", "Call", "Email"])
+
 export async function POST(req: NextRequest) {
   // ── Parse body ──────────────────────────────────────────────────────────────
   let raw: unknown
@@ -27,17 +32,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const body        = raw as Record<string, unknown>
-  const name        = typeof body.name         === "string" ? body.name.trim()         : ""
-  const email       = typeof body.email        === "string" ? body.email.trim().toLowerCase() : ""
-  const phone       = typeof body.phone        === "string" && body.phone.trim() ? body.phone.trim() : null
-  const title       = typeof body.title        === "string" ? body.title.trim()        : ""
-  const description = typeof body.description  === "string" ? body.description.trim()  : ""
-  const location    = typeof body.location     === "string" ? body.location.trim()     : ""
-  const requestSlug = typeof body.request_slug === "string" ? body.request_slug.trim() : ""
-  const photoNotes  = typeof body.photo_notes  === "string" && body.photo_notes.trim()
+  const body          = raw as Record<string, unknown>
+  const name          = typeof body.name         === "string" ? body.name.trim()         : ""
+  const email         = typeof body.email        === "string" ? body.email.trim().toLowerCase() : ""
+  const phone         = typeof body.phone        === "string" && body.phone.trim() ? body.phone.trim() : null
+  const title         = typeof body.title        === "string" ? body.title.trim()        : ""
+  const description   = typeof body.description  === "string" ? body.description.trim()  : ""
+  const location      = typeof body.location     === "string" ? body.location.trim()     : ""
+  const requestSlug   = typeof body.request_slug === "string" ? body.request_slug.trim() : ""
+  const addressStreet = typeof body.address_street === "string" && body.address_street.trim()
+    ? body.address_street.trim()
+    : null
+  const photoNotes    = typeof body.photo_notes  === "string" && body.photo_notes.trim()
     ? body.photo_notes.trim()
     : null
+  const rawContactPreference =
+    typeof body.contact_preference === "string" ? body.contact_preference.trim() : ""
+  const contactPreference = CONTACT_OPTIONS.has(rawContactPreference)
+    ? rawContactPreference
+    : "Email"
+  const photoUrls = Array.isArray(body.photo_urls)
+    ? body.photo_urls
+        .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+        .map((url) => url.trim())
+    : []
 
   if (!name)         return NextResponse.json({ error: "Full name is required" },      { status: 400 })
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
@@ -50,12 +68,24 @@ export async function POST(req: NextRequest) {
   const appUrl   = getAppUrl(req)
 
   // ── 1. Resolve contractor by request_slug ──────────────────────────────────
-  const { data: contractorProfile } = await supabase
+  let { data: contractorProfile } = await supabase
     .from("profiles")
     .select("user_id, owner_name, company_name")
     .eq("request_slug", requestSlug)
     .eq("role", "contractor")
     .maybeSingle()
+
+  // Old public request links used the contractor UUID in this route segment.
+  if (!contractorProfile && UUID_PATTERN.test(requestSlug)) {
+    const { data: contractorById } = await supabase
+      .from("profiles")
+      .select("user_id, owner_name, company_name")
+      .eq("user_id", requestSlug)
+      .eq("role", "contractor")
+      .maybeSingle()
+
+    contractorProfile = contractorById
+  }
 
   if (!contractorProfile) {
     return NextResponse.json({ error: "Contractor not found" }, { status: 404 })
@@ -110,22 +140,26 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Create job request ───────────────────────────────────────────────────
+  const jobPayload = {
+    client_id:          clientUserId,
+    contractor_id:      contractorProfile.user_id,
+    client_name:        name,
+    client_email:       email,
+    client_phone:       phone,
+    title,
+    description,
+    photo_notes:        photoNotes,
+    address_street:     addressStreet,
+    photo_urls:         photoUrls,
+    service_area:       location || "Not specified",
+    urgency:            "flexible" as const,
+    contact_preference: contactPreference,
+    status:             "new" as const,
+  }
+
   const { data: jobRequest, error: jobError } = await supabase
     .from("job_requests")
-    .insert({
-      client_id:          clientUserId,
-      contractor_id:      contractorProfile.user_id,
-      client_name:        name,
-      client_email:       email,
-      client_phone:       phone,
-      title,
-      description,
-      photo_notes:        photoNotes,
-      service_area:       location || "Not specified",
-      urgency:            "flexible",
-      contact_preference: "Email",
-      status:             "new",
-    })
+    .insert(jobPayload)
     .select()
     .single()
 
