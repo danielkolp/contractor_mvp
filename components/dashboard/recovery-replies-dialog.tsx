@@ -37,8 +37,8 @@ function stripHtml(html: string): string {
 function SentMessage({ event }: { event: RecoveryEmailEvent }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-        <Mail className="size-3.5 text-green-700 dark:text-green-400" />
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-ef-mist dark:bg-ef-navy/30">
+        <Mail className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
       </div>
       <div className="flex-1 rounded-xl border border-border bg-muted/30 p-3">
         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">

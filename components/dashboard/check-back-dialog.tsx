@@ -84,7 +84,7 @@ export function CheckBackDialog({
                 onClick={() => setSelected(opt.value)}
                 className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
                   active
-                    ? "border-green-300 bg-green-50 font-medium text-green-900 dark:border-green-700 dark:bg-green-950/40 dark:text-green-100"
+                    ? "border-ef-300 bg-ef-mist font-medium text-ef-navy dark:border-ef-ocean dark:bg-ef-ink/40 dark:text-ef-mist"
                     : "border-border hover:bg-muted"
                 }`}
               >
@@ -117,7 +117,7 @@ export function CheckBackDialog({
 
         <div className="flex gap-2 pt-1">
           <Button
-            className="flex-1 bg-green-700 text-white hover:bg-green-800"
+            className="flex-1 bg-ef-ocean text-white hover:bg-ef-ocean"
             disabled={isLoading || (selected === "custom" && !customDate)}
             onClick={handleConfirm}
           >

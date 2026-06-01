@@ -91,11 +91,11 @@ function SidebarNav({
             className={cn(
               "flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
               active
-                ? "bg-green-50 text-green-800 ring-1 ring-green-100 dark:bg-green-950/40 dark:text-green-200 dark:ring-green-900/60"
+                ? "bg-ef-mist text-ef-ocean ring-1 ring-ef-mist dark:bg-ef-ink/40 dark:text-ef-200 dark:ring-ef-navy/60"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <Icon className={cn("size-4 shrink-0", active && "text-green-700")} />
+            <Icon className={cn("size-4 shrink-0", active && "text-ef-ocean")} />
             <span className="flex-1">{item.name}</span>
             <NotificationBadge count={count} />
           </Link>
@@ -118,14 +118,14 @@ function Sidebar({ counts }: { counts: Record<string, number> }) {
     <aside className="hidden w-64 shrink-0 border-r border-border bg-sidebar lg:flex lg:flex-col">
       <div className="flex min-h-24 items-center justify-center px-5 pb-4 pt-5">
         <Link href="/client/dashboard" className="flex w-full min-w-0 justify-center" aria-label="My Projects">
-          <BrandLogo className="h-auto w-44 max-w-full" priority />
+          <BrandLogo className="h-10 w-44 max-w-full" priority />
         </Link>
       </div>
       <SidebarNav counts={counts} />
       <div className="px-3 pb-4 pt-2">
-        <div className="rounded-xl border border-green-100 bg-green-50 p-4 text-green-950 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100">
+        <div className="rounded-xl border border-ef-mist bg-ef-mist p-4 text-ef-ink dark:border-ef-navy/60 dark:bg-ef-ink/30 dark:text-ef-mist">
           <div className="text-sm font-medium">Client portal</div>
-          <p className="mt-1.5 text-xs leading-5 text-green-800 dark:text-green-200">
+          <p className="mt-1.5 text-xs leading-5 text-ef-ocean dark:text-ef-200">
             Track your projects and communicate with your contractor.
           </p>
         </div>
@@ -178,7 +178,7 @@ function TopBar({
       <Link
         href="/client/dashboard"
         className="grid size-9 shrink-0 place-items-center rounded-lg lg:hidden"
-        aria-label="EstiGator client dashboard"
+        aria-label="Euroflo client dashboard"
       >
         <BrandLogo variant="mark" className="size-8" />
       </Link>
@@ -188,7 +188,7 @@ function TopBar({
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
               <Avatar className="size-7">
-                <AvatarFallback className="bg-green-100 text-xs font-medium text-green-800">
+                <AvatarFallback className="bg-ef-mist text-xs font-medium text-ef-ocean">
                   {getInitials(userEmail)}
                 </AvatarFallback>
               </Avatar>
@@ -279,7 +279,7 @@ export function ClientShell({
   }, [supabase, pathname])
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-foreground dark:bg-zinc-950">
+    <div className="min-h-screen bg-ef-canvas text-foreground dark:bg-background">
       <div className="flex min-h-screen">
         <Sidebar counts={counts} />
         <div className="flex min-w-0 flex-1 flex-col">

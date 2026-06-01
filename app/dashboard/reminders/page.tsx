@@ -367,7 +367,7 @@ export default function RemindersPage() {
             <ContentReveal isLoading={isLoading} skeleton={<RemindersListSkeleton />}>
               {reminders.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                <div className="mx-auto grid size-12 place-items-center rounded-lg bg-ef-mist text-ef-ocean dark:bg-ef-ink/40 dark:text-ef-300">
                   <Bell className="size-5" />
                 </div>
                 <h3 className="mt-4 text-base font-semibold">
@@ -396,14 +396,14 @@ export default function RemindersPage() {
             ) : filteredReminders.length === 0 ? (
               activeTab === "today" ? (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-                  <div className="mx-auto grid size-12 place-items-center rounded-lg bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                  <div className="mx-auto grid size-12 place-items-center rounded-lg bg-ef-mist text-ef-ocean dark:bg-ef-ink/40 dark:text-ef-300">
                     <Bell className="size-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">No reminders due today</h3>
                   <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
                     You&rsquo;re clear for now. You can still review unpaid invoices or schedule a future reminder.
                   </p>
-                  <Button className="mt-5 bg-green-700 text-white hover:bg-green-800" asChild>
+                  <Button className="mt-5 bg-ef-ocean text-white hover:bg-ef-ocean" asChild>
                     <a href="/dashboard/recoveries">Open Follow-ups</a>
                   </Button>
                 </div>

@@ -188,12 +188,12 @@ export default function NewClientJobPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100">
+            <div className="rounded-lg border border-ef-200 bg-ef-mist p-4 text-sm text-ef-navy dark:border-ef-navy/60 dark:bg-ef-ink/30 dark:text-ef-mist">
               {submittedTitle}
             </div>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <Button
-                className="bg-green-700 text-white hover:bg-green-800"
+                className="bg-ef-ocean text-white hover:bg-ef-ocean"
                 onClick={() => router.push("/client/dashboard")}
               >
                 Return to dashboard
@@ -375,7 +375,7 @@ export default function NewClientJobPage() {
             <Button
               type="submit"
               disabled={isPending || profileLoading}
-              className="bg-green-700 text-white hover:bg-green-800"
+              className="bg-ef-ocean text-white hover:bg-ef-ocean"
             >
               <Send className="size-4" />
               {isPending ? "Sending..." : "Request estimate"}

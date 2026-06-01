@@ -12,7 +12,7 @@ export interface RecoveryEmailArgs {
   contractorPhone?:    string | null
   contractorWebsite?:  string | null
   inboundReplyToEmail?: string | null // when set, replies are tracked in-app
-  appName?:            string        // defaults to "EstiGator"
+  appName?:            string        // defaults to "Euroflo"
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ export function renderRecoveryEmailHtml(args: RecoveryEmailArgs): string {
     contractorPhone,
     contractorWebsite,
     inboundReplyToEmail,
-    appName = "EstiGator",
+    appName = "Euroflo",
   } = args
 
   const safeSubject       = escapeHtml(subject)
@@ -78,7 +78,7 @@ export function renderRecoveryEmailHtml(args: RecoveryEmailArgs): string {
   if (contractorWebsite) {
     const href = safeHref(contractorWebsite)
     sigLines.push(
-      `<p style="margin:0 0 4px 0; font-size:14px; color:#4B5563;"><a href="${escapeHtml(href)}" style="color:#15803D; text-decoration:none;">${escapeHtml(contractorWebsite)}</a></p>`
+      `<p style="margin:0 0 4px 0; font-size:14px; color:#4B5563;"><a href="${escapeHtml(href)}" style="color:#024D8B; text-decoration:none;">${escapeHtml(contractorWebsite)}</a></p>`
     )
   }
 
@@ -121,7 +121,7 @@ export function renderRecoveryEmailHtml(args: RecoveryEmailArgs): string {
 
           <!-- Green header bar -->
           <tr>
-            <td style="background-color:#15803D; padding:18px 32px;
+            <td style="background-color:#024D8B; padding:18px 32px;
                        border-radius:8px 8px 0 0;">
               <span style="display:inline-block; width:8px; height:8px;
                            background-color:#FFFFFF; border-radius:50%;
@@ -210,7 +210,7 @@ export function renderRecoveryEmailText(args: RecoveryEmailArgs): string {
     contractorPhone,
     contractorWebsite,
     inboundReplyToEmail,
-    appName = "EstiGator",
+    appName = "Euroflo",
   } = args
 
   const sigParts = [contractorName, companyName]

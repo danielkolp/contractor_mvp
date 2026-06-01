@@ -326,7 +326,7 @@ export default function CustomersPage() {
           Refresh
         </Button>
         <Button
-          className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+          className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
           onClick={openAddCustomer}
         >
           <Plus className="size-4" />
@@ -409,7 +409,7 @@ export default function CustomersPage() {
               <DialogClose asChild>
                 <Button type="button" variant="outline" disabled={isSaving}>Cancel</Button>
               </DialogClose>
-              <Button type="submit" className="bg-green-700 text-white hover:bg-green-800" disabled={isSaving}>
+              <Button type="submit" className="bg-ef-ocean text-white hover:bg-ef-ocean" disabled={isSaving}>
                 {isSaving ? "Saving…" : editingClient ? "Save changes" : "Add customer"}
               </Button>
             </DialogFooter>
@@ -618,7 +618,7 @@ function CustomerCard({
       <div className="flex items-center gap-2">
         <Button
           size="sm"
-          className="flex-1 gap-1.5 bg-green-700 text-white hover:bg-green-800"
+          className="flex-1 gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
           disabled={isSaving}
           onClick={onAddRecovery}
         >
@@ -654,7 +654,7 @@ function EmptyCustomers({ onAdd }: { onAdd: () => void }) {
           Add the people you work with, then open recovery jobs from their cards.
         </p>
         <Button
-          className="mt-4 gap-2 bg-green-700 text-white hover:bg-green-800"
+          className="mt-4 gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
           onClick={onAdd}
         >
           <Plus className="size-4" />

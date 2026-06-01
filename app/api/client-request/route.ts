@@ -27,33 +27,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const body         = raw as Record<string, unknown>
-  const name         = typeof body.name         === "string" ? body.name.trim()         : ""
-  const email        = typeof body.email        === "string" ? body.email.trim().toLowerCase() : ""
-  const phone        = typeof body.phone        === "string" && body.phone.trim() ? body.phone.trim() : null
-  const title        = typeof body.title        === "string" ? body.title.trim()        : ""
-  const description  = typeof body.description  === "string" ? body.description.trim()  : ""
-  const location     = typeof body.location     === "string" ? body.location.trim()     : ""
-  const contractorId = typeof body.contractor_id === "string" ? body.contractor_id.trim() : ""
-  const photoNotes   = typeof body.photo_notes  === "string" && body.photo_notes.trim()
+  const body        = raw as Record<string, unknown>
+  const name        = typeof body.name         === "string" ? body.name.trim()         : ""
+  const email       = typeof body.email        === "string" ? body.email.trim().toLowerCase() : ""
+  const phone       = typeof body.phone        === "string" && body.phone.trim() ? body.phone.trim() : null
+  const title       = typeof body.title        === "string" ? body.title.trim()        : ""
+  const description = typeof body.description  === "string" ? body.description.trim()  : ""
+  const location    = typeof body.location     === "string" ? body.location.trim()     : ""
+  const requestSlug = typeof body.request_slug === "string" ? body.request_slug.trim() : ""
+  const photoNotes  = typeof body.photo_notes  === "string" && body.photo_notes.trim()
     ? body.photo_notes.trim()
     : null
 
-  if (!name)         return NextResponse.json({ error: "Full name is required" },       { status: 400 })
+  if (!name)         return NextResponse.json({ error: "Full name is required" },      { status: 400 })
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
-                     return NextResponse.json({ error: "Valid email is required" },      { status: 400 })
-  if (!title)        return NextResponse.json({ error: "Project type is required" },     { status: 400 })
-  if (!description)  return NextResponse.json({ error: "Description is required" },     { status: 400 })
-  if (!contractorId) return NextResponse.json({ error: "Contractor link is invalid" },  { status: 400 })
+                     return NextResponse.json({ error: "Valid email is required" },     { status: 400 })
+  if (!title)        return NextResponse.json({ error: "Project type is required" },    { status: 400 })
+  if (!description)  return NextResponse.json({ error: "Description is required" },    { status: 400 })
+  if (!requestSlug)  return NextResponse.json({ error: "Contractor link is invalid" }, { status: 400 })
 
   const supabase = createServiceClient()
   const appUrl   = getAppUrl(req)
 
-  // ── 1. Verify contractor exists ─────────────────────────────────────────────
+  // ── 1. Resolve contractor by request_slug ──────────────────────────────────
   const { data: contractorProfile } = await supabase
     .from("profiles")
     .select("user_id, owner_name, company_name")
-    .eq("user_id", contractorId)
+    .eq("request_slug", requestSlug)
     .eq("role", "contractor")
     .maybeSingle()
 
@@ -110,25 +110,22 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Create job request ───────────────────────────────────────────────────
-  // client_phone is a new column added in the v2 migration; cast to bypass stale types.
-  const jobPayload = {
-    client_id:          clientUserId,
-    contractor_id:      contractorId,
-    client_name:        name,
-    client_email:       email,
-    client_phone:       phone,
-    title,
-    description,
-    photo_notes:        photoNotes,
-    service_area:       location || "Not specified",
-    urgency:            "flexible" as const,
-    contact_preference: "Email",
-    status:             "new" as const,
-  } as Parameters<ReturnType<typeof supabase.from<"job_requests">>["insert"]>[0]
-
   const { data: jobRequest, error: jobError } = await supabase
     .from("job_requests")
-    .insert(jobPayload)
+    .insert({
+      client_id:          clientUserId,
+      contractor_id:      contractorProfile.user_id,
+      client_name:        name,
+      client_email:       email,
+      client_phone:       phone,
+      title,
+      description,
+      photo_notes:        photoNotes,
+      service_area:       location || "Not specified",
+      urgency:            "flexible",
+      contact_preference: "Email",
+      status:             "new",
+    })
     .select()
     .single()
 

@@ -1027,7 +1027,7 @@ export default function EstimatesPage() {
 
                     <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
                       <span>Total</span>
-                      <span className="tabular-nums text-green-700">
+                      <span className="tabular-nums text-ef-ocean">
                         {moneyFormatter.format(computedTotal)}
                       </span>
                     </div>
@@ -1158,7 +1158,7 @@ export default function EstimatesPage() {
                         className={cn(
                           "min-w-0 px-4 py-3 transition-colors duration-700",
                           highlightedId === estimate.id &&
-                            "bg-green-50 ring-1 ring-inset ring-green-300 dark:bg-green-950/20 dark:ring-green-700/50"
+                            "bg-ef-mist ring-1 ring-inset ring-ef-300 dark:bg-ef-ink/20 dark:ring-ef-ocean/50"
                         )}
                       >
                         <div className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_120px_120px_130px_80px] xl:items-center">

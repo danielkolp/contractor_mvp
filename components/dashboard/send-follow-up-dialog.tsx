@@ -233,7 +233,7 @@ export function SendFollowUpDialog({
                       className={cn(
                         "flex flex-col items-center rounded-lg border px-2 py-2 text-xs transition-colors",
                         active
-                          ? "border-green-300 bg-green-50 font-medium text-green-900 dark:border-green-700 dark:bg-green-950/40 dark:text-green-100"
+                          ? "border-ef-300 bg-ef-mist font-medium text-ef-navy dark:border-ef-ocean dark:bg-ef-ink/40 dark:text-ef-mist"
                           : "border-border text-muted-foreground hover:bg-muted"
                       )}
                     >
@@ -263,7 +263,7 @@ export function SendFollowUpDialog({
           <div className="flex flex-col gap-2 pt-1">
             {hasEmail && (
               <Button
-                className="gap-2 bg-green-700 text-white hover:bg-green-800"
+                className="gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
                 disabled={!canSend || isSending}
                 onClick={() => void handleSend()}
               >
@@ -289,7 +289,7 @@ export function SendFollowUpDialog({
             >
               {copied ? (
                 <>
-                  <Check className="size-4 text-green-600" />
+                  <Check className="size-4 text-ef-ocean" />
                   Copied
                 </>
               ) : (

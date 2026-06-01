@@ -105,7 +105,7 @@ function PasswordMeter({ password }: { password: string }) {
               "h-1.5 rounded-full bg-muted",
               step <= score &&
                 (score >= 4
-                  ? "bg-green-600"
+                  ? "bg-ef-ocean"
                   : score >= 3
                     ? "bg-emerald-500"
                     : score >= 2
@@ -305,7 +305,7 @@ export function SignupForm() {
       ) : null}
 
       <div className="grid gap-3">
-        <Label>How will you use EstiGator?</Label>
+        <Label>How will you use Euroflo?</Label>
         <div className="grid gap-3 sm:grid-cols-2">
           {roleOptions.map((option) => {
             const Icon = option.icon
@@ -322,23 +322,23 @@ export function SignupForm() {
                 whileTap={{ scale: 0.985 }}
                 transition={quickTransition}
                 className={cn(
-                  "relative min-h-28 overflow-hidden rounded-lg border bg-background p-4 text-left transition-colors hover:border-green-300 hover:bg-green-50/50 dark:hover:bg-green-950/20",
+                  "relative min-h-28 overflow-hidden rounded-lg border bg-background p-4 text-left transition-colors hover:border-ef-300 hover:bg-ef-mist/50 dark:hover:bg-ef-ink/20",
                   active
-                    ? "border-green-600 ring-2 ring-green-600/20"
+                    ? "border-ef-ocean ring-2 ring-ef-ocean/20"
                     : "border-border"
                 )}
               >
                 {active ? (
                   <motion.div
                     layoutId="signup-role-active-bg"
-                    className="absolute inset-0 bg-green-50/70 dark:bg-green-950/20"
+                    className="absolute inset-0 bg-ef-mist/70 dark:bg-ef-ink/20"
                     transition={quickTransition}
                   />
                 ) : null}
                 <div className="relative flex items-start justify-between gap-3">
                   <motion.div
                     layout
-                    className="grid size-9 place-items-center rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                    className="grid size-9 place-items-center rounded-lg bg-ef-mist text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300"
                     animate={{ scale: active ? 1.05 : 1 }}
                     transition={quickTransition}
                   >
@@ -353,7 +353,7 @@ export function SignupForm() {
                         exit={{ opacity: 0, scale: 0.75, rotate: 12 }}
                         transition={quickTransition}
                       >
-                        <CheckCircle2 className="size-5 text-green-700" />
+                        <CheckCircle2 className="size-5 text-ef-ocean" />
                       </motion.div>
                     ) : null}
                   </AnimatePresence>
@@ -508,7 +508,7 @@ export function SignupForm() {
           <span>Already created this account?</span>
           <button
             type="button"
-            className="font-medium text-green-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+            className="font-medium text-ef-ocean hover:underline disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isResending}
             onClick={() => handleResendVerification()}
           >
@@ -520,7 +520,7 @@ export function SignupForm() {
             className={cn(
               "text-xs leading-5",
               resendMessage.type === "success"
-                ? "text-green-700"
+                ? "text-ef-ocean"
                 : "text-destructive"
             )}
           >

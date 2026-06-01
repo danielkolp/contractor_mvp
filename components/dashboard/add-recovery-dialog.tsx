@@ -257,9 +257,9 @@ export function AddRecoveryDialog({
                       variant="outline"
                       className={
                         i + 1 === step
-                          ? "border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200"
+                          ? "border-ef-200 bg-ef-mist text-ef-ocean dark:border-ef-navy/60 dark:bg-ef-ink/40 dark:text-ef-200"
                           : i + 1 < step
-                          ? "border-green-100 bg-green-50/50 text-green-600 dark:border-green-900/30 dark:text-green-400"
+                          ? "border-ef-mist bg-ef-mist/50 text-ef-ocean dark:border-ef-navy/30 dark:text-ef-cyan"
                           : "border-border text-muted-foreground"
                       }
                     >
@@ -379,7 +379,7 @@ export function AddRecoveryDialog({
               </div>
             </div>
             <Button
-              className="mt-1 bg-green-700 text-white hover:bg-green-800"
+              className="mt-1 bg-ef-ocean text-white hover:bg-ef-ocean"
               disabled={!canStep1}
               onClick={advance}
             >
@@ -404,7 +404,7 @@ export function AddRecoveryDialog({
                   }}
                   className={`flex flex-col gap-0.5 rounded-lg border px-4 py-3 text-left transition-colors ${
                     form.reason === r.value
-                      ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950/40"
+                      ? "border-ef-300 bg-ef-mist dark:border-ef-ocean dark:bg-ef-ink/40"
                       : "border-border hover:bg-muted"
                   }`}
                 >
@@ -416,7 +416,7 @@ export function AddRecoveryDialog({
               ))}
             </div>
             <Button
-              className="mt-1 bg-green-700 text-white hover:bg-green-800"
+              className="mt-1 bg-ef-ocean text-white hover:bg-ef-ocean"
               onClick={advance}
             >
               Next →
@@ -459,7 +459,7 @@ export function AddRecoveryDialog({
               </div>
             </div>
             <Button
-              className="mt-1 bg-green-700 text-white hover:bg-green-800"
+              className="mt-1 bg-ef-ocean text-white hover:bg-ef-ocean"
               disabled={!canStep3}
               onClick={advance}
             >
@@ -491,14 +491,14 @@ export function AddRecoveryDialog({
                 disabled={!form.message}
               >
                 {copied ? (
-                  <Check className="size-4 text-green-600" />
+                  <Check className="size-4 text-ef-ocean" />
                 ) : (
                   <ClipboardCopy className="size-4" />
                 )}
                 {copied ? "Copied!" : "Copy now"}
               </Button>
               <Button
-                className="gap-2 bg-green-700 text-white hover:bg-green-800"
+                className="gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
                 onClick={() => void handleSaveForLater()}
                 disabled={isSaving}
               >

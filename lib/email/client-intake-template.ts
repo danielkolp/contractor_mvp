@@ -25,7 +25,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
     contractorName,
     projectTitle,
     magicLink,
-    appName = "EstiGator",
+    appName = process.env.NEXT_PUBLIC_APP_NAME ?? "Contractor Portal",
   } = args
 
   const safeName       = escapeHtml(clientName)
@@ -56,7 +56,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
 
           <!-- Green header -->
           <tr>
-            <td style="background-color:#15803D; padding:20px 32px; border-radius:10px 10px 0 0;">
+            <td style="background-color:#024D8B; padding:20px 32px; border-radius:10px 10px 0 0;">
               <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                            font-size:14px; font-weight:700; color:#FFFFFF; letter-spacing:0.06em;">
                 ${safeApp}
@@ -108,7 +108,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
               <!-- CTA button -->
               <div style="text-align:center; margin-bottom:28px;">
                 <a href="${safeLink}"
-                   style="display:inline-block; background-color:#15803D; color:#FFFFFF;
+                   style="display:inline-block; background-color:#024D8B; color:#FFFFFF;
                           font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                           font-size:15px; font-weight:600; text-decoration:none;
                           padding:14px 36px; border-radius:8px; letter-spacing:0.01em;">
@@ -144,7 +144,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
 }
 
 export function renderClientIntakeEmailText(args: ClientIntakeEmailArgs): string {
-  const { clientName, contractorName, projectTitle, magicLink, appName = "EstiGator" } = args
+  const { clientName, contractorName, projectTitle, magicLink, appName = process.env.NEXT_PUBLIC_APP_NAME ?? "Contractor Portal" } = args
 
   return [
     `Request Submitted`,

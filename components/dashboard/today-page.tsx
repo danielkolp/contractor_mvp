@@ -623,7 +623,7 @@ export function TodayPage() {
                 {messageReadyItems.length > 0 && (
                   <ActionSection
                     label="Message ready"
-                    dot="bg-green-500"
+                    dot="bg-ef-sky"
                     count={messageReadyItems.length}
                   >
                     {messageReadyItems.map((item) => (
@@ -682,7 +682,7 @@ function HeroSummary({
 }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-br from-ef-sky/5 via-transparent to-transparent" />
       <div className="relative flex flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -707,7 +707,7 @@ function HeroSummary({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
-            className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
             onClick={onStartHighestValue}
           >
             <TrendingUp className="size-4" />
@@ -831,7 +831,7 @@ function InvoiceActionCard({
         <div className="flex shrink-0 items-center gap-2">
           <Button
             size="sm"
-            className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
             disabled={isSaving}
             onClick={() => onAddToQueue(invoice)}
           >
@@ -868,18 +868,18 @@ function EstimateActionCard({
   onSnooze: (estimate: EstimateRow) => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-green-400">
+    <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan">
       <div className="flex flex-col gap-3 py-4 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/25">
-            <ClipboardList className="size-3.5 text-green-600 dark:text-green-400" />
+          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
+            <ClipboardList className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <p className="truncate font-semibold text-foreground">
                 {estimate.client_name || "No client"}
               </p>
-              <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+              <span className="shrink-0 rounded-full bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300">
                 follow-up due
               </span>
             </div>
@@ -897,7 +897,7 @@ function EstimateActionCard({
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="bg-green-700 text-white hover:bg-green-800"
+            className="bg-ef-ocean text-white hover:bg-ef-ocean"
             disabled={isSaving}
             onClick={() => onWon(estimate)}
           >
@@ -930,18 +930,18 @@ function EstimateActionCard({
 
 function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-green-600">
+    <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-ocean">
       <div className="flex flex-col gap-3 py-4 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/25">
-            <ClipboardList className="size-3.5 text-green-700 dark:text-green-400" />
+          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
+            <ClipboardList className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <p className="truncate font-semibold text-foreground">
                 {estimate.client_name || "No client"}
               </p>
-              <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+              <span className="shrink-0 rounded-full bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300">
                 accepted
               </span>
             </div>
@@ -958,7 +958,7 @@ function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
         </div>
         <Button
           size="sm"
-          className="bg-green-700 text-white hover:bg-green-800"
+          className="bg-ef-ocean text-white hover:bg-ef-ocean"
           asChild
         >
           <Link href="/dashboard/estimates">Open estimate</Link>
@@ -979,19 +979,19 @@ function OnboardingState({
 }) {
   return (
     <div className="mx-auto max-w-md px-4 py-16 text-center">
-      <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-2xl bg-green-100 dark:bg-green-900/30">
-        <Sparkles className="size-7 text-green-700 dark:text-green-400" />
+      <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-2xl bg-ef-mist dark:bg-ef-navy/30">
+        <Sparkles className="size-7 text-ef-ocean dark:text-ef-cyan" />
       </div>
       <h2 className="text-xl font-semibold text-foreground">
         Let&apos;s set up your first recovery job.
       </h2>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        Add a customer and what happened — EstiGator will generate a follow-up
+        Add a customer and what happened — Euroflo will generate a follow-up
         message and show you who to contact today.
       </p>
       <div className="mt-8 flex flex-col gap-3">
         <Button
-          className="w-full gap-2 bg-green-700 text-white hover:bg-green-800"
+          className="w-full gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
           onClick={onAdd}
         >
           <Plus className="size-4" />
@@ -1029,12 +1029,12 @@ function AllCaughtUp({
   onAdd: () => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50/60 dark:border-green-900/50 dark:from-green-950/30 dark:to-emerald-950/20">
-      <div className="absolute right-0 top-0 size-40 -translate-y-1/2 translate-x-1/2 rounded-full bg-green-100/60 blur-3xl dark:bg-green-900/20" />
+    <div className="relative overflow-hidden rounded-2xl border border-ef-200 bg-gradient-to-br from-ef-mist to-emerald-50/60 dark:border-ef-navy/50 dark:from-ef-ink/30 dark:to-emerald-950/20">
+      <div className="absolute right-0 top-0 size-40 -translate-y-1/2 translate-x-1/2 rounded-full bg-ef-mist/60 blur-3xl dark:bg-ef-navy/20" />
       <div className="relative px-8 py-10 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-ef-mist dark:bg-ef-navy/40">
           <svg
-            className="size-6 text-green-600 dark:text-green-400"
+            className="size-6 text-ef-ocean dark:text-ef-cyan"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -1043,23 +1043,23 @@ function AllCaughtUp({
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h3 className="text-base font-semibold text-green-800 dark:text-green-200">
+        <h3 className="text-base font-semibold text-ef-ocean dark:text-ef-200">
           You&apos;re all caught up for today.
         </h3>
-        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-green-700/70 dark:text-green-300/70">
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ef-ocean/70 dark:text-ef-300/70">
           {atRisk > 0
             ? `${money.format(atRisk)} is being tracked.${waitingCount > 0 ? ` ${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.` : ""} Come back tomorrow.`
             : "No pending follow-ups. Come back tomorrow or add a new recovery job."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button
-            className="gap-2 bg-green-700 text-white hover:bg-green-800"
+            className="gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
             onClick={onAdd}
           >
             <Plus className="size-4" />
             Add recovery job
           </Button>
-          <Button variant="outline" className="gap-2 border-green-200 bg-white/80 text-green-800 hover:bg-white dark:border-green-800 dark:bg-green-950/40 dark:text-green-200" asChild>
+          <Button variant="outline" className="gap-2 border-ef-200 bg-white/80 text-ef-ocean hover:bg-white dark:border-ef-ocean dark:bg-ef-ink/40 dark:text-ef-200" asChild>
             <Link href="/dashboard/recoveries">
               <ArrowUpRight className="size-4" />
               View all recoveries

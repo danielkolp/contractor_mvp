@@ -214,7 +214,7 @@ export function ServiceAreaSelect({
                           className={cn(
                             "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
                             selected
-                              ? "border-green-600 bg-green-600 text-white"
+                              ? "border-ef-ocean bg-ef-ocean text-white"
                               : "border-input bg-background"
                           )}
                         >

@@ -16,10 +16,10 @@ export function BrandLogo({
   if (variant === "mark") {
     return (
       <Image
-        src="/images/EstiGator-Logo.png"
-        alt="EstiGator"
-        width={200}
-        height={200}
+        src="/images/euroflo-mark.svg"
+        alt="Euroflo"
+        width={128}
+        height={128}
         priority={priority}
         className={cn("size-9 shrink-0 object-contain", className)}
       />
@@ -27,13 +27,24 @@ export function BrandLogo({
   }
 
   return (
-    <Image
-      src="/images/EstiGator-LogoAndText.png"
-      alt="EstiGator"
-      width={700}
-      height={200}
-      priority={priority}
-      className={cn("h-10 w-auto shrink-0 object-contain", className)}
-    />
+    <div
+      className={cn(
+        "flex h-10 min-w-0 shrink-0 items-center gap-2.5 text-ef-ink",
+        className
+      )}
+      aria-label="Euroflo"
+    >
+      <Image
+        src="/images/euroflo-mark.svg"
+        alt=""
+        width={128}
+        height={128}
+        priority={priority}
+        className="size-full max-h-10 max-w-10 shrink-0 object-contain"
+      />
+      <span className="font-display text-[1.55rem] font-bold leading-none tracking-normal">
+        Euroflo
+      </span>
+    </div>
   )
 }

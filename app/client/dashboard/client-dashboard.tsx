@@ -57,7 +57,7 @@ const STATUS_COLOR: Record<string, StatusColor> = {
 const colorClasses: Record<StatusColor, { badge: string; dot: string }> = {
   gray:   { badge: "bg-gray-100 text-gray-700",           dot: "bg-gray-400" },
   yellow: { badge: "bg-amber-50 text-amber-700",           dot: "bg-amber-400" },
-  green:  { badge: "bg-green-50 text-green-700",           dot: "bg-green-500" },
+  green:  { badge: "bg-ef-mist text-ef-ocean",           dot: "bg-ef-sky" },
   red:    { badge: "bg-red-50 text-red-700",               dot: "bg-red-400" },
 }
 
@@ -124,7 +124,7 @@ function ProjectCard({
               </span>
             )}
           </div>
-          <h3 className="mt-2.5 truncate text-base font-semibold text-gray-900 group-hover:text-green-700 transition-colors">
+          <h3 className="mt-2.5 truncate text-base font-semibold text-gray-900 group-hover:text-ef-ocean transition-colors">
             {job.title}
           </h3>
           <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">
@@ -132,7 +132,7 @@ function ProjectCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="rounded-xl border border-gray-100 bg-gray-50 p-2 text-gray-400 transition group-hover:border-green-200 group-hover:bg-green-50 group-hover:text-green-600">
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-2 text-gray-400 transition group-hover:border-ef-200 group-hover:bg-ef-mist group-hover:text-ef-ocean">
             <ArrowRight className="h-4 w-4" />
           </div>
         </div>
@@ -197,7 +197,7 @@ export function ClientDashboardPage() {
     const ids = rows.map((r) => r.id)
     const { data: ests } = await supabase
       .from("estimates")
-      .select("id, job_request_id, status, created_at")
+      .select("*")
       .in("job_request_id", ids)
       .in("status", ["Sent", "Follow-up Needed", "Follow-up Sent", "Interested"])
 
@@ -247,8 +247,8 @@ export function ClientDashboardPage() {
             <div className="text-2xl font-bold text-amber-600">{pendingCount}</div>
             <div className="mt-0.5 text-xs text-gray-500">In progress</div>
           </div>
-          <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-center shadow-xs">
-            <div className="text-2xl font-bold text-green-700">{actionCount}</div>
+          <div className="rounded-xl border border-ef-200 bg-ef-mist p-3 text-center shadow-xs">
+            <div className="text-2xl font-bold text-ef-ocean">{actionCount}</div>
             <div className="mt-0.5 text-xs text-gray-500">Need action</div>
           </div>
         </div>

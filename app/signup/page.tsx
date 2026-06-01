@@ -41,7 +41,7 @@ export default async function SignupPage() {
         <div className="grid min-w-0 w-full gap-10 lg:grid-cols-[0.95fr_1.05fr]">
           {/* Left: pitch */}
           <section className="flex min-w-0 flex-col justify-center">
-            <Link href="/" className="mb-10 flex items-center" aria-label="EstiGator home">
+            <Link href="/" className="mb-10 flex items-center" aria-label="Euroflo home">
               <BrandLogo className="h-10" priority />
             </Link>
 
@@ -56,15 +56,15 @@ export default async function SignupPage() {
             <div className="mt-8 grid gap-3">
               {bullets.map((bullet) => (
                 <div key={bullet} className="flex items-start gap-3">
-                  <CheckCircle2 className="size-5 shrink-0 text-green-600 mt-0.5" />
+                  <CheckCircle2 className="size-5 shrink-0 text-ef-ocean mt-0.5" />
                   <span className="text-sm text-zinc-700">{bullet}</span>
                 </div>
               ))}
             </div>
 
-            <div className="mt-8 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4">
-              <ShieldCheck className="size-5 shrink-0 text-green-700 mt-0.5" />
-              <p className="text-sm leading-6 text-green-900">
+            <div className="mt-8 flex items-start gap-3 rounded-xl border border-ef-200 bg-ef-mist p-4">
+              <ShieldCheck className="size-5 shrink-0 text-ef-ocean mt-0.5" />
+              <p className="text-sm leading-6 text-ef-navy">
                 <span className="font-medium">You stay in control.</span> Every
                 follow-up message is drafted for your review. Nothing is sent
                 without your approval.
@@ -86,7 +86,7 @@ export default async function SignupPage() {
                 Already have an account?{" "}
                 <Link
                   href="/login"
-                  className="font-medium text-green-700 hover:underline"
+                  className="font-medium text-ef-ocean hover:underline"
                 >
                   Log in
                 </Link>

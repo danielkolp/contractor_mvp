@@ -129,7 +129,7 @@ export default async function EstimatePrintPage({
         <div className="mx-auto w-[794px] print:w-full my-6 print:my-0 bg-white shadow-2xl print:shadow-none">
 
           {/* ── Top accent ── */}
-          <div className="h-[5px] bg-green-700 print:bg-green-700" />
+          <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />
 
           {/* ── Header ── */}
           <div className="flex items-start justify-between gap-6 px-8 pt-7 pb-5">
@@ -148,7 +148,7 @@ export default async function EstimatePrintPage({
               </div>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-[2rem] font-black tracking-widest text-green-700 leading-none">ESTIMATE</p>
+              <p className="text-[2rem] font-black tracking-widest text-ef-ocean leading-none">ESTIMATE</p>
               <p className="mt-1.5 text-base font-bold text-zinc-700">#{estimate.estimate_number}</p>
               <div className="mt-2">
                 <span className={`inline-block rounded px-2.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide
@@ -173,7 +173,7 @@ export default async function EstimatePrintPage({
             )}
             <div className="flex-1 min-w-[110px] px-8 py-3">
               <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400">Estimate Total</p>
-              <p className="mt-0.5 font-black text-green-700">{money.format(total)}</p>
+              <p className="mt-0.5 font-black text-ef-ocean">{money.format(total)}</p>
             </div>
           </div>
 
@@ -237,7 +237,7 @@ export default async function EstimatePrintPage({
                         <span className="tabular-nums">{money.format(totalTax)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center rounded-md bg-green-700 px-3 py-2 text-white">
+                    <div className="flex justify-between items-center rounded-md bg-ef-ocean px-3 py-2 text-white">
                       <span className="text-xs font-bold uppercase tracking-wide">Estimate Total</span>
                       <span className="text-base font-black tabular-nums">{money.format(total)}</span>
                     </div>
@@ -250,7 +250,7 @@ export default async function EstimatePrintPage({
                   <p className="text-xs font-medium text-zinc-500">Estimate Total</p>
                   <p className="text-[0.65rem] text-zinc-400 mt-0.5">All labour, materials, and equipment included.</p>
                 </div>
-                <p className="text-2xl font-black tabular-nums text-green-700">{money.format(estimate.amount)}</p>
+                <p className="text-2xl font-black tabular-nums text-ef-ocean">{money.format(estimate.amount)}</p>
               </div>
             )}
           </div>
@@ -268,7 +268,7 @@ export default async function EstimatePrintPage({
                   <div key={label} className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5">
                     <p className="text-[0.6rem] font-bold text-zinc-600">{label}</p>
                     <p className="text-[0.55rem] text-zinc-400 mt-0.5">{sub} · {pct}</p>
-                    <p className="mt-1.5 text-sm font-black text-green-700 tabular-nums">{money.format(amt)}</p>
+                    <p className="mt-1.5 text-sm font-black text-ef-ocean tabular-nums">{money.format(amt)}</p>
                   </div>
                 ))}
               </div>
@@ -326,11 +326,11 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Bottom accent ── */}
-          <div className="h-[5px] bg-green-700 print:bg-green-700" />
+          <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />
 
           {/* ── Footer ── */}
           <div className="flex items-center justify-between px-8 py-2 text-[0.6rem] text-zinc-400">
-            <span>Generated with EstiGator</span>
+            <span>Generated with Euroflo</span>
             <span>{companyName} &middot; #{estimate.estimate_number}</span>
           </div>
         </div>

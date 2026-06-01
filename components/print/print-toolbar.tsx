@@ -13,7 +13,7 @@ export function PrintToolbar({ backHref }: { backHref: string }) {
         </a>
       </Button>
       <span className="text-sm font-medium text-zinc-500">
-        EstiGator Document Preview
+        Euroflo Document Preview
       </span>
       <div className="flex items-center gap-2">
         <Button
@@ -28,7 +28,7 @@ export function PrintToolbar({ backHref }: { backHref: string }) {
         </Button>
         <Button
           size="sm"
-          className="bg-green-700 hover:bg-green-800 text-white"
+          className="bg-ef-ocean hover:bg-ef-ocean text-white"
           onClick={() => window.print()}
         >
           <Printer className="mr-1.5 size-4" />

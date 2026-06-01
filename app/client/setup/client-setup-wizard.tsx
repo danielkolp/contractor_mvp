@@ -129,7 +129,7 @@ export function ClientSetupWizard() {
         {screen === "welcome" && (
           <div className="flex flex-col gap-6 text-center">
             <div>
-              <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+              <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-ef-mist text-ef-ocean dark:bg-ef-ink/40 dark:text-ef-300">
                 <MapPin className="size-8" />
               </div>
               <h1 className="text-2xl font-bold tracking-tight">
@@ -151,7 +151,7 @@ export function ClientSetupWizard() {
                     "You receive estimates and choose who to hire",
                   ].map((step, i) => (
                     <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground">
-                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-semibold text-green-700 dark:bg-green-950/60 dark:text-green-300">
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-ef-mist text-xs font-semibold text-ef-ocean dark:bg-ef-ink/60 dark:text-ef-300">
                         {i + 1}
                       </span>
                       {step}
@@ -161,7 +161,7 @@ export function ClientSetupWizard() {
               </div>
 
               <Button
-                className="bg-green-700 text-white hover:bg-green-800"
+                className="bg-ef-ocean text-white hover:bg-ef-ocean"
                 onClick={() => setScreen("step1")}
               >
                 Describe my project
@@ -194,9 +194,9 @@ export function ClientSetupWizard() {
                       variant="outline"
                       className={
                         i === currentIndex
-                          ? "border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200"
+                          ? "border-ef-200 bg-ef-mist text-ef-ocean dark:border-ef-navy/60 dark:bg-ef-ink/40 dark:text-ef-200"
                           : i < currentIndex
-                            ? "border-green-100 text-green-600 dark:border-green-900/30 dark:text-green-400"
+                            ? "border-ef-mist text-ef-ocean dark:border-ef-navy/30 dark:text-ef-cyan"
                             : "border-border text-muted-foreground"
                       }
                     >
@@ -238,7 +238,7 @@ export function ClientSetupWizard() {
                       />
                     </div>
                     <Button
-                      className="bg-green-700 text-white hover:bg-green-800"
+                      className="bg-ef-ocean text-white hover:bg-ef-ocean"
                       disabled={!canStep1}
                       onClick={() => setScreen("step2")}
                     >
@@ -273,7 +273,7 @@ export function ClientSetupWizard() {
                       />
                     </div>
                     <Button
-                      className="bg-green-700 text-white hover:bg-green-800"
+                      className="bg-ef-ocean text-white hover:bg-ef-ocean"
                       disabled={!canStep2}
                       onClick={() => setScreen("step3")}
                     >
@@ -310,7 +310,7 @@ export function ClientSetupWizard() {
                               onClick={() => update("urgency", opt.value)}
                               className={`flex flex-col gap-0.5 rounded-lg border px-4 py-3 text-left transition-colors ${
                                 form.urgency === opt.value
-                                  ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950/40"
+                                  ? "border-ef-300 bg-ef-mist dark:border-ef-ocean dark:bg-ef-ink/40"
                                   : "border-border hover:bg-muted"
                               }`}
                             >
@@ -324,7 +324,7 @@ export function ClientSetupWizard() {
                       </div>
                     </div>
                     <Button
-                      className="gap-2 bg-green-700 text-white hover:bg-green-800"
+                      className="gap-2 bg-ef-ocean text-white hover:bg-ef-ocean"
                       disabled={!canStep3 || isLoading}
                       onClick={() => void handleSubmit()}
                     >

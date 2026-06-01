@@ -138,7 +138,7 @@ function StatusBadge({ item }: { item: RecoveryItem }) {
       )
     case "message_ready":
       return (
-        <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
+        <Badge variant="outline" className="border-ef-200 bg-ef-mist text-ef-ocean dark:border-ef-navy/60 dark:bg-ef-ink/40 dark:text-ef-200">
           Message ready
         </Badge>
       )
@@ -441,7 +441,7 @@ export default function RecoveriesPage() {
           Refresh
         </Button>
         <Button
-          className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+          className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
           onClick={() => setAddOpen(true)}
         >
           <Plus className="size-4" />
@@ -516,7 +516,7 @@ export default function RecoveriesPage() {
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                       activeTab === tab.value
-                        ? "bg-green-700 text-white"
+                        ? "bg-ef-ocean text-white"
                         : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                     )}
                   >
@@ -672,7 +672,7 @@ function RecoveryRow({
               "gap-1.5",
               isCheckInDue(item)
                 ? "bg-sky-600 text-white hover:bg-sky-700"
-                : "bg-green-700 text-white hover:bg-green-800"
+                : "bg-ef-ocean text-white hover:bg-ef-ocean"
             )}
             disabled={isSaving}
             onClick={() => onPrimaryAction(item)}
@@ -781,14 +781,14 @@ function StatCard({
     <div
       className={cn(
         "rounded-xl border border-border bg-card px-4 py-3 shadow-sm",
-        highlight && "border-green-200 bg-green-50/50 dark:border-green-900/40 dark:bg-green-950/20",
+        highlight && "border-ef-200 bg-ef-mist/50 dark:border-ef-navy/40 dark:bg-ef-ink/20",
         className
       )}
     >
       <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
         {label}
       </p>
-      <p className={cn("mt-1 text-2xl font-bold tabular-nums", highlight && "text-green-800 dark:text-green-200")}>
+      <p className={cn("mt-1 text-2xl font-bold tabular-nums", highlight && "text-ef-ocean dark:text-ef-200")}>
         {value}
       </p>
       <p className="mt-0.5 text-xs text-muted-foreground">{sublabel}</p>
@@ -818,7 +818,7 @@ function EmptyTabState({ tab, onAdd }: { tab: TabFilter; onAdd: () => void }) {
         <p className="font-semibold">{title}</p>
         <p className="mt-1 text-sm text-muted-foreground">{desc}</p>
         {tab === "all" && (
-          <Button className="mt-4 gap-2 bg-green-700 text-white hover:bg-green-800" onClick={onAdd}>
+          <Button className="mt-4 gap-2 bg-ef-ocean text-white hover:bg-ef-ocean" onClick={onAdd}>
             <Plus className="size-4" />
             Add recovery
           </Button>

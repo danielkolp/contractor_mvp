@@ -114,7 +114,7 @@ function StatusPill({
       )
     case "message_ready":
       return (
-        <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
+        <Badge variant="outline" className="border-ef-200 bg-ef-mist text-ef-ocean dark:border-ef-navy/60 dark:bg-ef-ink/40 dark:text-ef-200">
           Message ready
         </Badge>
       )
@@ -215,7 +215,7 @@ function StandardCard({
   }
 
   const accentColor = isMessageReady
-    ? "before:bg-green-500"
+    ? "before:bg-ef-sky"
     : "before:bg-amber-400"
 
   return (
@@ -307,7 +307,7 @@ function StandardCard({
               /* Primary: email send */
               <Button
                 size="sm"
-                className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+                className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
                 onClick={() => onSendFollowUp(item)}
                 disabled={isSaving}
               >
@@ -318,7 +318,7 @@ function StandardCard({
               /* Primary fallback: copy when no email */
               <Button
                 size="sm"
-                className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+                className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
                 onClick={() => void handleCopy()}
                 disabled={isSaving}
               >
@@ -334,7 +334,7 @@ function StandardCard({
             /* needs_follow_up primary */
             <Button
               size="sm"
-              className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+              className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
               onClick={() => setMsgOpen(true)}
               disabled={isSaving}
             >
@@ -352,7 +352,7 @@ function StandardCard({
               className="gap-1.5"
             >
               {copied ? (
-                <Check className="size-3.5 text-green-600" />
+                <Check className="size-3.5 text-ef-ocean" />
               ) : (
                 <ClipboardCopy className="size-3.5" />
               )}
@@ -494,7 +494,7 @@ function CheckInCard({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="gap-1.5 bg-green-700 text-white hover:bg-green-800"
+            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
             onClick={() => onPaid(item)}
             disabled={isSaving}
           >

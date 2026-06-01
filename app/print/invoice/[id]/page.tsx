@@ -121,7 +121,7 @@ export default async function InvoicePrintPage({
           )}
 
           {/* ── Top accent ── */}
-          <div className="h-[5px] bg-green-700 print:bg-green-700" />
+          <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />
 
           {/* ── Header ── */}
           <div className="flex items-start justify-between gap-6 px-8 pt-7 pb-5">
@@ -140,7 +140,7 @@ export default async function InvoicePrintPage({
               </div>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-[2rem] font-black tracking-widest text-green-700 leading-none">INVOICE</p>
+              <p className="text-[2rem] font-black tracking-widest text-ef-ocean leading-none">INVOICE</p>
               <p className="mt-1.5 text-base font-bold text-zinc-700">#{invoice.invoice_number}</p>
               <div className="mt-2">
                 <span className={`inline-block rounded px-2.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide
@@ -236,7 +236,7 @@ export default async function InvoicePrintPage({
                         <span className="tabular-nums">{money.format(totalTax)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center rounded-md bg-green-700 px-3 py-2 text-white">
+                    <div className="flex justify-between items-center rounded-md bg-ef-ocean px-3 py-2 text-white">
                       <span className="text-xs font-bold uppercase tracking-wide">{isPaid ? "Total Paid" : "Total Due"}</span>
                       <span className="text-base font-black tabular-nums">{money.format(total)}</span>
                     </div>
@@ -252,7 +252,7 @@ export default async function InvoicePrintPage({
                   {invoice.project_name && <p className="text-xs text-zinc-500 mt-0.5">{invoice.project_name}</p>}
                 </div>
                 <p className={`text-2xl font-black tabular-nums
-                  ${isPaid ? "text-emerald-600" : isOverdue ? "text-red-600" : "text-green-700"}`}>
+                  ${isPaid ? "text-emerald-600" : isOverdue ? "text-red-600" : "text-ef-ocean"}`}>
                   {money.format(invoice.amount)}
                 </p>
               </div>
@@ -302,11 +302,11 @@ export default async function InvoicePrintPage({
           )}
 
           {/* ── Bottom accent ── */}
-          <div className="h-[5px] bg-green-700 print:bg-green-700" />
+          <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />
 
           {/* ── Footer ── */}
           <div className="flex items-center justify-between px-8 py-2 text-[0.6rem] text-zinc-400">
-            <span>Generated with EstiGator</span>
+            <span>Generated with Euroflo</span>
             <span>{companyName} &middot; #{invoice.invoice_number}</span>
           </div>
         </div>

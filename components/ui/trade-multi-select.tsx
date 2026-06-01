@@ -154,7 +154,7 @@ export function TradeMultiSelect({
                     className={cn(
                       "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
                       selected
-                        ? "border-green-600 bg-green-600 text-white"
+                        ? "border-ef-ocean bg-ef-ocean text-white"
                         : "border-input bg-background"
                     )}
                   >
@@ -173,14 +173,14 @@ export function TradeMultiSelect({
           {value.map((trade) => (
             <span
               key={trade}
-              className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:border-green-900/40 dark:bg-green-950/30 dark:text-green-300"
+              className="inline-flex items-center gap-1 rounded-md border border-ef-200 bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:border-ef-navy/40 dark:bg-ef-ink/30 dark:text-ef-300"
             >
               {trade}
               <button
                 type="button"
                 disabled={disabled}
                 onClick={(e) => removeTrade(trade, e)}
-                className="ml-0.5 rounded text-green-600 hover:text-green-900 disabled:cursor-not-allowed dark:text-green-400 dark:hover:text-green-200"
+                className="ml-0.5 rounded text-ef-ocean hover:text-ef-navy disabled:cursor-not-allowed dark:text-ef-cyan dark:hover:text-ef-200"
                 aria-label={`Remove ${trade}`}
               >
                 <X className="size-3" />

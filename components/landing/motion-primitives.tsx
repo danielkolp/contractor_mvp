@@ -144,7 +144,7 @@ export function CursorSpotlight({ containerRef }: { containerRef: RefObject<HTML
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       style={{
-        background: `radial-gradient(180px circle at ${x}px ${y}px, rgba(22,163,74,0.08), transparent 70%)`,
+        background: `radial-gradient(180px circle at ${x}px ${y}px, rgba(2,77,139,0.09), transparent 70%)`,
       }}
     />
   )
@@ -256,10 +256,10 @@ export function SectionBadge({
 }) {
   const classes = {
     green:
-      "border-green-200 bg-green-50 text-green-800 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]",
+      "border-ef-200 bg-ef-mist text-ef-ocean shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]",
     white:
-      "border-white/75 bg-white/80 text-green-950 shadow-sm shadow-green-950/5 backdrop-blur",
-    dark: "border-green-800 bg-green-950 text-green-100",
+      "border-white/75 bg-white/80 text-ef-ink shadow-sm shadow-ef-ink/5 backdrop-blur",
+    dark: "border-ef-ocean bg-ef-ink text-ef-mist",
   }
 
   return (
@@ -282,21 +282,21 @@ export function SectionBadge({
 const BLOBS = [
   {
     top: "2%", left: "-14%", w: "38rem", h: "38rem",
-    color: "bg-green-100/70",
+    color: "bg-ef-mist/70",
     dur: 20, shift: -80, delay: 0,
     br: "62% 38% 54% 46% / 44% 62% 38% 56%",
     mobile: true,
   },
   {
     top: "38%", left: "-8%", w: "22rem", h: "22rem",
-    color: "bg-green-200/40",
+    color: "bg-ef-200/40",
     dur: 15, shift: -40, delay: 2.5,
     br: "48% 52% 42% 58% / 60% 44% 56% 40%",
     mobile: false,
   },
   {
     top: "8%", right: "-10%", w: "28rem", h: "28rem",
-    color: "bg-green-50/90",
+    color: "bg-ef-mist/90",
     dur: 22, shift: -55, delay: 1,
     br: "54% 46% 62% 38% / 38% 56% 44% 62%",
     mobile: false,
@@ -383,9 +383,9 @@ export function AnimatedProgressBar({
 }) {
   const reduced = usePRM()
   return (
-    <div className={`h-1.5 overflow-hidden rounded-full ${dark ? "bg-green-800/50" : "bg-green-100"}`}>
+    <div className={`h-1.5 overflow-hidden rounded-full ${dark ? "bg-ef-ocean/50" : "bg-ef-mist"}`}>
       <m.div
-        className={`h-full rounded-full ${dark ? "bg-green-400" : "bg-green-600"}`}
+        className={`h-full rounded-full ${dark ? "bg-ef-cyan" : "bg-ef-ocean"}`}
         initial={reduced ? false : { scaleX: 0, originX: 0 }}
         whileInView={{ scaleX: value / 100 }}
         viewport={VIEWPORT}
@@ -412,10 +412,10 @@ export function ScrollProgressBeam({
   return (
     <div
       aria-hidden="true"
-      className="absolute -left-4 top-0 h-full w-0.5 overflow-hidden rounded-full bg-green-100 sm:-left-6"
+      className="absolute -left-4 top-0 h-full w-0.5 overflow-hidden rounded-full bg-ef-mist sm:-left-6"
     >
       <m.div
-        className="w-full origin-top rounded-full bg-green-600"
+        className="w-full origin-top rounded-full bg-ef-ocean"
         style={{ scaleY: scaleX, height: "100%" }}
       />
     </div>

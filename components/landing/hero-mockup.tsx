@@ -22,8 +22,8 @@ import { EASE, VIEWPORT, usePRM, AnimatedProgressBar, AnimatedNumber } from "./m
 
 const QUEUE_ROWS = [
   { id: "r1", client: "North Ridge Homes", type: "Invoice INV-1048", amount: "$4,850", status: "7 days overdue", progress: 82, statusColor: "text-red-600 bg-red-50" },
-  { id: "r2", client: "Harbor View HOA",   type: "Estimate EST-2211", amount: "$8,300",  status: "follow-up ready", progress: 64, statusColor: "text-green-700 bg-green-50" },
-  { id: "r3", client: "Mason & Co.",        type: "Repeat work",       amount: "$12,600", status: "draft ready",    progress: 91, statusColor: "text-green-700 bg-green-50" },
+  { id: "r2", client: "Harbor View HOA",   type: "Estimate EST-2211", amount: "$8,300",  status: "follow-up ready", progress: 64, statusColor: "text-ef-ocean bg-ef-mist" },
+  { id: "r3", client: "Mason & Co.",        type: "Repeat work",       amount: "$12,600", status: "draft ready",    progress: 91, statusColor: "text-ef-ocean bg-ef-mist" },
 ]
 
 // ─── Metric card ──────────────────────────────────────────────────────────────
@@ -50,17 +50,17 @@ function MetricCard({
   const reduced = usePRM()
   return (
     <m.div
-      className="rounded-2xl border border-green-100 bg-white p-4 shadow-sm shadow-green-950/8"
+      className="rounded-2xl border border-ef-mist bg-white p-4 shadow-sm shadow-ef-ink/8"
       initial={reduced ? false : { opacity: 0, y: 18, scale: 0.94 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.6, ease: EASE, delay }}
     >
       <div className="flex items-center justify-between">
-        <div className="grid size-9 place-items-center rounded-xl bg-green-50 text-green-700">
+        <div className="grid size-9 place-items-center rounded-xl bg-ef-mist text-ef-ocean">
           <Icon className="size-4" />
         </div>
         <m.span
-          className="rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-green-700"
+          className="rounded-full bg-ef-mist px-2.5 py-1 text-[11px] font-black text-ef-ocean"
           initial={reduced ? false : { opacity: 0, x: 8 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4, ease: EASE, delay: delay + 0.15 }}
@@ -147,19 +147,19 @@ function DraftBubble() {
       {visible && (
         <m.div
           key="draft-bubble"
-          className="absolute bottom-4 right-3 z-20 hidden w-52 rounded-2xl border border-green-100 bg-white p-3 shadow-xl shadow-green-950/10 lg:block"
+          className="absolute bottom-4 right-3 z-20 hidden w-52 rounded-2xl border border-ef-mist bg-white p-3 shadow-xl shadow-ef-ink/10 lg:block"
           initial={{ opacity: 0, y: 14, scale: 0.94 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.94 }}
           transition={{ duration: 0.45, ease: EASE }}
         >
           <div className="mb-2.5 flex items-center gap-2">
-            <div className="grid size-7 place-items-center rounded-full bg-green-100 text-green-700">
+            <div className="grid size-7 place-items-center rounded-full bg-ef-mist text-ef-ocean">
               <MessageSquareText className="size-3.5" />
             </div>
             <div className="text-xs font-black text-zinc-950">Draft approved</div>
           </div>
-          <div className="rounded-xl bg-green-50 p-3 text-[11px] leading-5 text-green-950">
+          <div className="rounded-xl bg-ef-mist p-3 text-[11px] leading-5 text-ef-ink">
             Quick reminder on the invoice from last week. Let me know if you need the link again.
           </div>
         </m.div>
@@ -207,14 +207,14 @@ export function AnimatedHeroMockup() {
     <div ref={containerRef} className="relative mx-auto w-full max-w-[40rem] min-w-0 perspective-[1200px] lg:mx-0 lg:max-w-none">
       {/* Floating stat card above-left */}
       <m.div
-        className="absolute left-4 top-8 z-20 hidden w-48 rounded-2xl border border-green-100 bg-white p-4 shadow-xl shadow-green-950/12 backdrop-blur md:block xl:-left-3"
+        className="absolute left-4 top-8 z-20 hidden w-48 rounded-2xl border border-ef-mist bg-white p-4 shadow-xl shadow-ef-ink/12 backdrop-blur md:block xl:-left-3"
         initial={reduced ? false : { opacity: 0, x: -20, scale: 0.9 }}
         animate={reduced ? { opacity: 1, x: 0, scale: 1 } : { opacity: 1, x: 0, scale: 1, y: [0, -8, 0], rotate: [0, -1, 0] }}
         transition={reduced ? { duration: 0.65, ease: EASE, delay: 1.1 } : { opacity: { duration: 0.65, ease: EASE, delay: 1.1 }, x: { duration: 0.65, ease: EASE, delay: 1.1 }, scale: { duration: 0.65, ease: EASE, delay: 1.1 }, y: { duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1.8 }, rotate: { duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1.8 } }}
       >
         <div>
           <div className="text-xs font-bold text-zinc-500">Found this week</div>
-          <div className="mt-1 text-3xl font-black tracking-tight text-green-700">
+          <div className="mt-1 text-3xl font-black tracking-tight text-ef-ocean">
             <AnimatedNumber value={24.8} prefix="$" suffix="k" decimals={1} />
           </div>
           <div className="mt-2 text-xs leading-5 text-zinc-600">
@@ -225,7 +225,7 @@ export function AnimatedHeroMockup() {
 
       {/* Main mockup shell with mouse tilt */}
       <m.div
-        className="relative w-full overflow-visible rounded-[1.75rem] border border-green-100/80 bg-white shadow-2xl shadow-green-950/15"
+        className="relative w-full overflow-visible rounded-[1.75rem] border border-ef-mist/80 bg-white shadow-2xl shadow-ef-ink/15"
         initial={reduced ? false : { opacity: 0, x: 48, scale: 0.96 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
         transition={{ duration: 0.85, ease: EASE, delay: 0.28 }}
@@ -236,10 +236,10 @@ export function AnimatedHeroMockup() {
         }
       >
         {/* Gradient top wash */}
-        <div className="absolute inset-x-0 top-0 h-20 rounded-t-[1.75rem] bg-gradient-to-b from-green-50 to-white" />
+        <div className="absolute inset-x-0 top-0 h-20 rounded-t-[1.75rem] bg-gradient-to-b from-ef-mist to-white" />
 
         {/* Header row */}
-        <div className="relative border-b border-green-100 px-4 py-4 sm:px-5">
+        <div className="relative border-b border-ef-mist px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <m.div
               initial={reduced ? false : { opacity: 0, y: -10 }}
@@ -252,7 +252,7 @@ export function AnimatedHeroMockup() {
               </div>
             </m.div>
             <m.div
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-green-200 bg-white px-3 py-1.5 text-[11px] font-black text-green-700 shadow-sm"
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-ef-200 bg-white px-3 py-1.5 text-[11px] font-black text-ef-ocean shadow-sm"
               initial={reduced ? false : { opacity: 0, x: 12 }}
               animate={reduced
                 ? { opacity: 1, x: 0 }
@@ -302,15 +302,15 @@ export function AnimatedHeroMockup() {
 
           {/* Queue rows */}
           <m.div
-            className="overflow-hidden rounded-2xl border border-green-100 bg-white shadow-sm"
+            className="overflow-hidden rounded-2xl border border-ef-mist bg-white shadow-sm"
             initial={reduced ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: EASE, delay: 0.78 }}
           >
-            <div className="flex items-center justify-between border-b border-green-100 bg-green-50/70 px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-ef-mist bg-ef-mist/70 px-4 py-2.5">
               <div className="text-sm font-black text-zinc-950">Best next follow-up</div>
               <m.div
-                className="text-xs font-black text-green-700"
+                className="text-xs font-black text-ef-ocean"
                 initial={reduced ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.4, ease: EASE, delay: 1.0 }}
@@ -320,7 +320,7 @@ export function AnimatedHeroMockup() {
             </div>
 
             <LayoutGroup>
-              <div className="divide-y divide-green-100">
+              <div className="divide-y divide-ef-mist">
                 {QUEUE_ROWS.map((row, i) => (
                   <QueueRow key={row.id} row={row} delay={0.92 + i * 0.12} />
                 ))}
@@ -330,14 +330,14 @@ export function AnimatedHeroMockup() {
 
           {/* AI draft bar — appears last */}
           <m.div
-            className="rounded-2xl border border-green-700/40 bg-gradient-to-br from-green-900 to-green-950 p-4 text-white shadow-lg shadow-green-950/20"
+            className="rounded-2xl border border-ef-ocean/40 bg-gradient-to-br from-ef-navy to-ef-ink p-4 text-white shadow-lg shadow-ef-ink/20"
             initial={reduced ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: EASE, delay: 1.3 }}
           >
             <div className="flex items-center gap-3">
               <m.div
-                className="grid size-9 place-items-center rounded-xl bg-green-500/20 text-green-200"
+                className="grid size-9 place-items-center rounded-xl bg-ef-sky/20 text-ef-200"
                 animate={reduced ? undefined : { scale: [1, 1.08, 1] }}
                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
               >
@@ -345,7 +345,7 @@ export function AnimatedHeroMockup() {
               </m.div>
               <div>
                 <div className="text-sm font-black">AI draft ready</div>
-                <div className="text-xs text-green-100/80">
+                <div className="text-xs text-ef-mist/80">
                   &ldquo;Hi Sam, quick reminder on invoice INV-1048…&rdquo;
                 </div>
               </div>

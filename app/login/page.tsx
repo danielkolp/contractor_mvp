@@ -46,7 +46,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="force-light grid min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-[0.9fr_1.1fr] lg:p-0">
       {/* Left: form */}
       <section className="mx-auto flex min-w-0 w-full max-w-md flex-col justify-center lg:px-10">
-        <Link href="/" className="mb-10 flex items-center" aria-label="EstiGator home">
+        <Link href="/" className="mb-10 flex items-center" aria-label="Euroflo home">
           <BrandLogo className="h-10" priority />
         </Link>
 
@@ -63,7 +63,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               New here?{" "}
               <Link
                 href="/signup"
-                className="font-medium text-green-700 hover:underline"
+                className="font-medium text-ef-ocean hover:underline"
               >
                 Create an account
               </Link>
@@ -76,7 +76,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <section className="hidden border-l border-border bg-white lg:flex lg:flex-col lg:justify-center">
         <div className="flex h-full flex-col justify-center px-12 xl:px-16">
           <div className="max-w-lg">
-            <div className="mb-6 grid size-16 place-items-center rounded-2xl bg-green-50 shadow-lg shadow-green-900/10">
+            <div className="mb-6 grid size-16 place-items-center rounded-2xl bg-ef-mist shadow-lg shadow-ef-navy/10">
               <BrandLogo variant="mark" className="size-12" />
             </div>
             <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 xl:text-4xl">
@@ -89,7 +89,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <div className="mt-8 grid gap-3">
               {trustPoints.map((point) => (
                 <div key={point} className="flex items-center gap-3">
-                  <CheckCircle2 className="size-5 shrink-0 text-green-600" />
+                  <CheckCircle2 className="size-5 shrink-0 text-ef-ocean" />
                   <span className="text-sm text-zinc-700">{point}</span>
                 </div>
               ))}

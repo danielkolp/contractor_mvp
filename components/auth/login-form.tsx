@@ -152,12 +152,12 @@ export function LoginForm({ message }: { message?: string }) {
           onChange={(event) => setPassword(event.target.value)}
         />
       </div>
-      <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-950">
+      <div className="rounded-lg border border-ef-200 bg-ef-mist p-3 text-sm text-ef-ink">
         <div className="flex items-start gap-3">
-          <MailCheck className="mt-0.5 size-4 shrink-0 text-green-700" />
+          <MailCheck className="mt-0.5 size-4 shrink-0 text-ef-ocean" />
           <div className="min-w-0 flex-1">
             <div className="font-medium">Need to verify your email?</div>
-            <p className="mt-1 leading-5 text-green-900/80">
+            <p className="mt-1 leading-5 text-ef-navy/80">
               Resend the confirmation link to the email above.
             </p>
           </div>
@@ -166,7 +166,7 @@ export function LoginForm({ message }: { message?: string }) {
           type="button"
           variant="outline"
           size="sm"
-          className="mt-3 w-full border-green-300 bg-white text-green-800 hover:bg-green-100"
+          className="mt-3 w-full border-ef-300 bg-white text-ef-ocean hover:bg-ef-mist"
           disabled={isResending}
           onClick={handleResendVerification}
         >
@@ -176,7 +176,7 @@ export function LoginForm({ message }: { message?: string }) {
           <p
             className={
               resendMessage.type === "success"
-                ? "mt-2 text-xs leading-5 text-green-800"
+                ? "mt-2 text-xs leading-5 text-ef-ocean"
                 : "mt-2 text-xs leading-5 text-destructive"
             }
           >

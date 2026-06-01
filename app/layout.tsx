@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 
 import "./globals.css";
+import "@/components/landing/euroflo-landing.css";
 
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
@@ -10,12 +11,12 @@ import { ThemeProvider } from "@/components/theme-provider";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "EstiGator",
+  title: "Euroflo",
   description:
-    "A contractor-friendly recovery dashboard for estimates, invoices, clients, and follow-up.",
+    "A contractor-first workspace for requests, estimates, approvals, invoices, and polite follow-up.",
   icons: {
-    icon: "/images/EstiGator-Logo.png",
-    apple: "/images/EstiGator-Logo.png",
+    icon: "/images/euroflo-mark.svg",
+    apple: "/images/euroflo-mark.png",
   },
 };
 
@@ -33,12 +34,11 @@ export default function RootLayout({
       className={cn("h-full antialiased", "font-sans", geist.variable)}
     >
       <head>
-        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Reem+Kufi+Fun:wght@500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>

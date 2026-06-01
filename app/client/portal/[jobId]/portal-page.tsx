@@ -30,28 +30,11 @@ import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
-type JobRequest = Database["public"]["Tables"]["job_requests"]["Row"]
-type Estimate   = Database["public"]["Tables"]["estimates"]["Row"]
-type Invoice    = Database["public"]["Tables"]["invoices"]["Row"]
-
-// ── New-table row shapes (not yet in generated types) ─────────────────────────
-
-type TimelineEvent = {
-  id:           string
-  event_type:   string
-  title:        string
-  notes:        string | null
-  event_date:   string
-  created_at:   string
-}
-
-type Message = {
-  id:          string
-  sender_id:   string
-  sender_role: "contractor" | "client"
-  body:        string
-  created_at:  string
-}
+type JobRequest    = Database["public"]["Tables"]["job_requests"]["Row"]
+type Estimate      = Database["public"]["Tables"]["estimates"]["Row"]
+type Invoice       = Database["public"]["Tables"]["invoices"]["Row"]
+type TimelineEvent = Database["public"]["Tables"]["project_timeline_events"]["Row"]
+type Message       = Database["public"]["Tables"]["client_messages"]["Row"]
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
@@ -87,7 +70,7 @@ const STATUS_COLOR: Record<string, StatusColor> = {
 const colorMap: Record<StatusColor, { bg: string; text: string; border: string; dot: string }> = {
   gray:   { bg: "bg-gray-50",    text: "text-gray-600",   border: "border-gray-200",  dot: "bg-gray-400" },
   yellow: { bg: "bg-amber-50",   text: "text-amber-700",  border: "border-amber-200", dot: "bg-amber-400" },
-  green:  { bg: "bg-green-50",   text: "text-green-700",  border: "border-green-200", dot: "bg-green-500" },
+  green:  { bg: "bg-ef-mist",   text: "text-ef-ocean",  border: "border-ef-200", dot: "bg-ef-sky" },
   red:    { bg: "bg-red-50",     text: "text-red-700",    border: "border-red-200",   dot: "bg-red-400" },
 }
 
@@ -206,6 +189,74 @@ function PortalSkeleton() {
 
 // ── Status card ───────────────────────────────────────────────────────────────
 
+const flowSteps = ["Request", "Estimate", "Approved", "Job", "Paid"] as const
+
+function FlowBar({
+  job,
+  hasEstimate,
+  invoices,
+}: {
+  job: JobRequest
+  hasEstimate: boolean
+  invoices: Invoice[]
+}) {
+  const hasApproved = job.status === "accepted" || job.status === "closed"
+  const hasInvoice = invoices.length > 0
+  const isPaid = invoices.some((invoice) => invoice.status === "Paid")
+  const complete = [true, hasEstimate, hasApproved, hasInvoice, isPaid]
+
+  return (
+    <div className="rounded-2xl border border-ef-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-ef-ocean">
+            Project flow
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-gray-900">
+            Every step in order
+          </h3>
+        </div>
+        <span className="rounded-full bg-ef-mist px-3 py-1 text-xs font-semibold text-ef-ocean">
+          {STATUS_LABEL[job.status] ?? "In progress"}
+        </span>
+      </div>
+      <div className="grid grid-cols-5 gap-2">
+        {flowSteps.map((step, index) => {
+          const done = complete[index]
+          const current = !done && complete.slice(0, index).every(Boolean)
+          return (
+            <div key={step} className="min-w-0">
+              <div
+                className={`h-1.5 rounded-full ${
+                  done ? "bg-ef-ocean" : current ? "bg-ef-orange" : "bg-gray-200"
+                }`}
+              />
+              <div className="mt-2 flex items-center gap-1.5">
+                {done ? (
+                  <CheckCircle2 className="size-3.5 shrink-0 text-ef-ocean" />
+                ) : (
+                  <Circle
+                    className={`size-3.5 shrink-0 ${
+                      current ? "text-ef-orange" : "text-gray-300"
+                    }`}
+                  />
+                )}
+                <span
+                  className={`truncate text-xs font-semibold ${
+                    done || current ? "text-gray-800" : "text-gray-400"
+                  }`}
+                >
+                  {step}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function StatusCard({ job, hasEstimate }: { job: JobRequest; hasEstimate: boolean }) {
   const status  = job.status as keyof typeof STATUS_LABEL
   const color   = STATUS_COLOR[status] ?? "gray"
@@ -247,7 +298,7 @@ function StatusCard({ job, hasEstimate }: { job: JobRequest; hasEstimate: boolea
         <div className="mt-4">
           <a
             href="#estimates"
-            className={`inline-flex items-center gap-2 rounded-xl ${c.dot === "bg-green-500" ? "bg-green-700 hover:bg-green-800" : "bg-gray-700 hover:bg-gray-800"} px-4 py-2.5 text-sm font-semibold text-white transition`}
+            className={`inline-flex items-center gap-2 rounded-xl ${c.dot === "bg-ef-sky" ? "bg-ef-ocean hover:bg-ef-ocean" : "bg-gray-700 hover:bg-gray-800"} px-4 py-2.5 text-sm font-semibold text-white transition`}
           >
             <FileText className="h-4 w-4" />
             View Estimate
@@ -280,7 +331,7 @@ function Timeline({ items }: { items: TimelineItem[] }) {
               {/* Dot */}
               <div className="relative mt-1 flex h-5 w-5 shrink-0 items-center justify-center">
                 {item.done ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 text-ef-sky" />
                 ) : (
                   <Circle className="h-5 w-5 text-gray-300" />
                 )}
@@ -335,13 +386,13 @@ function MessagesSection({
 
     start(async () => {
       const { data, error } = await supabase
-        .from("client_messages" as "job_requests") // table not in generated types yet
+        .from("client_messages")
         .insert({
           job_request_id: jobId,
           sender_id:      userId,
-          sender_role:    "client",
+          sender_role:    "client" as const,
           body:           text,
-        } as unknown as Parameters<ReturnType<typeof supabase.from<"job_requests">>["insert"]>[0])
+        })
         .select()
         .single()
 
@@ -350,7 +401,7 @@ function MessagesSection({
         return
       }
 
-      if (data) onSend(data as unknown as Message)
+      if (data) onSend(data)
     })
   }
 
@@ -378,14 +429,14 @@ function MessagesSection({
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                     isMe
-                      ? "bg-green-700 text-white"
+                      ? "bg-ef-ocean text-white"
                       : "bg-gray-100 text-gray-800"
                   }`}
                 >
                   <p>{msg.body}</p>
                   <p
                     className={`mt-1 text-right text-[10px] ${
-                      isMe ? "text-green-200" : "text-gray-400"
+                      isMe ? "text-ef-200" : "text-gray-400"
                     }`}
                   >
                     {relativeTime(msg.created_at)}
@@ -405,12 +456,12 @@ function MessagesSection({
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Send a message to your contractor…"
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-ef-sky focus:ring-2 focus:ring-ef-sky/20"
         />
         <Button
           type="submit"
           disabled={isPending || !body.trim()}
-          className="bg-green-700 text-white hover:bg-green-800"
+          className="bg-ef-ocean text-white hover:bg-ef-ocean"
           size="sm"
         >
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -452,14 +503,14 @@ function EstimatesSection({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-gray-900">{est.estimate_number}</p>
-                <p className="mt-1 text-2xl font-bold text-green-700">
+                <p className="mt-1 text-2xl font-bold text-ef-ocean">
                   {money.format(est.amount)}
                 </p>
               </div>
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                   est.status === "Accepted" || est.status === "Won"
-                    ? "bg-green-100 text-green-700"
+                    ? "bg-ef-mist text-ef-ocean"
                     : est.status === "Declined" || est.status === "Lost"
                     ? "bg-red-100 text-red-700"
                     : "bg-amber-50 text-amber-700"
@@ -488,7 +539,7 @@ function EstimatesSection({
                   <Button
                     size="sm"
                     disabled={isSaving}
-                    className="bg-green-700 text-white hover:bg-green-800"
+                    className="bg-ef-ocean text-white hover:bg-ef-ocean"
                     onClick={() => {
                       setIsSaving(true)
                       onRespond(est, "Accepted")
@@ -545,7 +596,7 @@ function InvoicesSection({ invoices }: { invoices: Invoice[] }) {
             <span
               className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                 inv.status === "Paid"
-                  ? "bg-green-100 text-green-700"
+                  ? "bg-ef-mist text-ef-ocean"
                   : inv.status === "Overdue"
                   ? "bg-red-100 text-red-700"
                   : "bg-amber-50 text-amber-700"
@@ -599,14 +650,13 @@ export function PortalPage({ jobId }: { jobId: string }) {
         supabase.from("job_requests").select("*").eq("id", jobId).maybeSingle(),
         supabase.from("estimates").select("*").eq("job_request_id", jobId).neq("status", "Draft"),
         supabase.from("invoices").select("*").eq("job_request_id", jobId),
-        // New tables — cast through unknown since types not yet regenerated.
         supabase
-          .from("project_timeline_events" as "job_requests")
+          .from("project_timeline_events")
           .select("*")
           .eq("job_request_id", jobId)
           .order("event_date", { ascending: true }),
         supabase
-          .from("client_messages" as "job_requests")
+          .from("client_messages")
           .select("*")
           .eq("job_request_id", jobId)
           .order("created_at", { ascending: true }),
@@ -615,8 +665,8 @@ export function PortalPage({ jobId }: { jobId: string }) {
     if (jobResult.data) setJob(jobResult.data)
     setEsts(estsResult.data ?? [])
     setInvs(invsResult.data ?? [])
-    setEvents((eventsResult.data ?? []) as unknown as TimelineEvent[])
-    setMessages((msgsResult.data ?? []) as unknown as Message[])
+    setEvents(eventsResult.data ?? [])
+    setMessages(msgsResult.data ?? [])
     setLoading(false)
   }, [supabase, jobId])
 
@@ -691,6 +741,8 @@ export function PortalPage({ jobId }: { jobId: string }) {
         <>
           {/* Status card — the single most important screen element */}
           <StatusCard job={job} hasEstimate={hasEstimate} />
+
+          <FlowBar job={job} hasEstimate={hasEstimate} invoices={invoices} />
 
           {/* Timeline */}
           {timeline.length > 0 && <Timeline items={timeline} />}

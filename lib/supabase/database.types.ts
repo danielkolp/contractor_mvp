@@ -186,6 +186,33 @@ export type Database = {
         }
         Relationships: []
       }
+      client_messages: {
+        Row: {
+          id: string
+          job_request_id: string
+          sender_id: string
+          sender_role: "contractor" | "client"
+          body: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_request_id: string
+          sender_id: string
+          sender_role: "contractor" | "client"
+          body: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_request_id?: string
+          sender_id?: string
+          sender_role?: "contractor" | "client"
+          body?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       job_requests: {
         Row: {
           id: string
@@ -193,6 +220,7 @@ export type Database = {
           contractor_id: string | null
           client_name: string | null
           client_email: string | null
+          client_phone: string | null
           title: string
           description: string
           trade: string | null
@@ -212,6 +240,7 @@ export type Database = {
           contractor_id?: string | null
           client_name?: string | null
           client_email?: string | null
+          client_phone?: string | null
           title: string
           description: string
           trade?: string | null
@@ -231,6 +260,7 @@ export type Database = {
           contractor_id?: string | null
           client_name?: string | null
           client_email?: string | null
+          client_phone?: string | null
           title?: string
           description?: string
           trade?: string | null
@@ -246,6 +276,39 @@ export type Database = {
         }
         Relationships: []
       }
+      project_timeline_events: {
+        Row: {
+          id: string
+          job_request_id: string
+          contractor_id: string
+          event_type: string
+          title: string
+          notes: string | null
+          event_date: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_request_id: string
+          contractor_id: string
+          event_type?: string
+          title: string
+          notes?: string | null
+          event_date?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_request_id?: string
+          contractor_id?: string
+          event_type?: string
+          title?: string
+          notes?: string | null
+          event_date?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           id: string
@@ -257,6 +320,7 @@ export type Database = {
           phone: string | null
           website: string | null
           service_area: string | null
+          request_slug: string
           created_at: string
           updated_at: string
         }
@@ -270,6 +334,7 @@ export type Database = {
           phone?: string | null
           website?: string | null
           service_area?: string | null
+          request_slug?: string
           created_at?: string
           updated_at?: string
         }
@@ -283,6 +348,7 @@ export type Database = {
           phone?: string | null
           website?: string | null
           service_area?: string | null
+          request_slug?: string
           created_at?: string
           updated_at?: string
         }
@@ -657,6 +723,19 @@ export type Database = {
           trade: string | null
           service_area: string | null
         }[]
+      }
+      contractor_profile_by_slug: {
+        Args: { slug: string }
+        Returns: {
+          company_name: string | null
+          owner_name: string | null
+          trade: string | null
+          service_area: string | null
+        }[]
+      }
+      get_auth_user_id_by_email: {
+        Args: { lookup_email: string }
+        Returns: string | null
       }
     }
     Enums: {

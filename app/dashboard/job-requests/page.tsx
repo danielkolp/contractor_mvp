@@ -50,18 +50,11 @@ import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
-type JobRequest = Database["public"]["Tables"]["job_requests"]["Row"]
+type JobRequest     = Database["public"]["Tables"]["job_requests"]["Row"]
 type JobRequestUpdate = Database["public"]["Tables"]["job_requests"]["Update"]
-type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
+type ClientInsert   = Database["public"]["Tables"]["clients"]["Insert"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
-
-type Message = {
-  id:          string
-  sender_id:   string
-  sender_role: "contractor" | "client"
-  body:        string
-  created_at:  string
-}
+type Message        = Database["public"]["Tables"]["client_messages"]["Row"]
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
@@ -149,7 +142,7 @@ function EstimateActionButton({
   }
   return (
     <Button
-      className="bg-green-700 text-white hover:bg-green-800"
+      className="bg-ef-ocean text-white hover:bg-ef-ocean"
       disabled={isSaving}
       onClick={() => onCreateEstimate(request)}
     >
@@ -173,6 +166,7 @@ export default function ContractorJobRequestsPage() {
   const supabase = useMemo(() => createClient(), [])
   const [requests, setRequests] = useState<JobRequest[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [requestSlug, setRequestSlug] = useState<string | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<JobRequest | null>(null)
   const [messagingRequest, setMessagingRequest] = useState<JobRequest | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -185,8 +179,8 @@ export default function ContractorJobRequestsPage() {
   // Maps job_request.id → estimate.id for requests that already have an estimate.
   const [estimateIdByRequestId, setEstimateIdByRequestId] = useState<Record<string, string>>({})
 
-  const shareableLink = userId
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${userId}`
+  const shareableLink = requestSlug
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${requestSlug}`
     : null
 
   function copyLink() {
@@ -201,11 +195,11 @@ export default function ContractorJobRequestsPage() {
     setMessagingRequest(request)
     setMessages([])
     const { data } = await supabase
-      .from("client_messages" as "job_requests")
+      .from("client_messages")
       .select("*")
       .eq("job_request_id", request.id)
       .order("created_at", { ascending: true })
-    setMessages((data ?? []) as unknown as Message[])
+    setMessages(data ?? [])
   }
 
   function sendMessage(e: FormEvent<HTMLFormElement>) {
@@ -216,18 +210,18 @@ export default function ContractorJobRequestsPage() {
 
     startMsgTransition(async () => {
       const { data, error } = await supabase
-        .from("client_messages" as "job_requests")
+        .from("client_messages")
         .insert({
           job_request_id: messagingRequest.id,
           sender_id:      userId,
-          sender_role:    "contractor",
+          sender_role:    "contractor" as const,
           body:           text,
-        } as unknown as Parameters<ReturnType<typeof supabase.from<"job_requests">>["insert"]>[0])
+        })
         .select()
         .single()
 
       if (error) { toast.error("Could not send message"); return }
-      if (data) setMessages((prev) => [...prev, data as unknown as Message])
+      if (data) setMessages((prev) => [...prev, data])
     })
   }
 
@@ -247,6 +241,14 @@ export default function ContractorJobRequestsPage() {
     }
 
     setUserId(user.id)
+
+    // Fetch profile to get the request slug for the shareable link.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("request_slug")
+      .eq("user_id", user.id)
+      .maybeSingle()
+    if (profile?.request_slug) setRequestSlug(profile.request_slug)
 
     const { data, error } = await supabase
       .from("job_requests")
@@ -450,7 +452,7 @@ export default function ContractorJobRequestsPage() {
                       <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
                           isMe
-                            ? "bg-green-700 text-white"
+                            ? "bg-ef-ocean text-white"
                             : "bg-background border border-border text-foreground"
                         }`}>
                           {msg.body}
@@ -472,7 +474,7 @@ export default function ContractorJobRequestsPage() {
                   type="submit"
                   size="sm"
                   disabled={isSendingMsg || !messageBody.trim()}
-                  className="bg-green-700 text-white hover:bg-green-800"
+                  className="bg-ef-ocean text-white hover:bg-ef-ocean"
                 >
                   <Send className="size-4" />
                 </Button>
@@ -587,16 +589,16 @@ export default function ContractorJobRequestsPage() {
       <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
         {/* Shareable link card */}
         {shareableLink && (
-          <div className="flex flex-col gap-3 rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-900/60 dark:bg-green-950/20 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-xl border border-ef-200 bg-ef-mist p-4 dark:border-ef-navy/60 dark:bg-ef-ink/20 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-sm font-semibold text-green-900 dark:text-green-100">
+              <div className="flex items-center gap-2 text-sm font-semibold text-ef-navy dark:text-ef-mist">
                 <Link2 className="size-4 shrink-0" />
                 Your client request link
               </div>
-              <p className="mt-0.5 truncate text-xs text-green-700 dark:text-green-300">
+              <p className="mt-0.5 truncate text-xs text-ef-ocean dark:text-ef-300">
                 {shareableLink}
               </p>
-              <p className="mt-1 text-xs text-green-700/70 dark:text-green-400">
+              <p className="mt-1 text-xs text-ef-ocean/70 dark:text-ef-cyan">
                 Send this link to clients so they can submit a project request — no account needed.
               </p>
             </div>
@@ -604,14 +606,14 @@ export default function ContractorJobRequestsPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="border-green-300 bg-white text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-transparent dark:text-green-200"
+                className="border-ef-300 bg-white text-ef-ocean hover:bg-ef-mist dark:border-ef-ocean dark:bg-transparent dark:text-ef-200"
                 onClick={copyLink}
               >
                 {linkCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                 {linkCopied ? "Copied!" : "Copy link"}
               </Button>
               <Button size="sm" variant="outline" asChild
-                className="border-green-300 bg-white text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-transparent dark:text-green-200"
+                className="border-ef-300 bg-white text-ef-ocean hover:bg-ef-mist dark:border-ef-ocean dark:bg-transparent dark:text-ef-200"
               >
                 <a href={shareableLink} target="_blank" rel="noreferrer">
                   <ExternalLink className="size-3.5" />
@@ -660,7 +662,7 @@ export default function ContractorJobRequestsPage() {
                             {request.trade && (
                               <Badge
                                 variant="outline"
-                                className="border-green-200 bg-green-50 text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200"
+                                className="border-ef-200 bg-ef-mist text-ef-ocean dark:border-ef-navy/60 dark:bg-ef-ink/40 dark:text-ef-200"
                               >
                                 {request.trade}
                               </Badge>

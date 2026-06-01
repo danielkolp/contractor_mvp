@@ -127,7 +127,7 @@ function ClientRequestLinkCard({ userId }: { userId: string }) {
           >
             {copied ? (
               <>
-                <Check className="size-3.5 text-green-600" />
+                <Check className="size-3.5 text-ef-ocean" />
                 Copied
               </>
             ) : (
