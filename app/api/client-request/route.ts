@@ -270,6 +270,7 @@ export async function POST(req: NextRequest) {
 
   // ── 2. Find or create client auth account ───────────────────────────────────
   let clientUserId: string
+  let clientAccountCreated = false
 
   const { data: existingId } = await supabase.rpc("get_auth_user_id_by_email", {
     lookup_email: email,
@@ -278,11 +279,20 @@ export async function POST(req: NextRequest) {
   if (existingId) {
     clientUserId = existingId
 
-    // Refresh profile name and phone so the portal shows the right name.
-    await supabase
+    // Only update profile if the existing user is not a contractor — never
+    // overwrite a contractor's role when their email is used on a request form.
+    const { data: existingProfile } = await supabase
       .from("profiles")
-      .update({ owner_name: name, ...(phone ? { phone } : {}), role: "client" })
+      .select("role")
       .eq("user_id", clientUserId)
+      .maybeSingle()
+
+    if (!existingProfile || existingProfile.role !== "contractor") {
+      await supabase
+        .from("profiles")
+        .update({ owner_name: name, ...(phone ? { phone } : {}), role: "client" })
+        .eq("user_id", clientUserId)
+    }
   } else {
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email,
@@ -303,6 +313,7 @@ export async function POST(req: NextRequest) {
     }
 
     clientUserId = created.user.id
+    clientAccountCreated = true
 
     // The DB trigger creates the profile row; update it with supplied details.
     await supabase
@@ -376,7 +387,7 @@ export async function POST(req: NextRequest) {
     const { error: sendError } = await resend.emails.send({
       from:    process.env.RESEND_FROM_EMAIL,
       to:      email,
-      subject: `Your request has been submitted to ${contractorName}`,
+      subject: `Track your job request with ${contractorName}`,
       html:    renderClientIntakeEmailHtml(emailArgs),
       text:    renderClientIntakeEmailText(emailArgs),
     })
@@ -389,10 +400,12 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    success:        true,
-    jobRequestId:   jobRequest.id,
+    success:              true,
+    jobRequestId:         jobRequest.id,
     contractorName,
     emailSent,
-    guestToken:     guestToken ?? undefined,
+    clientAccountCreated,
+    passwordless:         true,
+    fallbackGuestToken:   guestToken ?? undefined,
   })
 }

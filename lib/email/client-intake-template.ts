@@ -40,7 +40,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Request submitted to ${safeContractor}</title>
+  <title>Your request was submitted — ${safeContractor}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#F0F4F1; -webkit-text-size-adjust:100%;">
 
@@ -54,7 +54,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
                       border-radius:10px;
                       box-shadow:0 1px 4px rgba(0,0,0,0.08);">
 
-          <!-- Green header -->
+          <!-- Header -->
           <tr>
             <td style="background-color:#024D8B; padding:20px 32px; border-radius:10px 10px 0 0;">
               <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
@@ -71,7 +71,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
               <!-- Check circle -->
               <div style="text-align:center; margin-bottom:24px;">
                 <div style="display:inline-block; width:60px; height:60px;
-                            background-color:#DCFCE7; border-radius:50%;
+                            background-color:#E0F0FF; border-radius:50%;
                             text-align:center; line-height:60px; font-size:30px;">
                   ✓
                 </div>
@@ -80,30 +80,18 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
               <h1 style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                          margin:0 0 12px 0; font-size:26px; font-weight:700; color:#111827;
                          text-align:center; line-height:1.25;">
-                Request Submitted
+                Your request was submitted
               </h1>
 
               <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                         margin:0 0 28px 0; font-size:16px; color:#4B5563;
                         text-align:center; line-height:1.65;">
-                Hi ${safeName}, your request has been submitted to
-                <strong style="color:#111827;">${safeContractor}</strong>.
-                You'll be notified when there are updates.
+                Hi ${safeName},<br><br>
+                <strong style="color:#111827;">${safeContractor}</strong> received your request
+                for &ldquo;${safeProject}&rdquo;.<br><br>
+                Use your private ${safeApp} link to track the request, review estimates,
+                and pay securely. No password is needed.
               </p>
-
-              <!-- Project label box -->
-              <div style="background-color:#F9FAFB; border:1px solid #E5E7EB;
-                          border-radius:8px; padding:16px 20px; margin-bottom:32px;">
-                <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                          margin:0 0 5px 0; font-size:11px; font-weight:700; color:#9CA3AF;
-                          text-transform:uppercase; letter-spacing:0.08em;">
-                  Project
-                </p>
-                <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                          margin:0; font-size:16px; font-weight:600; color:#111827;">
-                  ${safeProject}
-                </p>
-              </div>
 
               <!-- CTA button -->
               <div style="text-align:center; margin-bottom:28px;">
@@ -112,13 +100,14 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
                           font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                           font-size:15px; font-weight:600; text-decoration:none;
                           padding:14px 36px; border-radius:8px; letter-spacing:0.01em;">
-                  Track My Request →
+                  Track your job →
                 </a>
               </div>
 
               <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                         margin:0; font-size:13px; color:#9CA3AF; text-align:center; line-height:1.6;">
-                This link signs you in automatically and expires in 24 hours.
+                This link signs you in automatically and expires in 24 hours.<br>
+                You can use this same email address anytime to request a fresh login link.
               </p>
             </td>
           </tr>
@@ -147,20 +136,21 @@ export function renderClientIntakeEmailText(args: ClientIntakeEmailArgs): string
   const { clientName, contractorName, projectTitle, magicLink, appName = process.env.NEXT_PUBLIC_APP_NAME ?? "Contractor Portal" } = args
 
   return [
-    `Request Submitted`,
+    `Your request was submitted`,
     `═`.repeat(40),
     ``,
     `Hi ${clientName},`,
     ``,
-    `Your request has been submitted to ${contractorName}.`,
-    `You'll be notified when there are updates.`,
+    `${contractorName} received your request for "${projectTitle}".`,
     ``,
-    `Project: ${projectTitle}`,
+    `Use your private ${appName} link to track the request, review estimates,`,
+    `and pay securely. No password is needed.`,
     ``,
-    `Track your request anytime here:`,
+    `Track your job:`,
     magicLink,
     ``,
     `This link signs you in automatically and expires in 24 hours.`,
+    `You can use this same email address anytime to request a fresh login link.`,
     ``,
     `—`,
     `Powered by ${appName}`,

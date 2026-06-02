@@ -54,7 +54,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <CardHeader className="pb-4">
             <CardTitle className="text-xl">Welcome back</CardTitle>
             <CardDescription>
-              Sign in to review unpaid invoices and follow-ups.
+              Sign in with your password, or get a secure email login link.
             </CardDescription>
           </CardHeader>
           <CardContent>

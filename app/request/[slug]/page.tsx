@@ -6,7 +6,6 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
-  Copy,
   HardHat,
   Loader2,
   MapPin,
@@ -30,12 +29,14 @@ type ContractorProfile = {
 }
 
 type SubmitResult = {
-  jobRequestId:   string
-  contractorName: string
-  emailSent:      boolean
-  guestToken?:    string
-  projectTitle:   string
-  submittedAt:    string
+  jobRequestId:         string
+  contractorName:       string
+  emailSent:            boolean
+  clientAccountCreated: boolean
+  fallbackGuestToken?:  string
+  projectTitle:         string
+  submittedAt:          string
+  email:                string
 }
 
 type ContactOption = "Text" | "Call" | "Email"
@@ -104,35 +105,54 @@ function ErrorMessage({ message }: { message: string }) {
 
 // ── Post-submit screen ────────────────────────────────────────────────────────
 
+const WHAT_NEXT = [
+  "Your contractor reviews the request.",
+  "If it's a fit, they send you an estimate.",
+  "You can accept, decline, or pay from your private link.",
+]
+
 function PostSubmitScreen({
   contractorName,
   emailSent,
-  guestToken,
+  fallbackGuestToken,
   submittedAt,
   projectTitle,
+  email,
+  jobRequestId,
 }: {
-  contractorName: string
-  emailSent:      boolean
-  guestToken?:    string
-  submittedAt:    string
-  projectTitle:   string
+  contractorName:       string
+  emailSent:            boolean
+  fallbackGuestToken?:  string
+  submittedAt:          string
+  projectTitle:         string
+  email:                string
+  jobRequestId:         string
 }) {
-  const [copied,    setCopied]    = useState(false)
-  const [guestLink, setGuestLink] = useState<string | null>(null)
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const [guestLink,   setGuestLink]   = useState<string | null>(null)
 
   useEffect(() => {
-    if (guestToken) {
+    if (fallbackGuestToken) {
       const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
-      setGuestLink(`${base}/guest/project/${guestToken}`)
+      setGuestLink(`${base}/guest/project/${fallbackGuestToken}`)
     }
-  }, [guestToken])
+  }, [fallbackGuestToken])
 
-  function handleCopy() {
-    if (!guestLink) return
-    void navigator.clipboard.writeText(guestLink).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2500)
-    })
+  async function handleResend() {
+    if (resendState === "sending" || resendState === "sent") return
+    setResendState("sending")
+    try {
+      const { createClient } = await import("@/lib/supabase/client")
+      const supabase = createClient()
+      const redirectTo = `${window.location.origin}/auth/callback?next=/client/portal/${jobRequestId}`
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      })
+      setResendState(error ? "error" : "sent")
+    } catch {
+      setResendState("error")
+    }
   }
 
   return (
@@ -147,48 +167,67 @@ function PostSubmitScreen({
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
             Request submitted
           </h1>
-          <p className="mt-2 text-sm leading-relaxed text-gray-500">
-            Your contractor will review it and follow up with next steps.
-          </p>
+          {emailSent ? (
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">
+              We emailed you a private link to track this job, review estimates, and pay securely.{" "}
+              <span className="font-medium text-gray-700">No password needed.</span>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">
+              Your request was submitted, but we could not send the tracking email. Use the
+              login page with this same email address to request a new secure link.
+            </p>
+          )}
         </div>
 
-        {/* Euroflo upsell card */}
-        <div className="rounded-2xl border border-gray-200/80 bg-white shadow-md">
-          <div className="border-b border-gray-100 px-6 pb-5 pt-6">
-            <p className="text-xs font-bold uppercase tracking-widest text-ef-ocean">
-              Euroflo
-            </p>
-            <h2 className="mt-1 text-lg font-bold leading-snug text-gray-900">
-              Hiring contractors is made easier with Euroflo. Join today.
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Track your request, review estimates, and pay securely from one simple page.
-            </p>
-          </div>
-
-          <div className="space-y-3 px-6 py-5">
+        {/* Email action card */}
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-md">
+          {emailSent ? (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ef-mist">
+                  <MessageSquare className="h-5 w-5 text-ef-ocean" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Check your email</p>
+                  <p className="text-xs text-gray-500">{email}</p>
+                </div>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                Your private Euroflo link is waiting in your inbox. Click it to track the job — no
+                account creation needed.
+              </p>
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                {resendState === "sent" ? (
+                  <p className="text-center text-xs text-ef-ocean">
+                    Login link sent — check your email.
+                  </p>
+                ) : resendState === "error" ? (
+                  <p className="text-center text-xs text-red-600">
+                    Could not send the link. Try the{" "}
+                    <a href="/login" className="underline">login page</a>.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={resendState === "sending"}
+                    onClick={() => void handleResend()}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    {resendState === "sending" ? "Sending…" : "Send login link again"}
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
             <a
-              href={guestToken ? `/client/setup?claim_token=${guestToken}` : "/client/setup"}
+              href="/login"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-ef-ocean px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-ef-ocean active:scale-[0.99]"
             >
-              Create free client account
+              Go to login
               <ArrowRight className="h-4 w-4" />
             </a>
-
-            {guestLink ? (
-              <button
-                type="button"
-                onClick={() => { window.location.href = guestLink }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50"
-              >
-                Continue without account
-              </button>
-            ) : (
-              <p className="text-center text-xs text-gray-400">
-                No account required. We can email you a private link for this job.
-              </p>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Project summary card */}
@@ -223,36 +262,40 @@ function PostSubmitScreen({
 
           <div className="mt-4 rounded-xl border border-ef-200 bg-ef-mist/60 p-3.5">
             <p className="text-xs font-semibold text-ef-ocean">What happens next</p>
-            <p className="mt-1 text-sm leading-relaxed text-gray-600">
-              Your contractor will review the request and send an estimate if the job is a fit.
-            </p>
+            <ol className="mt-2 space-y-1.5">
+              {WHAT_NEXT.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-gray-600">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ef-ocean text-[10px] font-bold text-white">
+                    {i + 1}
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ol>
           </div>
         </div>
 
-        {/* Private link */}
-        {guestLink && (
+        {/* Guest link fallback — only shown if email failed or token exists */}
+        {guestLink && !emailSent && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
-              Your private tracking link
+              Private job link
             </p>
             <p className="mt-2 text-xs leading-relaxed text-gray-500">
-              {emailSent
-                ? "We also emailed this to you. Save it to track your job anytime — no account needed."
-                : "Save this link to track your job anytime — no account needed."}
+              Bookmark this to track your job without signing in.
             </p>
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-              <p className="flex-1 truncate text-xs text-gray-600">{guestLink}</p>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-50"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
+            <a
+              href={guestLink}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50"
+            >
+              Open private job link
+            </a>
           </div>
         )}
+
+        <p className="text-center text-xs text-gray-400">
+          Use your email anytime to sign back in. We&apos;ll send a fresh login link.
+        </p>
 
       </div>
     </div>
@@ -449,9 +492,11 @@ export default function RequestPage({
       <PostSubmitScreen
         contractorName={result.contractorName}
         emailSent={result.emailSent}
-        guestToken={result.guestToken}
+        fallbackGuestToken={result.fallbackGuestToken}
         projectTitle={result.projectTitle}
         submittedAt={result.submittedAt}
+        email={result.email}
+        jobRequestId={result.jobRequestId}
       />
     )
   }
@@ -494,7 +539,7 @@ export default function RequestPage({
         })
 
         const json = (await res.json()) as
-          | { success: true; jobRequestId: string; contractorName: string; emailSent: boolean; guestToken?: string }
+          | { success: true; jobRequestId: string; contractorName: string; emailSent: boolean; clientAccountCreated: boolean; fallbackGuestToken?: string }
           | { error: string }
 
         if (!res.ok || "error" in json) {
@@ -503,16 +548,18 @@ export default function RequestPage({
         }
 
         setResult({
-          jobRequestId:   json.jobRequestId,
-          contractorName: json.contractorName,
-          emailSent:      json.emailSent,
-          guestToken:     json.guestToken,
-          projectTitle:   trade || String(fd.get("title") ?? "").trim(),
-          submittedAt:    new Date().toLocaleDateString("en-CA", {
+          jobRequestId:         json.jobRequestId,
+          contractorName:       json.contractorName,
+          emailSent:            json.emailSent,
+          clientAccountCreated: json.clientAccountCreated,
+          fallbackGuestToken:   json.fallbackGuestToken,
+          projectTitle:         trade || String(fd.get("title") ?? "").trim(),
+          submittedAt:          new Date().toLocaleDateString("en-CA", {
             month: "long",
             day:   "numeric",
             year:  "numeric",
           }),
+          email: String(fd.get("email") ?? "").trim().toLowerCase(),
         })
       } catch {
         setError("Could not reach the server. Please check your connection and try again.")
