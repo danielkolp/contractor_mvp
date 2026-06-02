@@ -181,19 +181,19 @@ const recoveryReadyStatuses = new Set<InvoiceStatus>([
 
 const statusPillClassName: Record<InvoiceStatus, string> = {
   Draft:
-    "border-zinc-200 bg-zinc-100 text-zinc-600 dark:border-[#1f4563] dark:bg-[#171D1A] dark:text-[#B6C2BB]",
+    "border-zinc-200 bg-zinc-100 text-zinc-600 dark:border-border dark:bg-muted dark:text-muted-foreground",
   Sent:
-    "border-sky-200 bg-sky-50 text-sky-700 dark:border-[#1f4563] dark:bg-[#102c44] dark:text-[#e7f4fb]",
+    "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800/50 dark:bg-sky-500/10 dark:text-sky-300",
   Overdue:
-    "border-amber-200 bg-amber-50 text-amber-700 dark:border-[#B97820]/70 dark:bg-[#B97820]/20 dark:text-[#F5B342]",
+    "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/50 dark:bg-amber-500/10 dark:text-amber-300",
   "Follow-up Sent":
-    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-[#024D8B]/40 dark:bg-[#024D8B]/20 dark:text-[#d6f4ff]",
+    "border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800/50 dark:bg-cyan-500/10 dark:text-cyan-300",
   "Payment Plan":
-    "border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-[#6B7280]/50 dark:bg-[#2C555E]/30 dark:text-[#D3ECEC]",
+    "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800/50 dark:bg-violet-500/10 dark:text-violet-300",
   Paid:
-    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-[#22C55E]/30 dark:bg-[#22C55E]/10 dark:text-[#BFEFD0]",
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-500/10 dark:text-emerald-300",
   Escalated:
-    "border-orange-200 bg-orange-50 text-orange-700 dark:border-[#F59E0B]/70 dark:bg-[#F59E0B]/20 dark:text-[#F8C76B]",
+    "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800/50 dark:bg-orange-500/10 dark:text-orange-300",
 }
 
 function getStatusDisplayLabel(status: InvoiceStatus): string {
@@ -567,7 +567,7 @@ function ClientCombobox({
           <div className="border-t border-border">
             <button
               type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ef-ocean hover:bg-muted/60 focus-visible:outline-none"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-primary hover:bg-muted/60 focus-visible:outline-none"
               onMouseDown={(e) => {
                 e.preventDefault()
                 setNewCompany(query)
@@ -1250,21 +1250,21 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-zinc-50 text-foreground dark:bg-[#071827] dark:text-[#f4f8fb]">
+    <div className="min-h-[calc(100vh-4rem)] bg-background text-foreground dark:bg-background dark:text-foreground">
       <PageHeader
         title="Invoices"
         description="Find unpaid invoices, create recovery drafts, and keep payment follow-up connected."
-        className="dark:border-[#1f4563] dark:bg-[#071827] dark:[&_h1]:text-[#f4f8fb] dark:[&_p]:text-[#9eb8cc]"
+        className="dark:border-border dark:bg-background dark:[&_h1]:text-foreground dark:[&_p]:text-muted-foreground"
       >
         <Dialog open={dialogOpen} onOpenChange={closeInvoiceDialog}>
           <Button
-            className="bg-[#024D8B] text-white shadow-sm hover:bg-[#024D8B] hover:shadow-md focus-visible:ring-[#024D8B]/40"
+            className="bg-[#024D8B] text-white shadow-sm hover:bg-[#024D8B] hover:shadow-md focus-visible:ring-ring/40"
             onClick={openAddInvoice}
           >
             <Plus className="size-4" />
             Add invoice
           </Button>
-          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto dark:border-[#1f4563] dark:bg-[#0d2235] dark:text-[#f4f8fb] dark:shadow-2xl dark:[&_[data-slot=dialog-description]]:text-[#9eb8cc]">
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto dark:border-border dark:bg-card dark:text-foreground dark:shadow-2xl dark:[&_[data-slot=dialog-description]]:text-muted-foreground">
             <DialogHeader>
               <DialogTitle>
                 {editingInvoice ? "Edit invoice" : "New invoice"}
@@ -1444,7 +1444,7 @@ export default function InvoicesPage() {
                       </div>
                       <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
                         <span>Total Due</span>
-                        <span className="tabular-nums text-ef-ocean">
+                        <span className="tabular-nums text-primary">
                           {moneyFormatter.format(liTotal)}
                         </span>
                       </div>
@@ -1518,21 +1518,21 @@ export default function InvoicesPage() {
         isSaving={isSaving}
       />
 
-      <div className="bg-zinc-50 p-4 sm:p-6 lg:p-8 dark:bg-[#071827]">
+      <div className="bg-background p-4 sm:p-6 lg:p-8 dark:bg-background">
         <div className="mx-auto grid w-full max-w-7xl gap-6">
-        <Card className="rounded-lg dark:border-[#1f4563] dark:bg-[#0d2235] dark:shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+        <Card className="rounded-lg dark:border-border dark:bg-card dark:shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
           <CardHeader className="gap-5 p-5 sm:p-6">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <CardTitle className="text-lg text-foreground dark:text-[#f4f8fb]">
+                <CardTitle className="text-lg text-foreground dark:text-foreground">
                   Invoice worklist
                 </CardTitle>
-                <CardDescription className="mt-1 text-muted-foreground dark:text-[#9eb8cc]">
+                <CardDescription className="mt-1 text-muted-foreground dark:text-muted-foreground">
                   Review invoices and prepare follow-up drafts for follow-ups.
                 </CardDescription>
               </div>
               {hasActiveFilters ? (
-                <Badge className="w-fit border-border bg-background text-muted-foreground dark:border-[#1f4563] dark:bg-[#071827] dark:text-[#9eb8cc]">
+                <Badge className="w-fit border-border bg-background text-muted-foreground dark:border-border dark:bg-background dark:text-muted-foreground">
                   {filteredInvoices.length} of {invoices.length} invoices
                 </Badge>
               ) : null}
@@ -1540,9 +1540,9 @@ export default function InvoicesPage() {
 
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_220px_220px_auto]">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground dark:text-[#9eb8cc]" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground dark:text-muted-foreground" />
                 <Input
-                  className="pl-9 dark:border-[#1f4563] dark:bg-[#071827] dark:text-[#f4f8fb] dark:placeholder:text-[#9eb8cc] dark:focus-visible:border-[#024D8B] dark:focus-visible:ring-[#024D8B]/25"
+                  className="pl-9 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus-visible:border-ring dark:focus-visible:ring-ring/25"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search client or invoice number"
@@ -1554,7 +1554,7 @@ export default function InvoicesPage() {
                   setStatusFilter(value as InvoiceStatus | FilterValue)
                 }
                 aria-label="Filter by status"
-                className="dark:border-[#1f4563] dark:bg-[#071827] dark:text-[#f4f8fb] dark:focus-visible:border-[#024D8B] dark:focus-visible:ring-[#024D8B]/25"
+                className="dark:border-border dark:bg-background dark:text-foreground dark:focus-visible:border-ring dark:focus-visible:ring-ring/25"
               >
                 <option value="all">All statuses</option>
                 {invoiceStatuses.map((status) => (
@@ -1567,7 +1567,7 @@ export default function InvoicesPage() {
                 value={clientFilter}
                 onChange={(value) => setClientFilter(value)}
                 aria-label="Filter by client"
-                className="dark:border-[#1f4563] dark:bg-[#071827] dark:text-[#f4f8fb] dark:focus-visible:border-[#024D8B] dark:focus-visible:ring-[#024D8B]/25"
+                className="dark:border-border dark:bg-background dark:text-foreground dark:focus-visible:border-ring dark:focus-visible:ring-ring/25"
               >
                 <option value="all">All clients</option>
                 {clientsWithInvoices.map((client) => (
@@ -1579,7 +1579,7 @@ export default function InvoicesPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full lg:w-auto dark:border-[#1f4563] dark:bg-transparent dark:text-[#c8d9e6] dark:hover:bg-[#102c44] dark:hover:text-[#f4f8fb]"
+                className="w-full lg:w-auto dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground"
                 disabled={!hasActiveFilters}
                 onClick={resetFilters}
               >
@@ -1601,15 +1601,15 @@ export default function InvoicesPage() {
               skeleton={<InvoiceListSkeleton rows={6} />}
             >
               {errorMessage && invoices.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center dark:border-[#2B3731] dark:bg-[#071827]">
-                <h3 className="text-base font-semibold text-foreground dark:text-[#f4f8fb]">
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center dark:border-border dark:bg-background">
+                <h3 className="text-base font-semibold text-foreground dark:text-foreground">
                   Something didn&apos;t load
                 </h3>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground dark:text-[#9eb8cc]">
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground dark:text-muted-foreground">
                   Your data is safe. Try refreshing, or check your connection.
                 </p>
                 <Button
-                  className="mt-5 dark:border-[#1f4563] dark:bg-transparent dark:text-[#f4f8fb] dark:hover:bg-[#102c44]"
+                  className="mt-5 dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-muted"
                   variant="outline"
                   onClick={() => {
                     setIsLoading(true)
@@ -1622,8 +1622,8 @@ export default function InvoicesPage() {
                 </Button>
               </div>
             ) : filteredInvoices.length > 0 ? (
-              <div className="overflow-hidden rounded-lg border border-border bg-background dark:border-[#1f4563] dark:bg-[#071827]">
-                <div className="hidden grid-cols-[116px_minmax(220px,1fr)_112px_112px_128px_112px_112px_40px] gap-3 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground dark:border-[#1f4563] dark:bg-[#102c44] dark:text-[#9eb8cc] xl:grid">
+              <div className="overflow-hidden rounded-lg border border-border bg-background dark:border-border dark:bg-background">
+                <div className="hidden grid-cols-[116px_minmax(220px,1fr)_112px_112px_128px_112px_112px_40px] gap-3 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium uppercase text-muted-foreground dark:border-border dark:bg-muted dark:text-muted-foreground xl:grid">
                   <div>Invoice</div>
                   <div>Client</div>
                   <div>Due</div>
@@ -1633,7 +1633,7 @@ export default function InvoicesPage() {
                   <div>Follow up</div>
                   <div />
                 </div>
-                <div className="divide-y divide-border dark:divide-[#1f4563]">
+                <div className="divide-y divide-border dark:divide-border">
                   {filteredInvoices.map((invoice) => {
                     const overdueDays = getOverdueDays(
                       invoice.due_date,
@@ -1644,35 +1644,35 @@ export default function InvoicesPage() {
                     return (
                       <div
                         key={invoice.id}
-                        className="min-w-0 bg-background px-4 py-4 transition-colors hover:bg-muted/40 dark:bg-[#071827] dark:hover:bg-[#0F1512]"
+                        className="min-w-0 bg-background px-4 py-4 transition-colors hover:bg-muted/40 dark:bg-background dark:hover:bg-muted/60"
                       >
                         <div
-                          className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[116px_minmax(220px,1fr)_112px_112px_128px_112px_112px_40px] xl:items-center"
+                          className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 xl:grid-cols-[116px_minmax(220px,1fr)_112px_112px_128px_112px_112px_40px] xl:items-center xl:gap-3"
                         >
-                          <div className="min-w-0">
-                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9eb8cc] xl:hidden">
+                          <div className="col-span-2 min-w-0 xl:col-span-1">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-muted-foreground xl:hidden">
                               Invoice
                             </div>
-                            <div className="truncate text-sm font-semibold text-foreground dark:text-[#f4f8fb]">
+                            <div className="truncate text-sm font-semibold text-foreground dark:text-foreground">
                               {invoice.invoice_number}
                             </div>
                           </div>
-                          <div className="min-w-0 sm:col-span-2 xl:col-span-1">
-                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9eb8cc] xl:hidden">
+                          <div className="col-span-2 min-w-0 xl:col-span-1">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-muted-foreground xl:hidden">
                               Client
                             </div>
-                            <div className="truncate text-sm font-medium text-foreground dark:text-[#f4f8fb]">
+                            <div className="truncate text-sm font-medium text-foreground dark:text-foreground">
                               {invoice.client_name || "No client"}
                             </div>
                           </div>
                           <div className="text-sm">
-                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9eb8cc] xl:hidden">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-muted-foreground xl:hidden">
                               Due
                             </div>
-                            <div className="text-foreground dark:text-[#f4f8fb]">
+                            <div className="text-foreground dark:text-foreground">
                               {formatDate(invoice.due_date)}
                             </div>
-                            <div className="mt-1 text-xs text-muted-foreground dark:text-[#9eb8cc]">
+                            <div className="mt-1 text-xs text-muted-foreground dark:text-muted-foreground">
                               {overdueDays > 0
                                 ? `${overdueDays} days overdue`
                                 : isDueToday(invoice.due_date) &&
@@ -1683,15 +1683,15 @@ export default function InvoicesPage() {
                             </div>
                           </div>
                           <div>
-                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9eb8cc] xl:hidden">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-muted-foreground xl:hidden">
                               Amount
                             </div>
-                            <div className="text-sm font-bold text-foreground dark:text-[#f4f8fb]">
+                            <div className="text-sm font-bold text-foreground dark:text-foreground">
                             {moneyFormatter.format(invoice.amount)}
                             </div>
                           </div>
-                          <div>
-                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-[#9eb8cc] xl:hidden">
+                          <div className="col-span-2 xl:col-span-1">
+                            <div className="mb-1 text-[0.68rem] font-medium uppercase text-muted-foreground dark:text-muted-foreground xl:hidden">
                               Status
                             </div>
                             <Badge
@@ -1707,7 +1707,7 @@ export default function InvoicesPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-9 w-full px-4 dark:border-[#1f4563] dark:bg-transparent dark:text-[#f4f8fb] dark:hover:bg-[#102c44] dark:hover:text-white"
+                              className="h-9 w-full px-4 dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-muted dark:hover:text-white"
                               disabled={isSaving}
                               onClick={(event) => {
                                 event.stopPropagation()
@@ -1720,7 +1720,7 @@ export default function InvoicesPage() {
                           <div>
                             <Button
                               size="sm"
-                              className="h-9 w-full bg-[#024D8B] px-4 text-white shadow-sm hover:bg-[#024D8B] disabled:border disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 dark:disabled:border-[#1f4563] dark:disabled:bg-[#102c44] dark:disabled:text-[#7894a8]"
+                              className="h-9 w-full bg-[#024D8B] px-4 text-white shadow-sm hover:bg-[#024D8B] disabled:border disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 dark:disabled:border-border dark:disabled:bg-muted dark:disabled:text-muted-foreground"
                               disabled={isSaving || !followUpEnabled}
                               onClick={(event) => {
                                 event.stopPropagation()
@@ -1731,13 +1731,13 @@ export default function InvoicesPage() {
                               Follow up
                             </Button>
                           </div>
-                          <div className="flex justify-end sm:col-span-2 xl:col-span-1">
+                          <div className="col-span-2 flex justify-end xl:col-span-1">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="text-muted-foreground hover:bg-muted hover:text-foreground dark:text-[#c8d9e6] dark:hover:bg-[#102c44] dark:hover:text-[#f4f8fb]"
+                                  className="text-muted-foreground hover:bg-muted hover:text-foreground dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground"
                                   aria-label={`Actions for ${invoice.invoice_number}`}
                                   disabled={isSaving}
                                   onClick={(event) => event.stopPropagation()}
@@ -1745,7 +1745,7 @@ export default function InvoicesPage() {
                                   <MoreHorizontal className="size-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent className="dark:border-[#1f4563] dark:bg-[#0d2235] dark:text-[#f4f8fb]">
+                              <DropdownMenuContent className="dark:border-border dark:bg-card dark:text-foreground">
                                 <DropdownMenuLabel>
                                   {invoice.invoice_number}
                                 </DropdownMenuLabel>
@@ -1823,20 +1823,20 @@ export default function InvoicesPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center dark:border-[#2B3731] dark:bg-[#071827]">
-                <div className="mx-auto grid size-12 place-items-center rounded-lg border border-border bg-background text-muted-foreground dark:border-[#1f4563] dark:bg-[#0d2235] dark:text-[#9eb8cc]">
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center dark:border-border dark:bg-background">
+                <div className="mx-auto grid size-12 place-items-center rounded-lg border border-border bg-background text-muted-foreground dark:border-border dark:bg-card dark:text-muted-foreground">
                   {hasActiveFilters ? (
                     <Search className="size-5" />
                   ) : (
                     <FileText className="size-5" />
                   )}
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-foreground dark:text-[#f4f8fb]">
+                <h3 className="mt-4 text-base font-semibold text-foreground dark:text-foreground">
                   {hasActiveFilters
                     ? "No invoices match these filters"
                     : "No invoices found"}
                 </h3>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground dark:text-[#9eb8cc]">
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground dark:text-muted-foreground">
                   {hasActiveFilters
                     ? "Try a different client, invoice number, or status."
                     : "Create your first invoice to get started."}
@@ -1845,7 +1845,7 @@ export default function InvoicesPage() {
                   {hasActiveFilters ? (
                     <Button
                       variant="outline"
-                      className="w-full sm:w-auto dark:border-[#1f4563] dark:bg-transparent dark:text-[#f4f8fb] dark:hover:bg-[#102c44]"
+                      className="w-full sm:w-auto dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-muted"
                       onClick={resetFilters}
                     >
                       Clear filters
