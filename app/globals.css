@@ -332,16 +332,51 @@
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
-/* Print: clean page with no browser chrome artifacts */
+/* Print: clean Letter pages. Disable browser "Headers and footers" for no URL/date/title. */
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 12mm 14mm;
+    size: Letter portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 8.5in;
+    min-height: 11in;
+    margin: 0;
+    background: white !important;
   }
 
   body {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  .print-document {
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .print-page {
+    width: 8.5in !important;
+    min-height: 11in;
+    margin: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+@media screen {
+  .print-page {
+    width: 8.5in;
+    min-height: 11in;
   }
 }
 

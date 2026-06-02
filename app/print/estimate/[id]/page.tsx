@@ -142,9 +142,9 @@ export default async function EstimatePrintPage({
     <>
       <PrintToolbar backHref={role === "client" ? "/client/dashboard" : "/dashboard/estimates"} />
 
-      <div className="pt-14 print:pt-0 min-h-screen bg-zinc-200 print:bg-white">
+      <div className="print-document pt-16 print:pt-0 min-h-screen bg-zinc-200 print:bg-white">
         <div
-          className="mx-auto w-[794px] print:w-full my-6 print:my-0 bg-white shadow-2xl print:shadow-none"
+          className="print-page mx-auto my-6 bg-white shadow-2xl print:my-0 print:shadow-none"
           data-testid="estimate-print-page"
         >
 
@@ -152,7 +152,7 @@ export default async function EstimatePrintPage({
           <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />
 
           {/* ── Header ── */}
-          <div className="flex items-start justify-between gap-6 px-8 pt-7 pb-5">
+          <div className="print-avoid-break flex items-start justify-between gap-6 px-8 pt-7 pb-5 print:pt-5 print:pb-3">
             <div>
               <p className="text-2xl font-black tracking-tight text-zinc-900 leading-tight">{companyName}</p>
               {ownerName && ownerName !== companyName && (
@@ -180,33 +180,33 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Dates strip ── */}
-          <div className="flex flex-wrap border-y border-zinc-200 text-xs">
-            <div className="flex-1 min-w-[110px] border-r border-zinc-200 px-8 py-3">
+          <div className="print-avoid-break flex flex-wrap border-y border-zinc-200 text-xs">
+            <div className="flex-1 min-w-[110px] border-r border-zinc-200 px-8 py-3 print:py-2">
               <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400">Date Issued</p>
               <p className="mt-0.5 font-semibold text-zinc-800">{fmt(estimate.sent_date)}</p>
             </div>
             {estimate.follow_up_date && (
-              <div className="flex-1 min-w-[110px] border-r border-zinc-200 px-8 py-3">
+              <div className="flex-1 min-w-[110px] border-r border-zinc-200 px-8 py-3 print:py-2">
                 <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400">Valid Until</p>
                 <p className="mt-0.5 font-semibold text-zinc-800">{fmt(estimate.follow_up_date)}</p>
               </div>
             )}
-            <div className="flex-1 min-w-[110px] px-8 py-3">
+            <div className="flex-1 min-w-[110px] px-8 py-3 print:py-2">
               <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400">Estimate Total</p>
               <p className="mt-0.5 font-black text-ef-ocean">{money.format(total)}</p>
             </div>
           </div>
 
           {/* ── Prepared By / For ── */}
-          <div className="grid grid-cols-2 gap-px bg-zinc-200 border-b border-zinc-200 text-xs">
-            <div className="bg-zinc-50 px-8 py-4">
+          <div className="print-avoid-break grid grid-cols-2 gap-px bg-zinc-200 border-b border-zinc-200 text-xs">
+            <div className="bg-zinc-50 px-8 py-4 print:py-3">
               <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Prepared By</p>
               <p className="font-bold text-zinc-900 text-sm">{companyName}</p>
               {profile?.phone   && <p className="text-zinc-500 mt-0.5">{profile.phone}</p>}
               {profile?.website && <p className="text-blue-600 mt-0.5">{profile.website}</p>}
               {profile?.service_area && <p className="text-zinc-400 mt-0.5">{profile.service_area}</p>}
             </div>
-            <div className="bg-white px-8 py-4">
+            <div className="bg-white px-8 py-4 print:py-3">
               <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Prepared For</p>
               <p className="font-bold text-zinc-900 text-sm">{clientName}</p>
               {clientCo    && clientCo !== clientName && <p className="text-zinc-600 mt-0.5">{clientCo}</p>}
@@ -216,7 +216,7 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Scope of work ── */}
-          <div className="px-8 py-5">
+          <div className="print-avoid-break px-8 py-5 print:py-3">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-3">Scope of Work</p>
 
             {hasLineItems ? (
@@ -265,7 +265,7 @@ export default async function EstimatePrintPage({
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-between rounded-lg border-2 border-zinc-200 bg-zinc-50 px-6 py-4">
+              <div className="print-avoid-break flex items-center justify-between rounded-lg border-2 border-zinc-200 bg-zinc-50 px-6 py-4 print:py-3">
                 <div>
                   <p className="text-xs font-medium text-zinc-500">Estimate Total</p>
                   <p className="text-[0.65rem] text-zinc-400 mt-0.5">All labour, materials, and equipment included.</p>
@@ -276,8 +276,8 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Payment schedule + Notes side by side ── */}
-          <div className="border-t border-zinc-200 grid grid-cols-[1fr_auto] gap-px bg-zinc-200">
-            <div className="bg-white px-8 py-4">
+          <div className="print-avoid-break border-t border-zinc-200 grid grid-cols-[1fr_auto] gap-px bg-zinc-200">
+            <div className="bg-white px-8 py-4 print:py-3">
               <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">Payment Schedule</p>
               <div className="grid grid-cols-3 gap-2">
                 {[
@@ -294,7 +294,7 @@ export default async function EstimatePrintPage({
               </div>
             </div>
             {estimate.notes && (
-              <div className="bg-zinc-50 px-8 py-4 min-w-[220px]">
+              <div className="bg-zinc-50 px-8 py-4 min-w-[220px] print:py-3">
                 <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Notes</p>
                 <p className="text-xs leading-relaxed whitespace-pre-wrap text-zinc-600">{estimate.notes}</p>
               </div>
@@ -302,7 +302,7 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Terms & Conditions (2-column) ── */}
-          <div className="border-t border-zinc-200 bg-zinc-50 px-8 py-4">
+          <div className="print-avoid-break border-t border-zinc-200 bg-zinc-50 px-8 py-4 print:py-3">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2">Terms &amp; Conditions</p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
               {[
@@ -321,7 +321,7 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Authorization ── */}
-          <div className="border-t border-zinc-200 px-8 py-5">
+          <div className="print-avoid-break border-t border-zinc-200 px-8 py-5 print:py-3">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-3">Authorization</p>
             {isAccepted && !isPaid && (
               <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-2">
@@ -365,7 +365,7 @@ export default async function EstimatePrintPage({
           <div className="h-[5px] bg-ef-ocean print:bg-ef-ocean" />
 
           {/* ── Footer ── */}
-          <div className="flex items-center justify-between px-8 py-2 text-[0.6rem] text-zinc-400">
+          <div className="print-avoid-break flex items-center justify-between px-8 py-2 text-[0.6rem] text-zinc-400">
             <span>Generated with Euroflo</span>
             <span>{companyName} &middot; #{estimate.estimate_number}</span>
           </div>

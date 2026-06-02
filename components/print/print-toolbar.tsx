@@ -5,16 +5,19 @@ import { Button } from "@/components/ui/button"
 
 export function PrintToolbar({ backHref }: { backHref: string }) {
   return (
-    <div className="print:hidden fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 shadow-sm sm:px-6">
+    <div className="print:hidden fixed inset-x-0 top-0 z-50 flex min-h-16 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-2 shadow-sm sm:px-6">
       <Button variant="ghost" size="sm" asChild>
         <a href={backHref}>
           <ArrowLeft className="mr-1.5 size-4" />
           Back
         </a>
       </Button>
-      <span className="text-sm font-medium text-zinc-500">
-        Euroflo Document Preview
-      </span>
+      <div className="hidden min-w-0 flex-1 text-center sm:block">
+        <p className="text-sm font-medium leading-5 text-zinc-600">Euroflo Document Preview</p>
+        <p className="text-[0.7rem] leading-4 text-zinc-400">
+          For a clean PDF, turn off &quot;Headers and footers&quot; in the print dialog.
+        </p>
+      </div>
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
