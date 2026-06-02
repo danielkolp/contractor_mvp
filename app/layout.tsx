@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { DM_Sans } from "next/font/google";
 
 import "./globals.css";
 import "@/components/landing/euroflo-landing.css";
@@ -8,7 +8,12 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "Euroflo",
@@ -20,7 +25,7 @@ export const metadata: Metadata = {
   },
 };
 
-const themeScript = `(function(){var t=localStorage.getItem('theme');var p=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t===null&&p)){document.documentElement.classList.add('dark')}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem('theme');var p=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||((t===null||t==='system')&&p)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -31,7 +36,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full antialiased", "font-sans", geist.variable)}
+      className={cn("h-full antialiased", "font-sans", dmSans.variable)}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

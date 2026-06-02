@@ -147,9 +147,9 @@ function PhotoThumbnail({ file, onRemove }: { file: File; onRemove: () => void }
         type="button"
         aria-label={`Remove ${file.name}`}
         onClick={onRemove}
-        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-ef-ink text-white shadow-sm"
+        className="absolute -right-2 -top-2 flex size-7 items-center justify-center rounded-full bg-ef-ink text-white shadow-md ring-2 ring-white transition active:scale-95"
       >
-        <X className="size-3" />
+        <X className="size-3.5" />
       </button>
     </div>
   )
@@ -401,7 +401,7 @@ export default function RequestPage({
     : "Request an estimate"
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-ef-mist/30 px-4 pb-16 pt-8">
+    <div className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist/40 px-4 pb-16 pt-8">
       <div className="mx-auto max-w-lg">
         <div className="mb-8 text-center">
           {profileLoading ? (
