@@ -36,7 +36,7 @@ export default async function SignupPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-8 sm:px-6 sm:py-10">
+    <main className="force-light min-h-screen overflow-x-hidden bg-zinc-50 px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-6xl items-center">
         <div className="grid min-w-0 w-full gap-10 lg:grid-cols-[0.95fr_1.05fr]">
           {/* Left: pitch */}
