@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  Copy,
   HardHat,
   Loader2,
   MapPin,
@@ -130,6 +131,7 @@ function PostSubmitScreen({
 }) {
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle")
   const [guestLink,   setGuestLink]   = useState<string | null>(null)
+  const [copiedLink,  setCopiedLink]  = useState(false)
 
   useEffect(() => {
     if (fallbackGuestToken) {
@@ -275,20 +277,36 @@ function PostSubmitScreen({
           </div>
         </div>
 
-        {/* Guest link fallback — only shown if email failed or token exists */}
-        {guestLink && !emailSent && (
+        {/* Bookmarkable portal link — always shown when token exists */}
+        {guestLink && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
-              Private job link
+              Your portal link
             </p>
             <p className="mt-2 text-xs leading-relaxed text-gray-500">
-              Bookmark this to track your job without signing in.
+              Copy or bookmark this link to access your job portal at any time — no sign-in needed.
             </p>
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <span className="flex-1 truncate text-xs text-gray-600 select-all">{guestLink}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(guestLink).then(() => {
+                    setCopiedLink(true)
+                    setTimeout(() => setCopiedLink(false), 2000)
+                  })
+                }}
+                className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-xs transition hover:bg-gray-100 active:scale-95 flex items-center gap-1.5"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copiedLink ? "Copied!" : "Copy"}
+              </button>
+            </div>
             <a
               href={guestLink}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50"
             >
-              Open private job link
+              Open portal
             </a>
           </div>
         )}
