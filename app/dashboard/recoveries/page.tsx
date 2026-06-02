@@ -479,12 +479,12 @@ export default function RecoveriesPage() {
         onClose={() => setViewRepliesItem(null)}
       />
 
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="space-y-6 p-6 sm:p-7 lg:p-8">
         <ContentReveal isLoading={isLoading} skeleton={<RecoveriesPageSkeleton />}>
           <>
             {/* Summary stats */}
             {items.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <StatCard
                   label="Active"
                   value={items.filter((i) => !["resolved", "lost", "archived"].includes(i.status ?? "")).length}
@@ -506,7 +506,7 @@ export default function RecoveriesPage() {
             )}
 
             {/* Filter tabs */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-1">
                 {TABS.map((tab) => (
                   <button
@@ -551,7 +551,7 @@ export default function RecoveriesPage() {
             {displayedItems.length === 0 ? (
               <EmptyTabState tab={activeTab} onAdd={() => setAddOpen(true)} />
             ) : (
-              <div className="grid gap-2">
+              <div className="grid gap-3">
                 {displayedItems.map((item) => (
                   <RecoveryRow
                     key={item.id}
@@ -622,8 +622,12 @@ function RecoveryRow({
   return (
     <div
       className={cn(
-        "group flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5 transition-shadow hover:shadow-sm sm:flex-row sm:items-center",
-        isDone && "opacity-60"
+        "group flex flex-col gap-2 rounded-xl border border-border bg-card px-5 py-4 transition-shadow hover:shadow-sm sm:flex-row sm:items-center",
+        !isDone && isCheckInDue(item) && "border-l-[3px] border-l-sky-400",
+        !isDone && !isCheckInDue(item) && item.status === "needs_follow_up" && "border-l-[3px] border-l-amber-400",
+        !isDone && !isCheckInDue(item) && item.status === "message_ready" && "border-l-[3px] border-l-blue-500",
+        !isDone && !isCheckInDue(item) && (item.status === "sent" || item.status === "waiting") && "border-l-[3px] border-l-blue-300 dark:border-l-blue-600",
+        isDone && "opacity-55"
       )}
     >
       {/* Left: customer + meta */}
@@ -780,15 +784,15 @@ function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card px-4 py-3 shadow-sm",
+        "rounded-xl border border-border bg-card px-5 py-4 shadow-sm",
         highlight && "border-ef-200 bg-ef-mist/50 dark:border-ef-navy/40 dark:bg-ef-ink/20",
         className
       )}
     >
-      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+      <p className="text-[0.6rem] font-semibold uppercase tracking-widest text-muted-foreground/60">
         {label}
       </p>
-      <p className={cn("mt-1 text-2xl font-bold tabular-nums", highlight && "text-ef-ocean dark:text-ef-200")}>
+      <p className={cn("mt-1 text-2xl font-bold tabular-nums tracking-tight", highlight ? "text-ef-ocean dark:text-ef-200" : "text-foreground")}>
         {value}
       </p>
       <p className="mt-0.5 text-xs text-muted-foreground">{sublabel}</p>

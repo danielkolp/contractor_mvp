@@ -80,7 +80,7 @@ Follow-up emails are sent via [Resend](https://resend.com). Sign up, verify a se
 | Variable | Description |
 |---|---|
 | `RESEND_API_KEY` | Resend API key (starts with `re_`) |
-| `RESEND_FROM_EMAIL` | Verified sender, e.g. `EstiGator <followups@yourdomain.com>` |
+| `RESEND_FROM_EMAIL` | Verified sender, e.g. `Euroflo <followups@yourdomain.com>` |
 
 **If these are missing:** the app does not crash. The "Send follow-up email" button shows a clear configuration error. Copy/manual fallback continues to work. Only recovery follow-up emails use Resend — invoice and estimate sending is not yet implemented.
 
@@ -89,11 +89,11 @@ Follow-up emails are sent via [Resend](https://resend.com). Sign up, verify a se
 Follow-up emails are sent as **branded HTML** with a plain-text fallback. The HTML template (`lib/email/recovery-email-template.ts`) uses inline styles only — no external CSS or fonts — so it renders correctly in Gmail, Outlook, Apple Mail, and mobile clients.
 
 Layout:
-- Green header bar with "Follow-up from [Company Name]"
+- Ocean header bar with "Follow-up from [Company Name]"
 - Subject line as a heading
 - Message body as paragraphs (line breaks preserved)
 - Contractor signature (name, company, phone if set, website if set)
-- Footer: "Sent via EstiGator on behalf of [Company Name]"
+- Footer: "Sent via Euroflo on behalf of [Company Name]"
 
 **Reply-To**: when `RESEND_INBOUND_DOMAIN` is configured, the `replyTo` address is set to a unique inbound address (`r_<event_id>@<domain>`) and client replies are routed back to the dashboard. Without inbound configured, the contractor's real email is used as `replyTo` — replies go to their inbox and are not tracked in-app. See **Inbound reply handling** below.
 

@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark light" />
-    <title>Confirm your EstiGator account</title>
+    <meta name="color-scheme" content="light" />
+    <title>Confirm your Euroflo account</title>
     <style>
       @media (max-width: 620px) {
         .container {
@@ -22,75 +22,75 @@
       }
     </style>
   </head>
-  <body style="margin:0;background:#0b0f0c;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#f3f5f4;">
+  <body style="margin:0;background:#f2f7fb;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#002453;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-      Confirm your EstiGator account to start using your workspace.
+      Confirm your Euroflo account to start using your contractor workspace.
     </div>
 
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0b0f0c;margin:0;padding:36px 16px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f2f7fb;margin:0;padding:36px 16px;">
       <tr>
         <td align="center">
-          <table class="container" role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:600px;max-width:600px;border:1px solid #1f2924;border-radius:18px;background:#111714;box-shadow:0 24px 80px rgba(0,0,0,0.38);overflow:hidden;">
+          <table class="container" role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:600px;max-width:600px;border:1px solid #d5e6f2;border-radius:18px;background:#ffffff;box-shadow:0 18px 45px rgba(0,36,83,0.12);overflow:hidden;">
             <tr>
-              <td style="height:5px;background:#16a34a;"></td>
+              <td style="height:6px;background:#024d8b;"></td>
             </tr>
             <tr>
               <td class="content" style="padding:34px 36px 32px;">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
                     <td>
-                      <div style="font-size:24px;font-weight:800;letter-spacing:0;color:#f3f5f4;">
-                        <span style="display:inline-block;width:30px;height:30px;line-height:30px;margin-right:10px;border-radius:10px;background:#16a34a;color:#07100b;text-align:center;font-weight:900;">E</span>
-                        EstiGator
+                      <div style="font-size:24px;font-weight:800;letter-spacing:0;color:#002453;">
+                        <span style="display:inline-block;width:34px;height:34px;line-height:34px;margin-right:10px;border-radius:10px;background:#024d8b;color:#ffffff;text-align:center;font-weight:900;">E</span>
+                        Euroflo
                       </div>
                     </td>
                   </tr>
                 </table>
 
-                <h1 style="margin:34px 0 12px;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:0;color:#f3f5f4;">
+                <h1 style="margin:34px 0 12px;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:0;color:#002453;">
                   Verify your email
                 </h1>
-                <p style="margin:0 0 22px;font-size:16px;line-height:1.65;color:#c8d0cc;">
-                  Hi {{ .Email }}, confirm this email address to finish setting up your EstiGator account.
+                <p style="margin:0 0 22px;font-size:16px;line-height:1.65;color:#334155;">
+                  Hi {{ .Email }}, confirm this email address to finish setting up your Euroflo account.
                 </p>
 
                 <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 26px;">
                   <tr>
-                    <td align="center" style="border-radius:10px;background:#16a34a;">
-                      <a class="button" href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 22px;border-radius:10px;background:#16a34a;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;">
+                    <td align="center" style="border-radius:10px;background:#024d8b;">
+                      <a class="button" href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 22px;border-radius:10px;background:#024d8b;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;">
                         Verify email address
                       </a>
                     </td>
                   </tr>
                 </table>
 
-                <div style="margin:0 0 24px;padding:16px;border:1px solid #26322d;border-radius:12px;background:#0f1512;">
-                  <p style="margin:0 0 8px;font-size:14px;line-height:1.55;color:#f3f5f4;font-weight:700;">
+                <div style="margin:0 0 24px;padding:16px;border:1px solid #d5e6f2;border-radius:12px;background:#eaf5fd;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.55;color:#033258;font-weight:700;">
                     What happens next
                   </p>
-                  <p style="margin:0;font-size:14px;line-height:1.65;color:#a9b5af;">
-                    After verification, EstiGator will open your dashboard so you can manage estimates, invoices, follow-ups, job requests, and recovery work from one focused workspace.
+                  <p style="margin:0;font-size:14px;line-height:1.65;color:#475569;">
+                    After verification, Euroflo will open your dashboard so you can manage estimates, invoices, follow-ups, job requests, and recovery work from one focused workspace.
                   </p>
                 </div>
 
-                <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#9aa39c;">
+                <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#64748b;">
                   If the button does not work, copy and paste this link into your browser:
                 </p>
-                <p style="margin:0;word-break:break-all;font-size:12px;line-height:1.6;color:#9aa39c;">
-                  <a href="{{ .ConfirmationURL }}" style="color:#4ade80;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                <p style="margin:0;word-break:break-all;font-size:12px;line-height:1.6;color:#64748b;">
+                  <a href="{{ .ConfirmationURL }}" style="color:#024d8b;text-decoration:underline;">{{ .ConfirmationURL }}</a>
                 </p>
 
-                <hr style="border:0;border-top:1px solid #26322d;margin:28px 0 20px;" />
+                <hr style="border:0;border-top:1px solid #d5e6f2;margin:28px 0 20px;" />
 
-                <p style="margin:0;font-size:12px;line-height:1.6;color:#7f8a84;">
-                  If you did not create an EstiGator account, you can ignore this email.
+                <p style="margin:0;font-size:12px;line-height:1.6;color:#64748b;">
+                  If you did not create a Euroflo account, you can ignore this email.
                 </p>
               </td>
             </tr>
           </table>
 
-          <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#66706a;">
-            EstiGator email verification
+          <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#64748b;">
+            Euroflo email verification
           </p>
         </td>
       </tr>

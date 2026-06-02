@@ -182,11 +182,11 @@ function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null
           </>
         ) : !complete ? (
           <>
-            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200/70 bg-amber-50/60 p-4 dark:border-amber-800/30 dark:bg-amber-950/20">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
               <div>
-                <p className="text-sm font-medium text-amber-800">Onboarding incomplete</p>
-                <p className="mt-0.5 text-xs text-amber-700">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Onboarding incomplete</p>
+                <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-400/80">
                   Finish Stripe onboarding to accept client payments.
                 </p>
               </div>
@@ -204,20 +204,20 @@ function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null
             </Button>
           </>
         ) : (
-          <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+          <div className="flex items-start gap-3 rounded-lg border border-emerald-200/70 bg-emerald-50/60 p-4 dark:border-emerald-800/30 dark:bg-emerald-950/20">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-green-800">Stripe connected</p>
-              <p className="mt-0.5 text-xs text-green-700">You can accept client payments.</p>
-              <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Stripe connected</p>
+              <p className="mt-0.5 text-xs text-emerald-700/80 dark:text-emerald-400/80">You can accept client payments.</p>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 {[
                   { label: "Charges",  value: status?.charges_enabled },
                   { label: "Payouts",  value: status?.payouts_enabled },
                   { label: "Verified", value: status?.details_submitted },
                 ].map(({ label, value }) => (
-                  <div key={label} className="rounded border border-green-200 bg-white px-2 py-1.5 text-center">
-                    <dt className="text-[0.6rem] font-bold uppercase tracking-wide text-gray-400">{label}</dt>
-                    <dd className={`mt-0.5 font-semibold ${value ? "text-green-700" : "text-red-500"}`}>
+                  <div key={label} className="rounded-md border border-border bg-card px-2 py-2 text-center">
+                    <dt className="text-[0.6rem] font-bold uppercase tracking-wider text-muted-foreground">{label}</dt>
+                    <dd className={`mt-0.5 font-semibold ${value ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                       {value ? "Yes" : "No"}
                     </dd>
                   </div>
