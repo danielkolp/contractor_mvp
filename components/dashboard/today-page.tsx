@@ -10,13 +10,14 @@ import {
 import Link from "next/link"
 import {
   ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Database,
   FileText,
   Plus,
   Send,
   Sparkles,
-  TrendingUp,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -27,6 +28,7 @@ import { RecoveryRepliesDialog } from "@/components/dashboard/recovery-replies-d
 import { SendFollowUpDialog } from "@/components/dashboard/send-follow-up-dialog"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Button } from "@/components/ui/button"
+import { StatusPulse } from "@/components/ui/status-pulse"
 import { generateRecoveryItemMessage } from "@/lib/recovery-engine"
 import { money } from "@/lib/format-money"
 import { createClient } from "@/lib/supabase/client"
@@ -148,7 +150,6 @@ export function TodayPage() {
     setPendingEstimates(estimatesResult.data ?? [])
     setAcceptedEstimates(acceptedEstimatesResult.data ?? [])
 
-    // Load reply info for all visible items in one query
     if (loadedItems.length > 0) {
       const itemIds = loadedItems.map((i) => i.id)
       const { data: replies } = await supabase
@@ -196,24 +197,12 @@ export function TodayPage() {
     [items]
   )
 
-  const needsActionItems = useMemo(
+  const needsFollowUpItems = useMemo(
     () =>
       items
         .filter(
           (i) =>
-            i.status === "needs_follow_up" &&
-            (!i.check_back_date || i.check_back_date <= todayIso())
-        )
-        .sort((a, b) => b.amount - a.amount),
-    [items]
-  )
-
-  const messageReadyItems = useMemo(
-    () =>
-      items
-        .filter(
-          (i) =>
-            i.status === "message_ready" &&
+            (i.status === "needs_follow_up" || i.status === "message_ready") &&
             (!i.check_back_date || i.check_back_date <= todayIso())
         )
         .sort((a, b) => b.amount - a.amount),
@@ -239,8 +228,7 @@ export function TodayPage() {
 
   const totalActionCount =
     checkInDueItems.length +
-    needsActionItems.length +
-    messageReadyItems.length +
+    needsFollowUpItems.length +
     overdueInvoices.length +
     pendingEstimates.length +
     acceptedEstimates.length
@@ -551,112 +539,83 @@ export function TodayPage() {
               isDemoSeeding={isDemoSeeding}
             />
           ) : totalActionCount === 0 ? (
-            <AllCaughtUp atRisk={atRisk} waitingCount={waitingItems.length} onAdd={() => setAddOpen(true)} />
+            <div className="grid gap-4 euroflo-fade-up">
+              <AllCaughtUp atRisk={atRisk} waitingCount={waitingItems.length} onAdd={() => setAddOpen(true)} />
+              {waitingItems.length > 0 && (
+                <WaitingSection
+                  items={waitingItems}
+                  replyInfoMap={replyInfoMap}
+                  defaultOpen
+                  sharedCardProps={sharedCardProps}
+                />
+              )}
+            </div>
           ) : (
-            <div className="grid gap-4">
-              {/* Hero summary */}
-              <HeroSummary
+            <div className="grid gap-4 euroflo-fade-up">
+              <CompactSummary
                 actionCount={totalActionCount}
                 atRisk={atRisk}
                 onAdd={() => setAddOpen(true)}
-                onStartHighestValue={() =>
+                onStartNextTask={() =>
                   actionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
               />
 
               <div ref={actionSectionRef} className="grid gap-6">
-                {/* Section 1: Needs action now */}
-                {(checkInDueItems.length > 0 ||
-                  needsActionItems.length > 0 ||
-                  overdueInvoices.length > 0 ||
-                  pendingEstimates.length > 0 ||
-                  acceptedEstimates.length > 0) && (
-                  <ActionSection
-                    label="Needs action now"
-                    dot="bg-amber-400"
-                    count={checkInDueItems.length + needsActionItems.length + overdueInvoices.length + pendingEstimates.length + acceptedEstimates.length}
-                  >
-                    {checkInDueItems.map((item) => (
-                      <RecoveryCard
-                        key={item.id}
-                        item={item}
-                        isCheckIn
-                        replyInfo={replyInfoMap[item.id]}
-                        {...sharedCardProps}
-                      />
-                    ))}
-                    {needsActionItems.map((item) => (
-                      <RecoveryCard
-                        key={item.id}
-                        item={item}
-                        isCheckIn={false}
-                        replyInfo={replyInfoMap[item.id]}
-                        {...sharedCardProps}
-                      />
-                    ))}
-                    {overdueInvoices.map((inv) => (
-                      <InvoiceActionCard
-                        key={inv.id}
-                        invoice={inv}
-                        isSaving={isSaving}
-                        onMarkPaid={handleInvoiceMarkPaid}
-                        onAddToQueue={handleInvoiceAddToQueue}
-                      />
-                    ))}
-                    {pendingEstimates.map((est) => (
-                      <EstimateActionCard
-                        key={est.id}
-                        estimate={est}
-                        isSaving={isSaving}
-                        onWon={handleEstimateWon}
-                        onLost={handleEstimateLost}
-                        onSnooze={handleEstimateSnooze}
-                      />
-                    ))}
-                    {acceptedEstimates.map((est) => (
-                      <AcceptedEstimateActionCard key={est.id} estimate={est} />
-                    ))}
-                  </ActionSection>
-                )}
+                <ActionSection
+                  label="Needs your attention"
+                  count={totalActionCount}
+                  urgent
+                >
+                  {overdueInvoices.map((inv) => (
+                    <InvoiceActionCard
+                      key={inv.id}
+                      invoice={inv}
+                      isSaving={isSaving}
+                      onMarkPaid={handleInvoiceMarkPaid}
+                      onAddToQueue={handleInvoiceAddToQueue}
+                    />
+                  ))}
+                  {checkInDueItems.map((item) => (
+                    <RecoveryCard
+                      key={item.id}
+                      item={item}
+                      isCheckIn
+                      replyInfo={replyInfoMap[item.id]}
+                      {...sharedCardProps}
+                    />
+                  ))}
+                  {needsFollowUpItems.map((item) => (
+                    <RecoveryCard
+                      key={item.id}
+                      item={item}
+                      isCheckIn={false}
+                      replyInfo={replyInfoMap[item.id]}
+                      {...sharedCardProps}
+                    />
+                  ))}
+                  {acceptedEstimates.map((est) => (
+                    <AcceptedEstimateActionCard key={est.id} estimate={est} />
+                  ))}
+                  {pendingEstimates.map((est) => (
+                    <EstimateActionCard
+                      key={est.id}
+                      estimate={est}
+                      isSaving={isSaving}
+                      onWon={handleEstimateWon}
+                      onLost={handleEstimateLost}
+                      onSnooze={handleEstimateSnooze}
+                    />
+                  ))}
+                </ActionSection>
 
-                {/* Section 2: Message ready */}
-                {messageReadyItems.length > 0 && (
-                  <ActionSection
-                    label="Message ready"
-                    dot="bg-ef-sky"
-                    count={messageReadyItems.length}
-                  >
-                    {messageReadyItems.map((item) => (
-                      <RecoveryCard
-                        key={item.id}
-                        item={item}
-                        isCheckIn={false}
-                        replyInfo={replyInfoMap[item.id]}
-                        {...sharedCardProps}
-                      />
-                    ))}
-                  </ActionSection>
-                )}
-
-                {/* Section 3: Waiting for reply */}
                 {waitingItems.length > 0 && (
-                  <ActionSection
-                    label="Waiting for reply"
-                    dot="bg-blue-400"
-                    count={waitingItems.length}
-                    muted
-                  >
-                    {waitingItems.map((item) => (
-                      <RecoveryCard
-                        key={item.id}
-                        item={item}
-                        isCheckIn={false}
-                        isWaiting
-                        replyInfo={replyInfoMap[item.id]}
-                        {...sharedCardProps}
-                      />
-                    ))}
-                  </ActionSection>
+                  <WaitingSection
+                    items={waitingItems}
+                    replyInfoMap={replyInfoMap}
+                    defaultOpen={false}
+                    sharedCardProps={sharedCardProps}
+                  />
                 )}
               </div>
             </div>
@@ -667,51 +626,43 @@ export function TodayPage() {
   )
 }
 
-// ─── Hero summary card ────────────────────────────────────────
+// ─── Compact summary card ─────────────────────────────────────
 
-function HeroSummary({
+function CompactSummary({
   actionCount,
   atRisk,
   onAdd,
-  onStartHighestValue,
+  onStartNextTask,
 }: {
   actionCount: number
   atRisk: number
   onAdd: () => void
-  onStartHighestValue: () => void
+  onStartNextTask: () => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="absolute inset-0 bg-gradient-to-br from-ef-sky/5 via-transparent to-transparent" />
-      <div className="relative flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <div className="flex size-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-              <span className="text-xs font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                {actionCount}
-              </span>
-            </div>
-            <h2 className="text-base font-semibold text-foreground">
-              Today&apos;s follow-ups
-            </h2>
+            <StatusPulse variant="warning" pulse label="Actions pending" />
+            <h2 className="text-base font-semibold text-foreground">Today</h2>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {actionCount === 1
-              ? "1 person needs attention."
-              : `${actionCount} people need attention.`}{" "}
+              ? "You have 1 thing to handle."
+              : `You have ${actionCount} things to handle.`}{" "}
             <span className="font-medium text-foreground">
               {money.format(atRisk)}
             </span>{" "}
-            still on the table.
+            on the table.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
-            onClick={onStartHighestValue}
+            onClick={onStartNextTask}
           >
-            <TrendingUp className="size-4" />
-            Start with highest value
+            Start next task
           </Button>
           <Button variant="outline" onClick={onAdd} className="gap-1.5">
             <Plus className="size-4" />
@@ -727,25 +678,24 @@ function HeroSummary({
 
 function ActionSection({
   label,
-  dot,
   count,
-  muted = false,
+  urgent = false,
   children,
 }: {
   label: string
-  dot: string
   count: number
-  muted?: boolean
+  urgent?: boolean
   children: React.ReactNode
 }) {
   return (
     <div className="grid gap-3">
-      <div className="flex items-center gap-3">
-        <div className={cn("size-2 shrink-0 rounded-full", dot)} />
-        <span className={cn(
-          "shrink-0 text-xs font-semibold uppercase tracking-widest",
-          muted ? "text-muted-foreground/70" : "text-muted-foreground"
-        )}>
+      <div className="flex items-center gap-2.5">
+        <StatusPulse
+          variant={urgent ? "warning" : "info"}
+          pulse={urgent}
+          className="shrink-0"
+        />
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           {label}
         </span>
         <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
@@ -754,6 +704,71 @@ function ActionSection({
         <div className="h-px flex-1 bg-border" />
       </div>
       {children}
+    </div>
+  )
+}
+
+// ─── Waiting section (collapsible) ────────────────────────────
+
+function WaitingSection({
+  items,
+  replyInfoMap,
+  defaultOpen,
+  sharedCardProps,
+}: {
+  items: RecoveryItem[]
+  replyInfoMap: Record<string, ReplyInfo>
+  defaultOpen: boolean
+  sharedCardProps: {
+    isSaving: boolean
+    onMarkSent: (item: RecoveryItem) => void
+    onSendFollowUp: (item: RecoveryItem) => void
+    onRemindLater: (item: RecoveryItem) => void
+    onResolve: (item: RecoveryItem) => void
+    onLost: (item: RecoveryItem) => void
+    onPaid: (item: RecoveryItem) => void
+    onFollowUpAgain: (item: RecoveryItem) => void
+    onNoResponse: (item: RecoveryItem) => void
+    onViewReplies: (item: RecoveryItem) => void
+  }
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <div className="grid gap-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2.5 text-left"
+      >
+        <StatusPulse variant="neutral" className="shrink-0" />
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+          Waiting on clients
+        </span>
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+          {items.length}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+        {open ? (
+          <ChevronUp className="size-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
+      </button>
+      {open && (
+        <div className="grid gap-3 opacity-80">
+          {items.map((item) => (
+            <RecoveryCard
+              key={item.id}
+              item={item}
+              isCheckIn={false}
+              isWaiting
+              replyInfo={replyInfoMap[item.id]}
+              {...sharedCardProps}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -777,7 +792,7 @@ function InvoiceActionCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md",
+        "euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md",
         "before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
         isOverdue ? "before:bg-orange-500" : "before:bg-amber-400"
       )}
@@ -868,7 +883,7 @@ function EstimateActionCard({
   onSnooze: (estimate: EstimateRow) => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan">
+    <div className="euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan">
       <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
@@ -926,11 +941,11 @@ function EstimateActionCard({
   )
 }
 
-// ─── Onboarding state ──────────────────────────────────────────
+// ─── Accepted estimate card ────────────────────────────────────
 
 function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-ocean">
+    <div className="euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-ocean">
       <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
@@ -941,8 +956,8 @@ function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
               <p className="truncate text-sm font-semibold text-foreground">
                 {estimate.client_name || "No client"}
               </p>
-              <span className="shrink-0 rounded-full bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300">
-                accepted
+              <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                Accepted
               </span>
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -952,7 +967,7 @@ function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
                 {money.format(estimate.amount ?? 0)}
               </span>
               {" · "}
-              Create invoice next
+              Create invoice or collect payment next
             </p>
           </div>
         </div>
@@ -968,6 +983,8 @@ function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
   )
 }
 
+// ─── Onboarding state ──────────────────────────────────────────
+
 function OnboardingState({
   onAdd,
   onDemo,
@@ -978,7 +995,7 @@ function OnboardingState({
   isDemoSeeding: boolean
 }) {
   return (
-    <div className="mx-auto max-w-md px-4 py-16 text-center">
+    <div className="mx-auto max-w-md px-4 py-16 text-center euroflo-fade-up">
       <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-2xl bg-ef-mist dark:bg-ef-navy/30">
         <Sparkles className="size-7 text-ef-ocean dark:text-ef-cyan" />
       </div>
@@ -1029,43 +1046,40 @@ function AllCaughtUp({
   onAdd: () => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-ef-200 bg-gradient-to-br from-ef-mist to-emerald-50/60 dark:border-ef-navy/50 dark:from-ef-ink/30 dark:to-emerald-950/20">
-      <div className="absolute right-0 top-0 size-40 -translate-y-1/2 translate-x-1/2 rounded-full bg-ef-mist/60 blur-3xl dark:bg-ef-navy/20" />
-      <div className="relative px-8 py-10 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-ef-mist dark:bg-ef-navy/40">
-          <svg
-            className="size-6 text-ef-ocean dark:text-ef-cyan"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h3 className="text-base font-semibold text-ef-ocean dark:text-ef-200">
-          You&apos;re all caught up for today.
-        </h3>
-        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ef-ocean/70 dark:text-ef-300/70">
-          {atRisk > 0
-            ? `${money.format(atRisk)} is being tracked.${waitingCount > 0 ? ` ${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.` : ""} Come back tomorrow.`
-            : "No pending follow-ups. Come back tomorrow or add a new recovery job."}
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <Button
-            className="gap-2 bg-ef-orange text-white hover:bg-ef-orange"
-            onClick={onAdd}
-          >
-            <Plus className="size-4" />
-            Add recovery job
-          </Button>
-          <Button variant="outline" className="gap-2 border-ef-200 bg-white/80 text-ef-ocean hover:bg-white dark:border-ef-ocean dark:bg-ef-ink/40 dark:text-ef-200" asChild>
-            <Link href="/dashboard/recoveries">
-              <ArrowUpRight className="size-4" />
-              View all recoveries
-            </Link>
-          </Button>
-        </div>
+    <div className="rounded-xl border border-border bg-card px-6 py-8 text-center shadow-sm">
+      <div className="mx-auto mb-4 flex size-10 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/30">
+        <svg
+          className="size-5 text-emerald-600 dark:text-emerald-400"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-foreground">
+        You&apos;re caught up.
+      </h3>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
+        {atRisk > 0
+          ? `${money.format(atRisk)} is being tracked.${waitingCount > 0 ? ` ${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.` : ""} Come back tomorrow.`
+          : "No pending follow-ups. Come back tomorrow or add a new recovery job."}
+      </p>
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
+        <Button
+          className="gap-2 bg-ef-orange text-white hover:bg-ef-orange"
+          onClick={onAdd}
+        >
+          <Plus className="size-4" />
+          Add recovery job
+        </Button>
+        <Button variant="outline" className="gap-2" asChild>
+          <Link href="/dashboard/recoveries">
+            <ArrowUpRight className="size-4" />
+            View all recoveries
+          </Link>
+        </Button>
       </div>
     </div>
   )
@@ -1074,12 +1088,12 @@ function AllCaughtUp({
 function LoadingSkeleton() {
   return (
     <div className="grid gap-4">
-      <div className="h-28 animate-pulse rounded-2xl border border-border bg-muted/30" />
+      <div className="h-20 animate-pulse rounded-xl border border-border bg-muted/30" />
       <div className="grid gap-3 pt-2">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-36 animate-pulse rounded-xl border border-border bg-muted/30"
+            className="h-28 animate-pulse rounded-xl border border-border bg-muted/30"
           />
         ))}
       </div>

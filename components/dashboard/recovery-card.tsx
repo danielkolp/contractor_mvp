@@ -207,7 +207,7 @@ function StandardCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md",
+        "euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md",
         "before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
         accentBar
       )}
@@ -427,7 +427,7 @@ function CheckInCard({
   onViewReplies:    (item: RecoveryItem) => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border-2 border-sky-200 bg-sky-50/30 shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/50 dark:bg-sky-950/10 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-sky-400">
+    <div className="euroflo-card-transition relative overflow-hidden rounded-xl border-2 border-sky-200 bg-sky-50/30 shadow-sm hover:shadow-md dark:border-sky-900/50 dark:bg-sky-950/10 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-sky-400">
       <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
         {/* Compact main row */}
         <div className="flex items-center gap-3">
@@ -567,7 +567,7 @@ function WaitingCard({
 
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-xl border border-border bg-card shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
+      "euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
       hasReplies
         ? "border-blue-200 before:bg-blue-500 dark:border-blue-900/50"
         : "opacity-80 before:bg-blue-300 dark:before:bg-blue-700"

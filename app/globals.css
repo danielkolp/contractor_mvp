@@ -256,6 +256,50 @@
   }
 }
 
+/* Euroflo shared animation utilities */
+@keyframes euroflo-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes euroflo-soft-pulse {
+  0%, 100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.euroflo-fade-up {
+  animation: euroflo-fade-up 240ms ease-out both;
+}
+
+.euroflo-soft-pulse {
+  animation: euroflo-soft-pulse 2.4s ease-in-out infinite;
+}
+
+.euroflo-card-transition {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    opacity 180ms ease;
+}
+
+.euroflo-card-transition:hover {
+  transform: translateY(-1px);
+}
+
 /* Skeleton shimmer animation */
 @keyframes skeleton-shimmer {
   0% {
@@ -309,6 +353,17 @@
 
   .dark .skeleton-shimmer {
     background: oklch(0.18 0.003 60);
+  }
+
+  .euroflo-fade-up,
+  .euroflo-soft-pulse {
+    animation: none !important;
+  }
+
+  .euroflo-card-transition,
+  .euroflo-card-transition:hover {
+    transition: none !important;
+    transform: none !important;
   }
 
   *,
