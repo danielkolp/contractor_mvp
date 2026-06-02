@@ -11,18 +11,20 @@ export default async function Page() {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (user) {
-      const { data, error } = await supabase
-        .from("job_requests")
-        .select("id")
-        .eq("client_id", user.id)
-        .limit(1)
+    if (!user) {
+      redirect("/login")
+    }
 
-      // Only redirect to setup if the table exists and has no rows.
-      // If the table doesn't exist yet (migration pending), skip the check.
-      if (!error && (!data || data.length === 0)) {
-        redirect("/client/setup")
-      }
+    const { data, error } = await supabase
+      .from("job_requests")
+      .select("id")
+      .eq("client_id", user.id)
+      .limit(1)
+
+    // Only redirect to setup if the table exists and has no rows.
+    // If the table doesn't exist yet (migration pending), skip the check.
+    if (!error && (!data || data.length === 0)) {
+      redirect("/client/setup")
     }
   }
 

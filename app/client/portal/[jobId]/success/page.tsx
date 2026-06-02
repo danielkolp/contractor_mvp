@@ -22,7 +22,7 @@ export default async function PaymentSuccessPage({
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect(`/auth/login?next=/client/portal/${jobId}/success`)
+  if (!user) redirect(`/login?next=/client/portal/${jobId}/success`)
 
   // Load the job request (verifies client ownership via RLS)
   const { data: job } = await supabase

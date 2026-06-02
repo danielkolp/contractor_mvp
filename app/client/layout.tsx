@@ -20,16 +20,14 @@ export default async function ClientLayout({
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      redirect("/login")
-    }
+    if (user) {
+      const role = await getProfileRole(supabase, user.id, user.user_metadata)
+      if (role !== "client") {
+        redirect("/dashboard")
+      }
 
-    const role = await getProfileRole(supabase, user.id, user.user_metadata)
-    if (role !== "client") {
-      redirect("/dashboard")
+      userEmail = user.email ?? undefined
     }
-
-    userEmail = user.email ?? undefined
   }
 
   return <ClientShell userEmail={userEmail}>{children}</ClientShell>

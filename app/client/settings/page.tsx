@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { RotateCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -9,8 +10,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { hasSupabaseEnv } from "@/lib/supabase/env"
+import { createClient } from "@/lib/supabase/server"
 
-export default function ClientSettingsPage() {
+export default async function ClientSettingsPage() {
+  if (hasSupabaseEnv()) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) redirect("/login")
+  }
+
   return (
     <div className="mx-auto grid max-w-3xl gap-6 p-4 sm:p-6 lg:p-8">
       <Card>
