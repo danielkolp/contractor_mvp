@@ -106,7 +106,22 @@ export default async function EstimatePrintPage({
   const hasLineItems = lineItems.length > 0
   const subtotal     = lineItems.reduce((s, i) => s + i.quantity * i.unit_price, 0)
   const totalTax     = taxLines.reduce((s, t) => s + subtotal * (t.rate / 100), 0)
-  const total        = hasLineItems ? subtotal + totalTax : estimate.amount
+
+  // When Stripe payment fields are set, client_total_cents is the canonical
+  // client-facing total. Contractors always see this on their own print view.
+  // Clients never see the contractor_amount_cents or platform_fee_cents breakdown.
+  const stripeEst = estimate as EstimateRow & {
+    client_total_cents?: number | null
+    contractor_amount_cents?: number | null
+    platform_fee_cents?: number | null
+    payment_status?: string | null
+  }
+  const clientTotalFromStripe = stripeEst.client_total_cents
+    ? stripeEst.client_total_cents / 100
+    : null
+
+  const total = clientTotalFromStripe
+    ?? (hasLineItems ? subtotal + totalTax : estimate.amount)
 
   const depositAmt  = total * 0.30
   const progressAmt = total * 0.40
@@ -119,7 +134,9 @@ export default async function EstimatePrintPage({
   const clientEmail = client?.email || ""
   const clientPhone = client?.phone || ""
 
-  const isAccepted = estimate.status === "Won" || estimate.status === "Accepted"
+  const isAccepted  = estimate.status === "Won" || estimate.status === "Accepted"
+  const isPaid      = stripeEst.payment_status === "paid"
+  const isContractor = role !== "client"
 
   return (
     <>
@@ -306,9 +323,25 @@ export default async function EstimatePrintPage({
           {/* ── Authorization ── */}
           <div className="border-t border-zinc-200 px-8 py-5">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-3">Authorization</p>
-            {isAccepted && (
+            {isAccepted && !isPaid && (
               <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-2">
                 <p className="text-xs font-semibold text-emerald-700">✓ This estimate has been accepted.</p>
+              </div>
+            )}
+            {isPaid && (
+              <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-4 py-2">
+                <p className="text-xs font-semibold text-blue-700">✓ Payment received — this estimate has been paid in full.</p>
+              </div>
+            )}
+            {/* Contractor-only: show fee breakdown on print */}
+            {isContractor && stripeEst.contractor_amount_cents && stripeEst.platform_fee_cents && (
+              <div className="mb-3 rounded border border-zinc-200 bg-zinc-50 px-4 py-2">
+                <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Payment breakdown (contractor view)</p>
+                <div className="grid grid-cols-3 gap-3 text-xs">
+                  <div><span className="text-zinc-400">Your payout: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.contractor_amount_cents / 100)}</span></div>
+                  <div><span className="text-zinc-400">Euroflo fee: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.platform_fee_cents / 100)}</span></div>
+                  <div><span className="text-zinc-400">Client total: </span><span className="font-semibold text-ef-ocean">{money.format(total)}</span></div>
+                </div>
               </div>
             )}
             <p className="mb-4 text-[0.6rem] text-zinc-400">

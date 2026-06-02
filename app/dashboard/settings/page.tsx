@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Check, ClipboardCopy, RotateCcw, Save } from "lucide-react"
+import { AlertCircle, Check, CheckCircle2, ClipboardCopy, ExternalLink, Loader2, RefreshCw, RotateCcw, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/dashboard/page-header"
@@ -90,6 +90,159 @@ function toSettingsForm(settings: SettingsRow | null): SettingsForm {
 function nullableText(value: string) {
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+// ── Stripe Connect card ───────────────────────────────────────────────────────
+
+type StripeStatus = {
+  connected: boolean
+  charges_enabled: boolean
+  payouts_enabled: boolean
+  details_submitted: boolean
+  onboarding_complete: boolean
+}
+
+function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null }) {
+  const [status, setStatus]       = useState<StripeStatus | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const fetchStatus = useCallback(async () => {
+    if (!stripeAccountId) return
+    setIsRefreshing(true)
+    try {
+      const res = await fetch("/api/stripe/connect/status", { method: "POST" })
+      if (res.ok) {
+        const data = await res.json() as StripeStatus
+        setStatus(data)
+      }
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [stripeAccountId])
+
+  useEffect(() => {
+    if (stripeAccountId) void fetchStatus()
+    else setStatus({ connected: false, charges_enabled: false, payouts_enabled: false, details_submitted: false, onboarding_complete: false })
+  }, [stripeAccountId, fetchStatus])
+
+  async function handleConnect() {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/stripe/connect/onboard", { method: "POST" })
+      const data = await res.json() as { url?: string; error?: string }
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Could not start Stripe onboarding")
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      toast.error("Could not reach Stripe. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const connected = status?.connected ?? false
+  const complete  = status?.onboarding_complete ?? false
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Payments</CardTitle>
+        <CardDescription>
+          Connect Stripe to accept online payments from clients.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {!connected ? (
+          <>
+            <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div>
+                <p className="text-sm font-medium">Stripe not connected</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Connect your Stripe account so clients can pay estimates online. Euroflo
+                  adds a platform fee on top of your payout — you receive the amount you
+                  set on each estimate.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => void handleConnect()}
+              disabled={isLoading}
+              className="w-fit"
+            >
+              {isLoading ? (
+                <><Loader2 className="size-4 animate-spin" />Connecting…</>
+              ) : (
+                <><ExternalLink className="size-4" />Connect Stripe</>
+              )}
+            </Button>
+          </>
+        ) : !complete ? (
+          <>
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Onboarding incomplete</p>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  Finish Stripe onboarding to accept client payments.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => void handleConnect()}
+              disabled={isLoading}
+              className="w-fit"
+            >
+              {isLoading ? (
+                <><Loader2 className="size-4 animate-spin" />Opening…</>
+              ) : (
+                <><ExternalLink className="size-4" />Continue Stripe Setup</>
+              )}
+            </Button>
+          </>
+        ) : (
+          <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-800">Stripe connected</p>
+              <p className="mt-0.5 text-xs text-green-700">You can accept client payments.</p>
+              <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                {[
+                  { label: "Charges",  value: status?.charges_enabled },
+                  { label: "Payouts",  value: status?.payouts_enabled },
+                  { label: "Verified", value: status?.details_submitted },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded border border-green-200 bg-white px-2 py-1.5 text-center">
+                    <dt className="text-[0.6rem] font-bold uppercase tracking-wide text-gray-400">{label}</dt>
+                    <dd className={`mt-0.5 font-semibold ${value ? "text-green-700" : "text-red-500"}`}>
+                      {value ? "Yes" : "No"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </div>
+        )}
+
+        {connected && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void fetchStatus()}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+              Refresh status
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 function ClientRequestLinkCard({ requestSlug }: { requestSlug: string }) {
@@ -654,6 +807,11 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </form>
+
+        {/* ── Stripe Connect payments ── */}
+        {profile?.role === "contractor" && (
+          <StripeConnectCard stripeAccountId={profile?.stripe_account_id ?? null} />
+        )}
 
         {/* ── Client request link ── */}
         {profile?.request_slug && (

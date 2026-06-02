@@ -161,6 +161,7 @@ type EstimateForm = {
   notes: string
   lineItems: LineItem[]
   taxLines: TaxLine[]
+  contractorAmountCents: string
 }
 
 const estimateStatuses: EstimateStatus[] = [
@@ -275,6 +276,7 @@ const initialForm: EstimateForm = {
   notes: "",
   lineItems: [],
   taxLines: [],
+  contractorAmountCents: "",
 }
 
 function formFromEstimate(estimate: EstimateRow): EstimateForm {
@@ -297,6 +299,9 @@ function formFromEstimate(estimate: EstimateRow): EstimateForm {
     notes: estimate.notes ?? "",
     lineItems: deserializeLineItems(estimate.line_items),
     taxLines,
+    contractorAmountCents: estimate.contractor_amount_cents
+      ? String(estimate.contractor_amount_cents / 100)
+      : "",
   }
 }
 
@@ -331,6 +336,16 @@ export default function EstimatesPage() {
   )
   const computedTotal = useMemo(() => subtotal + totalTaxAmount, [subtotal, totalTaxAmount])
   const hasLineItems = form.lineItems.length > 0
+
+  // ─── Stripe payout breakdown ──────────────────────────────────────────────────
+  const feePercent = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? 15)
+  const contractorDollars = parseFloat(form.contractorAmountCents) || 0
+  const contractorCents   = Math.round(contractorDollars * 100)
+  const platformFeeCents  = contractorCents > 0
+    ? Math.round(contractorCents * (feePercent / 100))
+    : 0
+  const clientTotalCents  = contractorCents + platformFeeCents
+  const hasStripePayment  = contractorCents > 0
 
   // ─── Data loading ────────────────────────────────────────────────────────────
   const loadEstimates = useCallback(async () => {
@@ -526,7 +541,10 @@ export default function EstimatesPage() {
       ? getClientLabel(selectedClient)
       : nullableText(form.clientName)
 
-    const finalAmount = hasLineItems ? computedTotal : parseAmount(form.amount)
+    const lineAmount = hasLineItems ? computedTotal : parseAmount(form.amount)
+    // When a Stripe payout amount is set, client_total_cents becomes the canonical
+    // amount so the PDF and client portal show the marked-up total.
+    const finalAmount = hasStripePayment ? clientTotalCents / 100 : lineAmount
     const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
     const serializedTaxLines = hasLineItems ? serializeTaxLines(form.taxLines) : []
 
@@ -544,6 +562,9 @@ export default function EstimatesPage() {
       line_items: serializedItems,
       tax_rate: 0,
       tax_lines: serializedTaxLines,
+      contractor_amount_cents: hasStripePayment ? contractorCents    : null,
+      platform_fee_cents:      hasStripePayment ? platformFeeCents   : null,
+      client_total_cents:      hasStripePayment ? clientTotalCents   : null,
     }
 
     if (editingEstimate) {
@@ -559,6 +580,9 @@ export default function EstimatesPage() {
         line_items: payload.line_items,
         tax_rate: 0,
         tax_lines: payload.tax_lines,
+        contractor_amount_cents: payload.contractor_amount_cents,
+        platform_fee_cents:      payload.platform_fee_cents,
+        client_total_cents:      payload.client_total_cents,
       }
       const { data, error } = await supabase
         .from("estimates")
@@ -1087,6 +1111,44 @@ export default function EstimatesPage() {
               />
             </div>
 
+            {/* ── Online Payment (Euroflo) ── */}
+            <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-4">
+              <div>
+                <p className="text-sm font-semibold">Online payment via Euroflo</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Enter your desired payout. Euroflo adds a {feePercent}% platform fee on top — the
+                  client sees only their total. Leave blank to skip online payment for this estimate.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="contractor-payout">Your payout (CAD)</Label>
+                <Input
+                  id="contractor-payout"
+                  value={form.contractorAmountCents}
+                  onChange={(e) => updateForm("contractorAmountCents", e.target.value)}
+                  placeholder="10000.00"
+                  type="number"
+                  min="0.50"
+                  step="0.01"
+                  disabled={isSaving}
+                />
+              </div>
+              {hasStripePayment && (
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {[
+                    { label: "Your payout",   value: moneyFormatter.format(contractorCents / 100) },
+                    { label: `Euroflo ${feePercent}%`, value: moneyFormatter.format(platformFeeCents / 100) },
+                    { label: "Client total",  value: moneyFormatter.format(clientTotalCents / 100) },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded border border-border bg-background px-3 py-2 text-center">
+                      <p className="text-[0.6rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+                      <p className="mt-0.5 text-sm font-bold tabular-nums">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="outline" disabled={isSaving}>
@@ -1194,11 +1256,22 @@ export default function EstimatesPage() {
                           </div>
                           <div className="font-semibold tabular-nums">
                             {moneyFormatter.format(estimate.amount)}
+                            {estimate.contractor_amount_cents && estimate.payment_status !== "paid" && (
+                              <div className="text-[0.65rem] font-normal text-muted-foreground">
+                                Payout {moneyFormatter.format(estimate.contractor_amount_cents / 100)}
+                              </div>
+                            )}
                           </div>
-                          <div>
+                          <div className="flex flex-wrap gap-1">
                             <Badge variant={statusTone[estimate.status]}>
                               {estimate.status}
                             </Badge>
+                            {estimate.payment_status === "paid" && (
+                              <Badge variant="success">Paid</Badge>
+                            )}
+                            {estimate.payment_status === "checkout_created" && (
+                              <Badge variant="outline">Checkout pending</Badge>
+                            )}
                           </div>
                           <div className="flex justify-start gap-2 xl:justify-end">
                             <DropdownMenu>
