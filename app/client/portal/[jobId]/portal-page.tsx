@@ -9,7 +9,9 @@ import {
   buildTimeline,
   EstimatesSection,
   FlowBar,
+  InspectionCard,
   InvoicesSection,
+  MoreDetailsCard,
   PortalSkeleton,
   StatusCard,
   Timeline,
@@ -64,6 +66,32 @@ export function PortalPage({ jobId }: { jobId: string }) {
     const id = window.setTimeout(() => void load(), 0)
     return () => window.clearTimeout(id)
   }, [load])
+
+  async function respondToDetails(response: string) {
+    if (!job) return
+    const { data, error } = await supabase
+      .from("job_requests")
+      .update({ more_details_response: response } as never)
+      .eq("id", jobId)
+      .select()
+      .single()
+    if (error) { toast.error("Could not send your response. Please try again."); return }
+    if (data) setJob(data as typeof job)
+    toast.success("Response sent to your contractor")
+  }
+
+  async function confirmInspection() {
+    if (!job) return
+    const { data, error } = await supabase
+      .from("job_requests")
+      .update({ status: "inspection_confirmed" })
+      .eq("id", jobId)
+      .select()
+      .single()
+    if (error) { toast.error("Could not confirm inspection. Please try again."); return }
+    if (data) setJob(data)
+    toast.success("Inspection confirmed")
+  }
 
   async function respondToEstimate(est: Estimate, response: "Accepted" | "Declined") {
     if (!job) return
@@ -126,6 +154,12 @@ export function PortalPage({ jobId }: { jobId: string }) {
           <StatusCard job={job} hasEstimate={hasEstimate} />
           <FlowBar job={job} hasEstimate={hasEstimate} invoices={invoices} estimates={visibleEstimates} />
           {timeline.length > 0 && <Timeline items={timeline} />}
+          {job.status === "needs_info" && (
+            <MoreDetailsCard job={job} onRespond={(r) => void respondToDetails(r)} />
+          )}
+          {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed") && (
+            <InspectionCard job={job} onConfirm={() => void confirmInspection()} />
+          )}
           <EstimatesSection
             estimates={visibleEstimates}
             onRespond={(est, r) => void respondToEstimate(est, r)}

@@ -161,6 +161,7 @@ export type Database = {
           scheduled_visit_starts_at: string | null
           scheduled_visit_ends_at: string | null
           scheduled_visit_notes: string | null
+          billing_type: string | null
           notes: string | null
           line_items: Json
           tax_rate: number
@@ -191,6 +192,7 @@ export type Database = {
           scheduled_visit_starts_at?: string | null
           scheduled_visit_ends_at?: string | null
           scheduled_visit_notes?: string | null
+          billing_type?: string | null
           notes?: string | null
           line_items?: Json
           tax_rate?: number
@@ -221,6 +223,7 @@ export type Database = {
           scheduled_visit_starts_at?: string | null
           scheduled_visit_ends_at?: string | null
           scheduled_visit_notes?: string | null
+          billing_type?: string | null
           notes?: string | null
           line_items?: Json
           tax_rate?: number
@@ -366,6 +369,8 @@ export type Database = {
           contact_preference: string
           photo_notes: string | null
           photo_urls: string[]
+          more_details_message: string | null
+          more_details_response: string | null
           status: Database["public"]["Enums"]["job_request_status"]
           created_at: string
           updated_at: string
@@ -393,6 +398,8 @@ export type Database = {
           contact_preference?: string
           photo_notes?: string | null
           photo_urls?: string[]
+          more_details_message?: string | null
+          more_details_response?: string | null
           status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string
@@ -420,6 +427,8 @@ export type Database = {
           contact_preference?: string
           photo_notes?: string | null
           photo_urls?: string[]
+          more_details_message?: string | null
+          more_details_response?: string | null
           status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string
@@ -960,6 +969,9 @@ export type Database = {
       job_request_status:
         | "new"
         | "reviewed"
+        | "needs_info"
+        | "inspection_scheduled"
+        | "inspection_confirmed"
         | "estimate_created"
         | "accepted"
         | "declined"

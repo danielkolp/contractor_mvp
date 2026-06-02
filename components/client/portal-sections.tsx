@@ -6,12 +6,14 @@
 
 import { useState } from "react"
 import {
+  CalendarDays,
   CheckCircle2,
   Circle,
   Clock,
   CreditCard,
   Download,
   FileText,
+  HelpCircle,
   Loader2,
   MapPin,
   Printer,
@@ -31,32 +33,41 @@ export type TimelineEvent = Database["public"]["Tables"]["project_timeline_event
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
 export const STATUS_LABEL: Record<string, string> = {
-  new:              "Under Review",
-  reviewed:         "Estimate Pending",
-  estimate_created: "Estimate Ready",
-  accepted:         "Accepted",
-  declined:         "Declined",
-  closed:           "Closed",
+  new:                   "Under Review",
+  reviewed:              "Estimate Pending",
+  needs_info:            "More Info Requested",
+  inspection_scheduled:  "Inspection Scheduled",
+  inspection_confirmed:  "Inspection Confirmed",
+  estimate_created:      "Estimate Ready",
+  accepted:              "Accepted",
+  declined:              "Declined",
+  closed:                "Closed",
 }
 
 export const STATUS_NEXT: Record<string, string> = {
-  new:              "Your contractor is reviewing your request. You'll be notified when there's an update.",
-  reviewed:         "Your contractor is working on an estimate. We'll notify you when it's ready.",
-  estimate_created: "An estimate is ready for your review. Accept or decline it below.",
-  accepted:         "Your contractor will be in touch shortly to schedule the work.",
-  declined:         "The estimate was declined. Contact your contractor if you have questions.",
-  closed:           "This project has been closed.",
+  new:                   "Your contractor is reviewing your request. You'll be notified when there's an update.",
+  reviewed:              "Your contractor is working on an estimate. We'll notify you when it's ready.",
+  needs_info:            "Your contractor needs more information before preparing an estimate. Please respond below.",
+  inspection_scheduled:  "An on-site inspection has been scheduled. Please confirm your availability below.",
+  inspection_confirmed:  "Inspection confirmed. Your contractor will prepare an estimate after the visit.",
+  estimate_created:      "An estimate is ready for your review. Accept or decline it below.",
+  accepted:              "Your contractor will be in touch shortly to schedule the work.",
+  declined:              "The estimate was declined. Contact your contractor if you have questions.",
+  closed:                "This project has been closed.",
 }
 
 type StatusColor = "gray" | "yellow" | "green" | "red"
 
 export const STATUS_COLOR: Record<string, StatusColor> = {
-  new:              "gray",
-  reviewed:         "yellow",
-  estimate_created: "green",
-  accepted:         "green",
-  declined:         "red",
-  closed:           "gray",
+  new:                   "gray",
+  reviewed:              "yellow",
+  needs_info:            "yellow",
+  inspection_scheduled:  "yellow",
+  inspection_confirmed:  "green",
+  estimate_created:      "green",
+  accepted:              "green",
+  declined:              "red",
+  closed:                "gray",
 }
 
 const colorMap: Record<StatusColor, { bg: string; text: string; border: string; dot: string }> = {
@@ -429,6 +440,137 @@ export function PayButton({
       )}
       {isLoading ? "Redirecting…" : `Pay ${label}`}
     </Button>
+  )
+}
+
+// ── More details card ─────────────────────────────────────────────────────────
+
+export function MoreDetailsCard({
+  job,
+  onRespond,
+}: {
+  job:       JobRequest
+  onRespond: (response: string) => void
+}) {
+  const [response, setResponse] = useState("")
+  const [isSaving, setIsSaving]  = useState(false)
+  const hasResponse = Boolean((job as JobRequest & { more_details_response?: string | null }).more_details_response)
+  const message     = (job as JobRequest & { more_details_message?: string | null }).more_details_message
+  const savedResponse = (job as JobRequest & { more_details_response?: string | null }).more_details_response
+
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5" data-testid="more-details-card">
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+          <HelpCircle className="h-4 w-4 text-amber-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900">Your contractor needs more information</p>
+          {message && (
+            <p className="mt-2 text-sm leading-relaxed text-gray-700 whitespace-pre-wrap">{message}</p>
+          )}
+        </div>
+      </div>
+
+      {hasResponse ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-white p-3.5">
+          <p className="text-xs font-semibold text-amber-700">Your response</p>
+          <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{savedResponse}</p>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <textarea
+            value={response}
+            onChange={(e) => setResponse(e.target.value)}
+            placeholder="Provide the additional details your contractor needs…"
+            disabled={isSaving}
+            rows={4}
+            className="w-full rounded-xl border border-amber-200 bg-white px-3.5 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60"
+          />
+          <Button
+            size="sm"
+            className="bg-ef-ocean text-white hover:bg-ef-ocean"
+            disabled={!response.trim() || isSaving}
+            data-testid="more-details-submit"
+            onClick={() => {
+              setIsSaving(true)
+              onRespond(response.trim())
+            }}
+          >
+            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            Submit response
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Inspection card ───────────────────────────────────────────────────────────
+
+export function InspectionCard({
+  job,
+  onConfirm,
+}: {
+  job:       JobRequest
+  onConfirm: () => void
+}) {
+  const [isSaving, setIsSaving] = useState(false)
+  const confirmed  = job.status === "inspection_confirmed"
+  const startsAt   = job.scheduled_visit_starts_at
+  const notes      = job.scheduled_visit_notes
+
+  const formattedDate = startsAt
+    ? new Intl.DateTimeFormat("en-CA", {
+        weekday: "long",
+        month:   "long",
+        day:     "numeric",
+        year:    "numeric",
+        hour:    "numeric",
+        minute:  "2-digit",
+      }).format(new Date(startsAt))
+    : null
+
+  return (
+    <div
+      className={`rounded-2xl border p-5 ${confirmed ? "border-ef-200 bg-ef-mist" : "border-amber-200 bg-amber-50"}`}
+      data-testid="inspection-card"
+    >
+      <div className="flex items-start gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${confirmed ? "bg-ef-mist" : "bg-amber-100"}`}>
+          <CalendarDays className={`h-4 w-4 ${confirmed ? "text-ef-ocean" : "text-amber-600"}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900">
+            {confirmed ? "Inspection confirmed" : "Inspection scheduled"}
+          </p>
+          {formattedDate && (
+            <p className="mt-1 text-sm text-gray-700">{formattedDate}</p>
+          )}
+          {notes && (
+            <p className="mt-2 text-xs leading-relaxed text-gray-500 whitespace-pre-wrap">{notes}</p>
+          )}
+        </div>
+      </div>
+
+      {!confirmed && (
+        <div className="mt-4">
+          <Button
+            size="sm"
+            className="bg-ef-ocean text-white hover:bg-ef-ocean"
+            disabled={isSaving}
+            data-testid="inspection-confirm-button"
+            onClick={() => {
+              setIsSaving(true)
+              onConfirm()
+            }}
+          >
+            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            Confirm inspection
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }
 

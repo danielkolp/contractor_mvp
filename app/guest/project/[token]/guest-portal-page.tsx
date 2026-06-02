@@ -9,7 +9,9 @@ import {
   buildTimeline,
   EstimatesSection,
   FlowBar,
+  InspectionCard,
   InvoicesSection,
+  MoreDetailsCard,
   PortalSkeleton,
   StatusCard,
   Timeline,
@@ -71,6 +73,38 @@ export function GuestPortalPage({
 }) {
   const [job,       setJob]  = useState<JobRequest | null>(initialJob)
   const [estimates, setEsts] = useState<Estimate[]>(initialEstimates)
+
+  async function respondToDetails(response: string) {
+    try {
+      const res = await fetch("/api/guest/project/respond-details", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ guestToken: token, response }),
+      })
+      const data = await res.json() as { job?: JobRequest; error?: string }
+      if (!res.ok || data.error) { toast.error(data.error ?? "Could not send your response."); return }
+      if (data.job) setJob(data.job)
+      toast.success("Response sent to your contractor")
+    } catch {
+      toast.error("Could not reach the server. Please try again.")
+    }
+  }
+
+  async function confirmInspection() {
+    try {
+      const res = await fetch("/api/guest/project/confirm-inspection", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ guestToken: token }),
+      })
+      const data = await res.json() as { job?: JobRequest; error?: string }
+      if (!res.ok || data.error) { toast.error(data.error ?? "Could not confirm inspection."); return }
+      if (data.job) setJob(data.job)
+      toast.success("Inspection confirmed")
+    } catch {
+      toast.error("Could not reach the server. Please try again.")
+    }
+  }
 
   async function respondToEstimate(est: Estimate, response: "Accepted" | "Declined") {
     try {
@@ -135,6 +169,13 @@ export function GuestPortalPage({
 
       {/* Timeline */}
       {timeline.length > 0 && <Timeline items={timeline} />}
+
+      {job.status === "needs_info" && (
+        <MoreDetailsCard job={job} onRespond={(r) => void respondToDetails(r)} />
+      )}
+      {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed") && (
+        <InspectionCard job={job} onConfirm={() => void confirmInspection()} />
+      )}
 
       {/* Estimates — accept/decline + pay (via guest routes) */}
       <EstimatesSection

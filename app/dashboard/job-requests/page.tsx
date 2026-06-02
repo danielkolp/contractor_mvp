@@ -4,11 +4,14 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 import Image from "next/image"
 import Link from "next/link"
 import {
+  Calendar,
   Check,
   ClipboardList,
+  Clock,
   Copy,
   ExternalLink,
   FileText,
+  HelpCircle,
   Link2,
   Loader2,
   MapPin,
@@ -85,6 +88,7 @@ type EstimateDraftForm = {
   notes: string
   lineItems: EstimateLineItem[]
   taxLines: EstimateTaxLine[]
+  billingType: "flat_rate" | "hourly"
 }
 
 const emptyEstimateDraftForm: EstimateDraftForm = {
@@ -96,6 +100,7 @@ const emptyEstimateDraftForm: EstimateDraftForm = {
   notes: "",
   lineItems: [],
   taxLines: [],
+  billingType: "flat_rate",
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
@@ -369,12 +374,16 @@ function EstimateActionButton({
   isSaving,
   onCreateEstimate,
   onShareEstimate,
+  onRequestDetails,
+  onScheduleInspection,
 }: {
   request: JobRequest
   estimate: EstimateRow | undefined
   isSaving: boolean
   onCreateEstimate: (r: JobRequest) => void
   onShareEstimate: (estimate: EstimateRow, request: JobRequest) => void
+  onRequestDetails: (r: JobRequest) => void
+  onScheduleInspection: (r: JobRequest) => void
 }) {
   const hasEstimate =
     request.status === "estimate_created" ||
@@ -415,16 +424,48 @@ function EstimateActionButton({
       </Button>
     )
   }
+
+  const canAct =
+    request.status === "new" ||
+    request.status === "reviewed" ||
+    request.status === "needs_info" ||
+    request.status === "inspection_scheduled" ||
+    request.status === "inspection_confirmed"
+
+  if (!canAct) return null
+
   return (
-    <Button
-      data-testid="job-request-create-estimate"
-      className="bg-ef-ocean text-white hover:bg-ef-ocean"
-      disabled={isSaving}
-      onClick={() => onCreateEstimate(request)}
-    >
-      <Plus className="size-4" />
-      Create estimate
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={isSaving}
+        onClick={() => onRequestDetails(request)}
+        data-testid="job-request-request-details"
+      >
+        <HelpCircle className="size-4" />
+        Request details
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={isSaving}
+        onClick={() => onScheduleInspection(request)}
+        data-testid="job-request-schedule-inspection"
+      >
+        <Calendar className="size-4" />
+        Schedule inspection
+      </Button>
+      <Button
+        data-testid="job-request-create-estimate"
+        className="bg-ef-ocean text-white hover:bg-ef-ocean"
+        disabled={isSaving}
+        onClick={() => onCreateEstimate(request)}
+      >
+        <Plus className="size-4" />
+        Create estimate
+      </Button>
+    </>
   )
 }
 
@@ -453,6 +494,18 @@ export default function ContractorJobRequestsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [estimateByRequestId, setEstimateByRequestId] = useState<Record<string, EstimateRow>>({})
+
+  // Request more details dialog
+  const [detailsRequest, setDetailsRequest] = useState<JobRequest | null>(null)
+  const [detailsMessage, setDetailsMessage] = useState("")
+  const [isSubmittingDetails, setIsSubmittingDetails] = useState(false)
+
+  // Schedule inspection dialog
+  const [inspectionRequest, setInspectionRequest] = useState<JobRequest | null>(null)
+  const [inspectionDate, setInspectionDate] = useState("")
+  const [inspectionStartTime, setInspectionStartTime] = useState("")
+  const [inspectionNotes, setInspectionNotes] = useState("")
+  const [isSubmittingInspection, setIsSubmittingInspection] = useState(false)
 
   const estimateSubtotal = useMemo(
     () => lineItemSubtotal(estimateForm.lineItems),
@@ -631,8 +684,9 @@ export default function ContractorJobRequestsPage() {
       status: "Draft",
       followUpDate: inputDate(3),
       notes: requestNotes(request),
-      lineItems: [],
+      lineItems: [{ id: Math.random().toString(36).slice(2), description: "The work to be done", quantity: "1", unit_price: "" }],
       taxLines: [],
+      billingType: "flat_rate",
     })
   }
 
@@ -704,6 +758,38 @@ export default function ContractorJobRequestsPage() {
     }))
   }
 
+  async function submitDetailsRequest() {
+    if (!detailsRequest || !detailsMessage.trim() || isSubmittingDetails) return
+    setIsSubmittingDetails(true)
+    await updateRequestStatus(detailsRequest, {
+      status: "needs_info",
+      more_details_message: detailsMessage.trim(),
+    })
+    setDetailsRequest(null)
+    setDetailsMessage("")
+    setIsSubmittingDetails(false)
+    toast.success("More details requested from client")
+  }
+
+  async function submitInspectionSchedule() {
+    if (!inspectionRequest || !inspectionDate || isSubmittingInspection) return
+    setIsSubmittingInspection(true)
+    const timeStr = inspectionStartTime || "09:00"
+    const startsAt = new Date(`${inspectionDate}T${timeStr}`).toISOString()
+    await updateRequestStatus(inspectionRequest, {
+      status: "inspection_scheduled",
+      scheduled_visit_type: "inspection",
+      scheduled_visit_starts_at: startsAt,
+      scheduled_visit_notes: inspectionNotes.trim() || null,
+    })
+    setInspectionRequest(null)
+    setInspectionDate("")
+    setInspectionStartTime("")
+    setInspectionNotes("")
+    setIsSubmittingInspection(false)
+    toast.success("Inspection scheduled — client will be asked to confirm")
+  }
+
   async function saveEstimateFromRequest(sendToClient: boolean) {
     if (!userId || !estimateRequest || isSaving) return
     setIsSaving(true)
@@ -746,6 +832,7 @@ export default function ContractorJobRequestsPage() {
       sent_date: inputDate(),
       follow_up_date: nullableDate(estimateForm.followUpDate),
       notes: nullableText(estimateForm.notes),
+      billing_type: estimateForm.billingType,
       line_items: serializedItems,
       tax_rate: 0,
       tax_lines: serializedTaxLines,
@@ -947,6 +1034,27 @@ export default function ContractorJobRequestsPage() {
                 </div>
 
                 <div className="grid gap-3">
+                  {/* Billing type toggle */}
+                  <div className="flex items-center gap-3">
+                    <Label>Billing type</Label>
+                    <div className="flex overflow-hidden rounded-lg border border-border text-sm">
+                      {(["flat_rate", "hourly"] as const).map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => updateEstimateForm("billingType", type)}
+                          className={`px-3 py-1.5 font-medium transition ${
+                            estimateForm.billingType === type
+                              ? "bg-ef-ocean text-white"
+                              : "bg-white text-gray-600 hover:bg-gray-50"
+                          } ${type === "hourly" ? "border-l border-border" : ""}`}
+                        >
+                          {type === "flat_rate" ? "Flat rate" : "Hourly"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between gap-3">
                     <Label>Line items</Label>
                     <Button
@@ -967,7 +1075,7 @@ export default function ContractorJobRequestsPage() {
                       <div className="hidden grid-cols-[1fr_72px_112px_36px] gap-2 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground sm:grid">
                         <span>Description</span>
                         <span className="text-right">Qty</span>
-                        <span className="text-right">Unit price</span>
+                        <span className="text-right">{estimateForm.billingType === "hourly" ? "Rate/hr" : "Unit price"}</span>
                         <span />
                       </div>
                       {estimateForm.lineItems.map((item) => (
@@ -1250,11 +1358,99 @@ export default function ContractorJobRequestsPage() {
                     onShareEstimate={(estimate, request) =>
                       void shareEstimateWithClient(estimate, request)
                     }
+                    onRequestDetails={(r) => { setSelectedRequest(null); setDetailsRequest(r); setDetailsMessage("") }}
+                    onScheduleInspection={(r) => { setSelectedRequest(null); setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
                   />
                 </div>
               </div>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Request more details dialog */}
+      <Dialog open={detailsRequest !== null} onOpenChange={(open) => { if (!open) { setDetailsRequest(null); setDetailsMessage("") } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Request more details</DialogTitle>
+            <DialogDescription>
+              Ask the client to provide additional information before you create an estimate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Label htmlFor="details-message">Message to client</Label>
+            <Textarea
+              id="details-message"
+              value={detailsMessage}
+              onChange={(e) => setDetailsMessage(e.target.value)}
+              placeholder="e.g. Could you share photos of the area? What is the approximate square footage?"
+              className="min-h-28"
+              disabled={isSubmittingDetails}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDetailsRequest(null); setDetailsMessage("") }} disabled={isSubmittingDetails}>Cancel</Button>
+            <Button
+              className="bg-ef-ocean text-white hover:bg-ef-ocean"
+              disabled={!detailsMessage.trim() || isSubmittingDetails}
+              onClick={() => void submitDetailsRequest()}
+            >
+              {isSubmittingDetails ? <Loader2 className="size-4 animate-spin" /> : <HelpCircle className="size-4" />}
+              Send request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule inspection dialog */}
+      <Dialog open={inspectionRequest !== null} onOpenChange={(open) => { if (!open) { setInspectionRequest(null); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Schedule inspection</DialogTitle>
+            <DialogDescription>
+              Set a date and time for the on-site inspection. The client will be asked to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="inspection-date">
+                  <Calendar className="mr-1 inline-block size-3.5" />
+                  Date
+                </Label>
+                <Input id="inspection-date" type="date" value={inspectionDate} onChange={(e) => setInspectionDate(e.target.value)} disabled={isSubmittingInspection} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="inspection-time">
+                  <Clock className="mr-1 inline-block size-3.5" />
+                  Time (optional)
+                </Label>
+                <Input id="inspection-time" type="time" value={inspectionStartTime} onChange={(e) => setInspectionStartTime(e.target.value)} disabled={isSubmittingInspection} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="inspection-notes">Notes (optional)</Label>
+              <Textarea
+                id="inspection-notes"
+                value={inspectionNotes}
+                onChange={(e) => setInspectionNotes(e.target.value)}
+                placeholder="e.g. Please have access to the basement. I'll call ahead."
+                className="min-h-20"
+                disabled={isSubmittingInspection}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setInspectionRequest(null) }} disabled={isSubmittingInspection}>Cancel</Button>
+            <Button
+              className="bg-ef-ocean text-white hover:bg-ef-ocean"
+              disabled={!inspectionDate || isSubmittingInspection}
+              onClick={() => void submitInspectionSchedule()}
+            >
+              {isSubmittingInspection ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
+              Schedule inspection
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1382,6 +1578,8 @@ export default function ContractorJobRequestsPage() {
                             onShareEstimate={(estimate, request) =>
                               void shareEstimateWithClient(estimate, request)
                             }
+                            onRequestDetails={(r) => { setDetailsRequest(r); setDetailsMessage("") }}
+                            onScheduleInspection={(r) => { setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
                           />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
