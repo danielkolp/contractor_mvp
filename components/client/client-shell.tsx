@@ -126,7 +126,7 @@ function Sidebar({ counts }: { counts: Record<string, number> }) {
         <div className="rounded-xl border border-ef-mist bg-ef-mist p-4 text-ef-ink dark:border-ef-navy/60 dark:bg-ef-ink/30 dark:text-ef-mist">
           <div className="text-sm font-medium">Client portal</div>
           <p className="mt-1.5 text-xs leading-5 text-ef-ocean dark:text-ef-200">
-            Track your projects and communicate with your contractor.
+            Track your projects, estimates, invoices, and payments.
           </p>
         </div>
       </div>

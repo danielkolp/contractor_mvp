@@ -8,9 +8,19 @@ import { getProfileRole } from "@/lib/user-role"
 
 type ClientRow   = Database["public"]["Tables"]["clients"]["Row"]
 type EstimateRow = Database["public"]["Tables"]["estimates"]["Row"]
+type JobRequestRow = Database["public"]["Tables"]["job_requests"]["Row"]
 
 type LineItem = { description: string; quantity: number; unit_price: number }
 type TaxLine  = { name: string; rate: number }
+type ScheduledVisitType = "inspection" | "job_start" | "job_completion" | "site_visit"
+type ScheduledSource = {
+  work_address?: string | null
+  address_street?: string | null
+  scheduled_visit_type?: ScheduledVisitType | null
+  scheduled_visit_starts_at?: string | null
+  scheduled_visit_ends_at?: string | null
+  scheduled_visit_notes?: string | null
+}
 
 function parseLineItems(raw: unknown): LineItem[] {
   if (!Array.isArray(raw)) return []
@@ -42,6 +52,44 @@ const dateFmt = new Intl.DateTimeFormat("en-CA", {
 
 const fmt = (iso: string | null | undefined) =>
   iso ? dateFmt.format(new Date(`${iso}T00:00:00`)) : "—"
+
+const dateTimeFmt = new Intl.DateTimeFormat("en-CA", {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+})
+
+const VISIT_TYPE_LABEL: Record<ScheduledVisitType, string> = {
+  inspection: "Inspection",
+  job_start: "Job start",
+  job_completion: "Job completion",
+  site_visit: "Site visit",
+}
+
+function formatDateTime(value: string | null | undefined) {
+  return value ? dateTimeFmt.format(new Date(value)) : null
+}
+
+function workAddressFor(document: ScheduledSource, job: ScheduledSource | null) {
+  return document.work_address || job?.work_address || job?.address_street || null
+}
+
+function scheduledVisitFor(document: ScheduledSource, job: ScheduledSource | null) {
+  const source = document.scheduled_visit_starts_at ? document : job?.scheduled_visit_starts_at ? job : null
+  if (!source?.scheduled_visit_starts_at) return null
+
+  const startsAt = formatDateTime(source.scheduled_visit_starts_at)
+  const endsAt = formatDateTime(source.scheduled_visit_ends_at)
+  const type = source.scheduled_visit_type
+
+  return {
+    label: type ? VISIT_TYPE_LABEL[type] : "Scheduled visit",
+    time: endsAt ? `${startsAt} to ${endsAt}` : startsAt,
+    notes: source.scheduled_visit_notes ?? null,
+  }
+}
 
 const STATUS_LABEL: Record<string, string> = {
   Draft: "Draft", Sent: "Sent — Awaiting Response",
@@ -101,6 +149,16 @@ export default async function EstimatePrintPage({
     client = data
   }
 
+  let jobRequest: JobRequestRow | null = null
+  if (estimate.job_request_id) {
+    const { data } = await supabase
+      .from("job_requests")
+      .select("*")
+      .eq("id", estimate.job_request_id)
+      .maybeSingle()
+    jobRequest = data
+  }
+
   const lineItems    = parseLineItems(estimate.line_items)
   const taxLines     = parseTaxLines((estimate as Record<string, unknown>).tax_lines, Number(estimate.tax_rate ?? 0))
   const hasLineItems = lineItems.length > 0
@@ -133,6 +191,10 @@ export default async function EstimatePrintPage({
   const clientCo    = client?.company || ""
   const clientEmail = client?.email || ""
   const clientPhone = client?.phone || ""
+  const estimateDetails = estimate as EstimateRow & ScheduledSource
+  const jobDetails = jobRequest as (JobRequestRow & ScheduledSource) | null
+  const workAddress = workAddressFor(estimateDetails, jobDetails)
+  const scheduledVisit = scheduledVisitFor(estimateDetails, jobDetails)
 
   const isAccepted  = estimate.status === "Won" || estimate.status === "Accepted"
   const isPaid      = stripeEst.payment_status === "paid"
@@ -216,6 +278,26 @@ export default async function EstimatePrintPage({
           </div>
 
           {/* ── Scope of work ── */}
+          {(workAddress || scheduledVisit) && (
+            <div className={`print-avoid-break grid gap-px bg-zinc-200 border-b border-zinc-200 text-xs ${
+              workAddress && scheduledVisit ? "grid-cols-2" : "grid-cols-1"
+            }`}>
+              {workAddress && (
+                <div className="bg-white px-8 py-3">
+                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Work Address</p>
+                  <p className="font-semibold text-zinc-800">{workAddress}</p>
+                </div>
+              )}
+              {scheduledVisit && (
+                <div className="bg-zinc-50 px-8 py-3">
+                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">{scheduledVisit.label}</p>
+                  <p className="font-semibold text-zinc-800">{scheduledVisit.time}</p>
+                  {scheduledVisit.notes && <p className="mt-1 text-zinc-500">{scheduledVisit.notes}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="print-avoid-break px-8 py-5 print:py-3">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-3">Scope of Work</p>
 

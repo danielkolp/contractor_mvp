@@ -72,6 +72,11 @@ export type Database = {
           client_name: string | null
           invoice_number: string
           project_name: string | null
+          work_address: string | null
+          scheduled_visit_type: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at: string | null
+          scheduled_visit_ends_at: string | null
+          scheduled_visit_notes: string | null
           amount: number
           issue_date: string | null
           due_date: string | null
@@ -93,6 +98,11 @@ export type Database = {
           client_name?: string | null
           invoice_number: string
           project_name?: string | null
+          work_address?: string | null
+          scheduled_visit_type?: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at?: string | null
+          scheduled_visit_ends_at?: string | null
+          scheduled_visit_notes?: string | null
           amount: number
           issue_date?: string | null
           due_date?: string | null
@@ -114,6 +124,11 @@ export type Database = {
           client_name?: string | null
           invoice_number?: string
           project_name?: string | null
+          work_address?: string | null
+          scheduled_visit_type?: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at?: string | null
+          scheduled_visit_ends_at?: string | null
+          scheduled_visit_notes?: string | null
           amount?: number
           issue_date?: string | null
           due_date?: string | null
@@ -136,11 +151,16 @@ export type Database = {
           client_id: string | null
           job_request_id: string | null
           client_name: string | null
+          work_address: string | null
           estimate_number: string
           amount: number
           status: Database["public"]["Enums"]["estimate_status"]
           sent_date: string
           follow_up_date: string | null
+          scheduled_visit_type: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at: string | null
+          scheduled_visit_ends_at: string | null
+          scheduled_visit_notes: string | null
           notes: string | null
           line_items: Json
           tax_rate: number
@@ -161,11 +181,16 @@ export type Database = {
           client_id?: string | null
           job_request_id?: string | null
           client_name?: string | null
+          work_address?: string | null
           estimate_number: string
           amount: number
           status?: Database["public"]["Enums"]["estimate_status"]
           sent_date?: string
           follow_up_date?: string | null
+          scheduled_visit_type?: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at?: string | null
+          scheduled_visit_ends_at?: string | null
+          scheduled_visit_notes?: string | null
           notes?: string | null
           line_items?: Json
           tax_rate?: number
@@ -186,11 +211,16 @@ export type Database = {
           client_id?: string | null
           job_request_id?: string | null
           client_name?: string | null
+          work_address?: string | null
           estimate_number?: string
           amount?: number
           status?: Database["public"]["Enums"]["estimate_status"]
           sent_date?: string
           follow_up_date?: string | null
+          scheduled_visit_type?: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at?: string | null
+          scheduled_visit_ends_at?: string | null
+          scheduled_visit_notes?: string | null
           notes?: string | null
           line_items?: Json
           tax_rate?: number
@@ -323,6 +353,11 @@ export type Database = {
           title: string
           description: string
           address_street: string | null
+          work_address: string | null
+          scheduled_visit_type: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at: string | null
+          scheduled_visit_ends_at: string | null
+          scheduled_visit_notes: string | null
           trade: string | null
           service_area: string
           urgency: Database["public"]["Enums"]["job_request_urgency"]
@@ -345,6 +380,11 @@ export type Database = {
           title: string
           description: string
           address_street?: string | null
+          work_address?: string | null
+          scheduled_visit_type?: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at?: string | null
+          scheduled_visit_ends_at?: string | null
+          scheduled_visit_notes?: string | null
           trade?: string | null
           service_area: string
           urgency?: Database["public"]["Enums"]["job_request_urgency"]
@@ -367,6 +407,11 @@ export type Database = {
           title?: string
           description?: string
           address_street?: string | null
+          work_address?: string | null
+          scheduled_visit_type?: "inspection" | "job_start" | "job_completion" | "site_visit" | null
+          scheduled_visit_starts_at?: string | null
+          scheduled_visit_ends_at?: string | null
+          scheduled_visit_notes?: string | null
           trade?: string | null
           service_area?: string
           urgency?: Database["public"]["Enums"]["job_request_urgency"]

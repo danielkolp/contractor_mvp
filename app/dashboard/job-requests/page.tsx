@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
@@ -12,7 +12,6 @@ import {
   Link2,
   Loader2,
   MapPin,
-  MessageSquare,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -63,7 +62,6 @@ type ClientInsert   = Database["public"]["Tables"]["clients"]["Insert"]
 type EstimateRow    = Database["public"]["Tables"]["estimates"]["Row"]
 type EstimateInsert = Database["public"]["Tables"]["estimates"]["Insert"]
 type EstimateStatus = Database["public"]["Enums"]["estimate_status"]
-type Message        = Database["public"]["Tables"]["client_messages"]["Row"]
 
 type EstimateLineItem = {
   id: string
@@ -134,12 +132,19 @@ function budgetLabel(request: JobRequest) {
   return "Budget not provided"
 }
 
+function requestWorkAddress(request: JobRequest) {
+  return request.work_address || request.address_street || null
+}
+
 function requestNotes(request: JobRequest) {
+  const workAddress = requestWorkAddress(request)
+
   return [
     `Job request: ${request.title}`,
     "",
     request.description,
     "",
+    workAddress ? `Work address: ${workAddress}` : null,
     request.client_name ? `Client: ${request.client_name}` : null,
     request.client_email ? `Email: ${request.client_email}` : null,
     request.client_phone ? `Phone: ${request.client_phone}` : null,
@@ -252,6 +257,8 @@ function RequestPhotos({ request }: { request: JobRequest }) {
 }
 
 function RequestContext({ request }: { request: JobRequest }) {
+  const workAddress = requestWorkAddress(request)
+
   return (
     <div
       className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 text-sm"
@@ -293,6 +300,14 @@ function RequestContext({ request }: { request: JobRequest }) {
             Budget
           </div>
           <div className="mt-1">{budgetLabel(request)}</div>
+        </div>
+        <div className="sm:col-span-2">
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Work address
+          </div>
+          <div className="mt-1 break-words" data-testid="job-request-work-address-value">
+            {workAddress || "Not provided"}
+          </div>
         </div>
         <div>
           <div className="text-xs font-medium uppercase text-muted-foreground">
@@ -433,10 +448,6 @@ export default function ContractorJobRequestsPage() {
   const [estimateForm, setEstimateForm] = useState<EstimateDraftForm>(
     emptyEstimateDraftForm
   )
-  const [messagingRequest, setMessagingRequest] = useState<JobRequest | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [messageBody, setMessageBody] = useState("")
-  const [isSendingMsg, startMsgTransition] = useTransition()
   const [linkCopied, setLinkCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -469,40 +480,6 @@ export default function ContractorJobRequestsPage() {
     navigator.clipboard.writeText(shareableLink).then(() => {
       setLinkCopied(true)
       setTimeout(() => setLinkCopied(false), 2000)
-    })
-  }
-
-  async function openMessages(request: JobRequest) {
-    setMessagingRequest(request)
-    setMessages([])
-    const { data } = await supabase
-      .from("client_messages")
-      .select("*")
-      .eq("job_request_id", request.id)
-      .order("created_at", { ascending: true })
-    setMessages(data ?? [])
-  }
-
-  function sendMessage(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!messagingRequest || !userId || !messageBody.trim()) return
-    const text = messageBody.trim()
-    setMessageBody("")
-
-    startMsgTransition(async () => {
-      const { data, error } = await supabase
-        .from("client_messages")
-        .insert({
-          job_request_id: messagingRequest.id,
-          sender_id:      userId,
-          sender_role:    "contractor" as const,
-          body:           text,
-        })
-        .select()
-        .single()
-
-      if (error) { toast.error("Could not send message"); return }
-      if (data) setMessages((prev) => [...prev, data])
     })
   }
 
@@ -850,66 +827,6 @@ export default function ContractorJobRequestsPage() {
         </Button>
       </PageHeader>
 
-      {/* Messages dialog */}
-      <Dialog
-        open={messagingRequest !== null}
-        onOpenChange={(open) => { if (!open) { setMessagingRequest(null); setMessages([]) } }}
-      >
-        <DialogContent className="max-w-lg">
-          {messagingRequest && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <MessageSquare className="size-4 text-muted-foreground" />
-                  {messagingRequest.title}
-                </DialogTitle>
-                <DialogDescription>
-                  Messaging {messagingRequest.client_name || messagingRequest.client_email || "client"}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="max-h-72 min-h-[6rem] space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-3">
-                {messages.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No messages yet. Start the conversation below.
-                  </p>
-                ) : (
-                  messages.map((msg) => {
-                    const isMe = msg.sender_role === "contractor"
-                    return (
-                      <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                          isMe
-                            ? "bg-ef-ocean text-white"
-                            : "bg-background border border-border text-foreground"
-                        }`}>
-                          {msg.body}
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-              <form onSubmit={sendMessage} className="flex gap-2">
-                <input
-                  type="text"
-                  value={messageBody}
-                  onChange={(e) => setMessageBody(e.target.value)}
-                  placeholder="Type a message…"
-                  className="flex h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={isSendingMsg || !messageBody.trim()}
-                  className="bg-ef-ocean text-white hover:bg-ef-ocean"
-                >
-                  <Send className="size-4" />
-                </Button>
-              </form>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={estimateRequest !== null}
@@ -1280,16 +1197,6 @@ export default function ContractorJobRequestsPage() {
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      setSelectedRequest(null)
-                      void openMessages(selectedRequest)
-                    }}
-                  >
-                    <MessageSquare className="size-4" />
-                    Message client
-                  </Button>
-                  <Button
-                    variant="outline"
                     disabled={isSaving}
                     onClick={() =>
                       void updateRequestStatus(selectedRequest, {
@@ -1449,11 +1356,6 @@ export default function ContractorJobRequestsPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>{request.title}</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onSelect={() => void openMessages(request)}>
-                                <MessageSquare className="size-4" />
-                                Message client
-                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onSelect={() =>

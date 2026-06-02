@@ -13,6 +13,7 @@ import {
   Download,
   FileText,
   Loader2,
+  MapPin,
   Printer,
   Receipt,
 } from "lucide-react"
@@ -85,6 +86,10 @@ export function formatDate(iso: string): string {
     day:   "numeric",
     year:  "numeric",
   }).format(new Date(iso))
+}
+
+function jobWorkAddress(job: JobRequest): string | null {
+  return job.work_address || job.address_street || null
 }
 
 // ── Timeline builder ──────────────────────────────────────────────────────────
@@ -247,6 +252,7 @@ export function StatusCard({ job, hasEstimate }: { job: JobRequest; hasEstimate:
   const c       = colorMap[color]
   const label   = STATUS_LABEL[status] ?? status
   const nextMsg = STATUS_NEXT[status] ?? ""
+  const address = jobWorkAddress(job)
 
   return (
     <div
@@ -271,6 +277,13 @@ export function StatusCard({ job, hasEstimate }: { job: JobRequest; hasEstimate:
         <Clock className="h-3.5 w-3.5" />
         Last updated {relativeTime(job.updated_at)}
       </p>
+
+      {address && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-500">
+          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{address}</span>
+        </p>
+      )}
 
       <div className="mt-4 rounded-xl border border-white/80 bg-white/70 p-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
