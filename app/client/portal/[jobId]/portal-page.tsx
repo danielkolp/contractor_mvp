@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  CreditCard,
   Download,
   FileText,
   Loader2,
@@ -195,14 +196,18 @@ function FlowBar({
   job,
   hasEstimate,
   invoices,
+  estimates,
 }: {
   job: JobRequest
   hasEstimate: boolean
   invoices: Invoice[]
+  estimates: Estimate[]
 }) {
   const hasApproved = job.status === "accepted" || job.status === "closed"
   const hasInvoice = invoices.length > 0
-  const isPaid = invoices.some((invoice) => invoice.status === "Paid")
+  const isPaid =
+    invoices.some((invoice) => invoice.status === "Paid") ||
+    estimates.some((e) => (e as Estimate & { payment_status?: string | null }).payment_status === "paid")
   const complete = [true, hasEstimate, hasApproved, hasInvoice, isPaid]
 
   return (
@@ -479,6 +484,73 @@ function MessagesSection({
 
 // ── Estimates section ─────────────────────────────────────────────────────────
 
+function PayButton({ estimate }: { estimate: Estimate }) {
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Estimate has Stripe fields configured and contractor has Stripe connected.
+  const stripeEst = estimate as Estimate & {
+    client_total_cents?: number | null
+    payment_status?: string | null
+  }
+
+  const clientTotalCents = stripeEst.client_total_cents
+  const paymentStatus    = stripeEst.payment_status ?? "unpaid"
+
+  if (!clientTotalCents || clientTotalCents <= 0) return null
+
+  if (paymentStatus === "paid") {
+    return (
+      <div className="flex items-center gap-1.5 rounded-full bg-ef-mist px-3 py-1.5 text-sm font-semibold text-ef-ocean">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Paid
+      </div>
+    )
+  }
+
+  const label = new Intl.NumberFormat("en-CA", {
+    style: "currency", currency: "CAD",
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(clientTotalCents / 100)
+
+  async function handlePay() {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/payments/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estimateId: estimate.id }),
+      })
+      const data = await res.json() as { url?: string; error?: string }
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Could not start payment. Please try again.")
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      toast.error("Could not reach the payment server. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <Button
+      size="sm"
+      className="bg-ef-ocean text-white hover:bg-ef-ocean"
+      disabled={isLoading}
+      data-testid="estimate-pay-button"
+      onClick={() => void handlePay()}
+    >
+      {isLoading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <CreditCard className="h-3.5 w-3.5" />
+      )}
+      {isLoading ? "Redirecting…" : `Pay ${label}`}
+    </Button>
+  )
+}
+
 function EstimatesSection({
   estimates,
   jobId,
@@ -504,6 +576,10 @@ function EstimatesSection({
           est.status !== "Won" &&
           est.status !== "Lost"
 
+        const isAccepted = est.status === "Accepted" || est.status === "Won"
+        const stripeEst  = est as Estimate & { payment_status?: string | null }
+        const isPaid     = stripeEst.payment_status === "paid"
+
         return (
           <div
             key={est.id}
@@ -518,17 +594,24 @@ function EstimatesSection({
                   {money.format(est.amount)}
                 </p>
               </div>
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  est.status === "Accepted" || est.status === "Won"
-                    ? "bg-ef-mist text-ef-ocean"
-                    : est.status === "Declined" || est.status === "Lost"
-                    ? "bg-red-100 text-red-700"
-                    : "bg-amber-50 text-amber-700"
-                }`}
-              >
-                {est.status}
-              </span>
+              <div className="flex flex-col items-end gap-1.5">
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    isAccepted
+                      ? "bg-ef-mist text-ef-ocean"
+                      : est.status === "Declined" || est.status === "Lost"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  {est.status}
+                </span>
+                {isPaid && (
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                    Paid
+                  </span>
+                )}
+              </div>
             </div>
 
             {est.notes && (
@@ -579,6 +662,9 @@ function EstimatesSection({
                   </Button>
                 </>
               )}
+
+              {/* Pay button — shown only after client accepts and payment not yet made */}
+              {isAccepted && !isPaid && <PayButton estimate={est} />}
             </div>
           </div>
         )
@@ -760,7 +846,7 @@ export function PortalPage({ jobId }: { jobId: string }) {
           {/* Status card — the single most important screen element */}
           <StatusCard job={job} hasEstimate={hasEstimate} />
 
-          <FlowBar job={job} hasEstimate={hasEstimate} invoices={invoices} />
+          <FlowBar job={job} hasEstimate={hasEstimate} invoices={invoices} estimates={visibleEstimates} />
 
           {/* Timeline */}
           {timeline.length > 0 && <Timeline items={timeline} />}

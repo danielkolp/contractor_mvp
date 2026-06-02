@@ -145,6 +145,13 @@ export type Database = {
           line_items: Json
           tax_rate: number
           tax_lines: Json
+          contractor_amount_cents: number | null
+          platform_fee_cents: number | null
+          client_total_cents: number | null
+          payment_status: string
+          paid_at: string | null
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
           created_at: string
           updated_at: string
         }
@@ -163,6 +170,13 @@ export type Database = {
           line_items?: Json
           tax_rate?: number
           tax_lines?: Json
+          contractor_amount_cents?: number | null
+          platform_fee_cents?: number | null
+          client_total_cents?: number | null
+          payment_status?: string
+          paid_at?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -181,8 +195,93 @@ export type Database = {
           line_items?: Json
           tax_rate?: number
           tax_lines?: Json
+          contractor_amount_cents?: number | null
+          platform_fee_cents?: number | null
+          client_total_cents?: number | null
+          payment_status?: string
+          paid_at?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          id: string
+          estimate_id: string
+          contractor_id: string
+          client_id: string | null
+          contractor_amount_cents: number
+          platform_fee_cents: number
+          client_total_cents: number
+          currency: string
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_connected_account_id: string | null
+          stripe_event_id: string | null
+          paid_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          estimate_id: string
+          contractor_id: string
+          client_id?: string | null
+          contractor_amount_cents: number
+          platform_fee_cents: number
+          client_total_cents: number
+          currency?: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_connected_account_id?: string | null
+          stripe_event_id?: string | null
+          paid_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          estimate_id?: string
+          contractor_id?: string
+          client_id?: string | null
+          contractor_amount_cents?: number
+          platform_fee_cents?: number
+          client_total_cents?: number
+          currency?: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_connected_account_id?: string | null
+          stripe_event_id?: string | null
+          paid_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      stripe_webhook_events: {
+        Row: {
+          id: string
+          type: string
+          processed_at: string
+          payload: Json | null
+        }
+        Insert: {
+          id: string
+          type: string
+          processed_at?: string
+          payload?: Json | null
+        }
+        Update: {
+          id?: string
+          type?: string
+          processed_at?: string
+          payload?: Json | null
         }
         Relationships: []
       }
@@ -327,6 +426,11 @@ export type Database = {
           website: string | null
           service_area: string | null
           request_slug: string
+          stripe_account_id: string | null
+          stripe_onboarding_complete: boolean
+          stripe_charges_enabled: boolean
+          stripe_payouts_enabled: boolean
+          stripe_details_submitted: boolean
           created_at: string
           updated_at: string
         }
@@ -341,6 +445,11 @@ export type Database = {
           website?: string | null
           service_area?: string | null
           request_slug?: string
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
+          stripe_charges_enabled?: boolean
+          stripe_payouts_enabled?: boolean
+          stripe_details_submitted?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -355,6 +464,11 @@ export type Database = {
           website?: string | null
           service_area?: string | null
           request_slug?: string
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
+          stripe_charges_enabled?: boolean
+          stripe_payouts_enabled?: boolean
+          stripe_details_submitted?: boolean
           created_at?: string
           updated_at?: string
         }
