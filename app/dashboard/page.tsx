@@ -12,31 +12,17 @@ export default async function Page() {
     } = await supabase.auth.getUser()
 
     if (user) {
-      // New-user gate: if no data at all, send to the guided setup flow.
-      const [riResult, invResult, estResult] = await Promise.all([
-        supabase
-          .from("recovery_items")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1),
-        supabase
-          .from("invoices")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1),
-        supabase
-          .from("estimates")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1),
-      ])
+      // New-user gate: redirect to setup if the contractor has not completed
+      // their business profile yet (company_name is the reliable indicator).
+      const profileResult = await supabase
+        .from("profiles")
+        .select("company_name")
+        .eq("user_id", user.id)
+        .maybeSingle()
 
-      const hasAnyData =
-        (riResult.data?.length ?? 0) > 0 ||
-        (invResult.data?.length ?? 0) > 0 ||
-        (estResult.data?.length ?? 0) > 0
+      const hasProfile = Boolean(profileResult.data?.company_name)
 
-      if (!hasAnyData) {
+      if (!hasProfile) {
         redirect("/dashboard/setup")
       }
     }

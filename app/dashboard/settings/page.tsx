@@ -292,7 +292,7 @@ function ClientRequestLinkCard({ requestSlug }: { requestSlug: string }) {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Clients must be signed in to submit. Requests appear in your Job Requests page.
+          Clients can submit a request without creating an account. Requests appear in your Job Requests page.
         </p>
       </CardContent>
     </Card>
@@ -834,7 +834,7 @@ export default function SettingsPage() {
               <div className="grid gap-0.5">
                 <p className="text-sm font-medium">Setup wizard</p>
                 <p className="text-xs text-muted-foreground">
-                  Re-run the guided setup to add a customer or load demo data.
+                  Re-run the guided setup to update your profile, services, and defaults.
                 </p>
               </div>
               <Button variant="outline" size="sm" asChild>
