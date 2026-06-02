@@ -15,7 +15,12 @@ import { createClient } from "@/lib/supabase/client"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { dashboardPathForRole, getProfileRole } from "@/lib/user-role"
 
-export function LoginForm({ message }: { message?: string }) {
+function safeInternalPath(path?: string) {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return null
+  return path
+}
+
+export function LoginForm({ message, next }: { message?: string; next?: string }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isResending, startResendTransition] = useTransition()
@@ -76,7 +81,7 @@ export function LoginForm({ message }: { message?: string }) {
         }
       }
 
-      router.push(dashboardPathForRole(role))
+      router.push(safeInternalPath(next) ?? dashboardPathForRole(role))
       router.refresh()
     })
   }
@@ -139,10 +144,11 @@ export function LoginForm({ message }: { message?: string }) {
       }
 
       const supabase = createClient()
+      const nextPath = safeInternalPath(next) ?? "/client/dashboard"
       const { error } = await supabase.auth.signInWithOtp({
         email: normalizedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/client/dashboard`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
         },
       })
 

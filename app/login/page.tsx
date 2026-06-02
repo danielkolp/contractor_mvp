@@ -18,6 +18,7 @@ import { dashboardPathForRole, getProfileRole } from "@/lib/user-role"
 type LoginPageProps = {
   searchParams?: Promise<{
     message?: string
+    next?: string
   }>
 }
 
@@ -26,6 +27,11 @@ const trustPoints = [
   "Plain-English follow-ups",
   "Built for trades owners",
 ]
+
+function safeInternalPath(path?: string) {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return undefined
+  return path
+}
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   if (hasSupabaseEnv()) {
@@ -58,7 +64,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <LoginForm message={params?.message} />
+            <LoginForm message={params?.message} next={safeInternalPath(params?.next)} />
             <p className="mt-6 text-center text-sm text-muted-foreground">
               New here?{" "}
               <Link
