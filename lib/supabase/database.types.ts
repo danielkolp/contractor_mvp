@@ -474,6 +474,39 @@ export type Database = {
         }
         Relationships: []
       }
+      job_request_guest_access: {
+        Row: {
+          id: string
+          job_request_id: string
+          client_email: string
+          token: string
+          expires_at: string | null
+          claimed_by: string | null
+          claimed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_request_id: string
+          client_email: string
+          token: string
+          expires_at?: string | null
+          claimed_by?: string | null
+          claimed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_request_id?: string
+          client_email?: string
+          token?: string
+          expires_at?: string | null
+          claimed_by?: string | null
+          claimed_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           id: string

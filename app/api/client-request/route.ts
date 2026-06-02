@@ -6,6 +6,7 @@ import {
   renderClientIntakeEmailHtml,
   renderClientIntakeEmailText,
 } from "@/lib/email/client-intake-template"
+import { createGuestAccess } from "@/lib/guest-access"
 import { createServiceClient } from "@/lib/supabase/service"
 
 // Reuse across requests when env is present.
@@ -342,7 +343,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── 4. Generate magic login link ────────────────────────────────────────────
+  // ── 4. Create guest access token ────────────────────────────────────────────
+  const guestToken = await createGuestAccess(supabase, jobRequest.id, email)
+
+  // ── 5. Generate magic login link ────────────────────────────────────────────
   const redirectTo = `${appUrl}/auth/callback?next=/client/portal/${jobRequest.id}`
 
   const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -358,7 +362,7 @@ export async function POST(req: NextRequest) {
   // Fallback to login page if magic link generation failed.
   const magicLink = linkData?.properties?.action_link ?? `${appUrl}/login`
 
-  // ── 5. Send confirmation email ──────────────────────────────────────────────
+  // ── 6. Send confirmation email ──────────────────────────────────────────────
   let emailSent = false
 
   if (resend && process.env.RESEND_FROM_EMAIL) {
@@ -389,5 +393,6 @@ export async function POST(req: NextRequest) {
     jobRequestId:   jobRequest.id,
     contractorName,
     emailSent,
+    guestToken:     guestToken ?? undefined,
   })
 }

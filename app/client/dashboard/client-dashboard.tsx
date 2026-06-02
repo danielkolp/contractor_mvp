@@ -159,10 +159,10 @@ function EmptyState() {
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
         <FolderOpen className="h-7 w-7 text-gray-400" />
       </div>
-      <h3 className="text-base font-semibold text-gray-900">No projects yet</h3>
+      <h3 className="text-base font-semibold text-gray-900">No jobs yet</h3>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
-        Use the request link your contractor shared with you to submit your first
-        project — no account setup needed.
+        When you submit a request through a contractor&apos;s Euroflo link, it will
+        appear here after you save it to your account.
       </p>
     </div>
   )
@@ -229,10 +229,10 @@ export function ClientDashboardPage() {
       {/* Welcome header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
-          Your Projects
+          Your jobs
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Track the status of your contractor projects in one place.
+          Track requests, review estimates, and pay contractors in one place.
         </p>
       </div>
 

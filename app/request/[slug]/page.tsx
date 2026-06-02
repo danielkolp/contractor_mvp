@@ -1,10 +1,13 @@
-﻿"use client"
+"use client"
 
 import { type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { use } from "react"
 import {
   ArrowRight,
+  CalendarDays,
   CheckCircle2,
+  Copy,
+  HardHat,
   Loader2,
   MapPin,
   MessageSquare,
@@ -17,7 +20,7 @@ import {
 import { CONTRACTOR_TRADES } from "@/components/ui/trade-multi-select"
 import { createClient } from "@/lib/supabase/client"
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type ContractorProfile = {
   company_name: string | null
@@ -30,6 +33,9 @@ type SubmitResult = {
   jobRequestId:   string
   contractorName: string
   emailSent:      boolean
+  guestToken?:    string
+  projectTitle:   string
+  submittedAt:    string
 }
 
 type ContactOption = "Text" | "Call" | "Email"
@@ -40,7 +46,7 @@ const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024
 const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp"
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return classes.filter(Boolean).join(" ")
@@ -64,7 +70,7 @@ function validatePhotoFiles(files: File[]) {
   return null
 }
 
-// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function FieldLabel({
   htmlFor,
@@ -76,10 +82,7 @@ function FieldLabel({
   optional?: boolean
 }) {
   return (
-    <label
-      htmlFor={htmlFor}
-      className="block text-sm font-semibold text-gray-800"
-    >
+    <label htmlFor={htmlFor} className="block text-sm font-semibold text-gray-800">
       {children}
       {optional && (
         <span className="ml-1.5 text-xs font-normal text-gray-400">optional</span>
@@ -99,7 +102,164 @@ function ErrorMessage({ message }: { message: string }) {
   )
 }
 
-// â”€â”€ Confirmed screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Post-submit screen ────────────────────────────────────────────────────────
+
+function PostSubmitScreen({
+  contractorName,
+  emailSent,
+  guestToken,
+  submittedAt,
+  projectTitle,
+}: {
+  contractorName: string
+  emailSent:      boolean
+  guestToken?:    string
+  submittedAt:    string
+  projectTitle:   string
+}) {
+  const [copied,    setCopied]    = useState(false)
+  const [guestLink, setGuestLink] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (guestToken) {
+      const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      setGuestLink(`${base}/guest/project/${guestToken}`)
+    }
+  }, [guestToken])
+
+  function handleCopy() {
+    if (!guestLink) return
+    void navigator.clipboard.writeText(guestLink).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    })
+  }
+
+  return (
+    <div className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist/40 px-4 pb-16 pt-12">
+      <div className="mx-auto max-w-lg space-y-5">
+
+        {/* Check + headline */}
+        <div className="text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-ef-mist">
+            <CheckCircle2 className="h-8 w-8 text-ef-ocean" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+            Request submitted
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-gray-500">
+            Your contractor will review it and follow up with next steps.
+          </p>
+        </div>
+
+        {/* Euroflo upsell card */}
+        <div className="rounded-2xl border border-gray-200/80 bg-white shadow-md">
+          <div className="border-b border-gray-100 px-6 pb-5 pt-6">
+            <p className="text-xs font-bold uppercase tracking-widest text-ef-ocean">
+              Euroflo
+            </p>
+            <h2 className="mt-1 text-lg font-bold leading-snug text-gray-900">
+              Hiring contractors is made easier with Euroflo. Join today.
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">
+              Track your request, review estimates, and pay securely from one simple page.
+            </p>
+          </div>
+
+          <div className="space-y-3 px-6 py-5">
+            <a
+              href={guestToken ? `/client/setup?claim_token=${guestToken}` : "/client/setup"}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-ef-ocean px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-ef-ocean active:scale-[0.99]"
+            >
+              Create free client account
+              <ArrowRight className="h-4 w-4" />
+            </a>
+
+            {guestLink ? (
+              <button
+                type="button"
+                onClick={() => { window.location.href = guestLink }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-50"
+              >
+                Continue without account
+              </button>
+            ) : (
+              <p className="text-center text-xs text-gray-400">
+                No account required. We can email you a private link for this job.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Project summary card */}
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
+            Your request
+          </p>
+
+          <div className="mt-3 space-y-2.5">
+            <div className="flex items-start gap-3">
+              <HardHat className="mt-0.5 h-4 w-4 shrink-0 text-ef-ocean" />
+              <div>
+                <p className="text-xs text-gray-400">Project</p>
+                <p className="text-sm font-semibold text-gray-900">{projectTitle}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <User className="mt-0.5 h-4 w-4 shrink-0 text-ef-ocean" />
+              <div>
+                <p className="text-xs text-gray-400">Contractor</p>
+                <p className="text-sm font-semibold text-gray-900">{contractorName}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-ef-ocean" />
+              <div>
+                <p className="text-xs text-gray-400">Submitted</p>
+                <p className="text-sm font-semibold text-gray-900">{submittedAt}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-ef-200 bg-ef-mist/60 p-3.5">
+            <p className="text-xs font-semibold text-ef-ocean">What happens next</p>
+            <p className="mt-1 text-sm leading-relaxed text-gray-600">
+              Your contractor will review the request and send an estimate if the job is a fit.
+            </p>
+          </div>
+        </div>
+
+        {/* Private link */}
+        {guestLink && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
+              Your private tracking link
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-gray-500">
+              {emailSent
+                ? "We also emailed this to you. Save it to track your job anytime — no account needed."
+                : "Save this link to track your job anytime — no account needed."}
+            </p>
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="flex-1 truncate text-xs text-gray-600">{guestLink}</p>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-50"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  )
+}
+
+// ── Contact preference ────────────────────────────────────────────────────────
 
 function ContactPreference({
   value,
@@ -138,6 +298,7 @@ function PhotoThumbnail({ file, onRemove }: { file: File; onRemove: () => void }
 
   return (
     <div className="relative aspect-square" data-testid="request-photo-thumbnail">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
         alt={file.name}
@@ -221,52 +382,7 @@ function PhotoUpload({
   )
 }
 
-function ConfirmedScreen({
-  contractorName,
-  emailSent,
-}: {
-  contractorName: string
-  emailSent: boolean
-}) {
-  return (
-    <div
-      className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-16 text-center"
-      data-testid="request-confirmed"
-    >
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-ef-mist">
-        <CheckCircle2 className="h-10 w-10 text-ef-ocean" />
-      </div>
-
-      <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-        Request submitted
-      </h1>
-      <p className="mt-4 max-w-sm text-base leading-relaxed text-gray-500">
-        Your request has been submitted to{" "}
-        <span className="font-semibold text-gray-800">{contractorName}</span>.
-        {emailSent
-          ? " We sent a tracking link to your email â€” check your inbox."
-          : " You'll be notified when there are updates."}
-      </p>
-
-      {emailSent && (
-        <div className="mt-6 rounded-xl border border-ef-200 bg-ef-mist px-5 py-4 text-sm text-ef-ocean">
-          <strong>Check your email</strong> for a link to track your project
-          anytime â€” no password needed.
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => window.close()}
-        className="mt-8 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-medium text-gray-600 shadow-xs transition hover:border-gray-300 hover:bg-gray-50"
-      >
-        Close
-      </button>
-    </div>
-  )
-}
-
-// â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function RequestPage({
   params,
@@ -275,21 +391,19 @@ export default function RequestPage({
 }) {
   const { slug } = use(params)
 
-  const [profile, setProfile]        = useState<ContractorProfile | null>(null)
-  const [profileLoading, setLoading] = useState(true)
-  const [notFound, setNotFound]      = useState(false)
-  const [error, setError]            = useState<string | null>(null)
-  const [result, setResult]          = useState<SubmitResult | null>(null)
-  const [isPending, startTransition] = useTransition()
-  const [contactPref, setContactPref] = useState<ContactOption>("Email")
-  const [photoFiles, setPhotoFiles]  = useState<File[]>([])
+  const [profile,      setProfile]      = useState<ContractorProfile | null>(null)
+  const [profileLoading, setLoading]    = useState(true)
+  const [notFound,     setNotFound]     = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+  const [result,       setResult]       = useState<SubmitResult | null>(null)
+  const [isPending,    startTransition] = useTransition()
+  const [contactPref,  setContactPref]  = useState<ContactOption>("Email")
+  const [photoFiles,   setPhotoFiles]   = useState<File[]>([])
 
   useEffect(() => {
     const supabase = createClient()
     void (async () => {
-      const { data, error: rpcError } = await supabase.rpc("contractor_profile_by_slug", {
-        slug,
-      })
+      const { data, error: rpcError } = await supabase.rpc("contractor_profile_by_slug", { slug })
 
       if (rpcError) {
         setLoading(false)
@@ -332,9 +446,12 @@ export default function RequestPage({
 
   if (result) {
     return (
-      <ConfirmedScreen
+      <PostSubmitScreen
         contractorName={result.contractorName}
         emailSent={result.emailSent}
+        guestToken={result.guestToken}
+        projectTitle={result.projectTitle}
+        submittedAt={result.submittedAt}
       />
     )
   }
@@ -359,16 +476,16 @@ export default function RequestPage({
     startTransition(async () => {
       try {
         const payload = new FormData()
-        payload.append("request_slug", slug)
-        payload.append("name", String(fd.get("name") ?? "").trim())
-        payload.append("email", String(fd.get("email") ?? "").trim())
-        payload.append("phone", String(fd.get("phone") ?? "").trim())
-        payload.append("title", trade || String(fd.get("title") ?? "").trim())
-        payload.append("description", String(fd.get("description") ?? "").trim())
-        payload.append("address_street", String(fd.get("address_street") ?? "").trim())
-        payload.append("location", String(fd.get("city") ?? "").trim())
+        payload.append("request_slug",     slug)
+        payload.append("name",             String(fd.get("name") ?? "").trim())
+        payload.append("email",            String(fd.get("email") ?? "").trim())
+        payload.append("phone",            String(fd.get("phone") ?? "").trim())
+        payload.append("title",            trade || String(fd.get("title") ?? "").trim())
+        payload.append("description",      String(fd.get("description") ?? "").trim())
+        payload.append("address_street",   String(fd.get("address_street") ?? "").trim())
+        payload.append("location",         String(fd.get("city") ?? "").trim())
         payload.append("contact_preference", contactPref)
-        payload.append("photo_notes", String(fd.get("photo_notes") ?? "").trim())
+        payload.append("photo_notes",      String(fd.get("photo_notes") ?? "").trim())
         photoFiles.forEach((file) => payload.append("photos", file))
 
         const res = await fetch("/api/client-request", {
@@ -377,7 +494,7 @@ export default function RequestPage({
         })
 
         const json = (await res.json()) as
-          | { success: true; jobRequestId: string; contractorName: string; emailSent: boolean }
+          | { success: true; jobRequestId: string; contractorName: string; emailSent: boolean; guestToken?: string }
           | { error: string }
 
         if (!res.ok || "error" in json) {
@@ -389,6 +506,13 @@ export default function RequestPage({
           jobRequestId:   json.jobRequestId,
           contractorName: json.contractorName,
           emailSent:      json.emailSent,
+          guestToken:     json.guestToken,
+          projectTitle:   trade || String(fd.get("title") ?? "").trim(),
+          submittedAt:    new Date().toLocaleDateString("en-CA", {
+            month: "long",
+            day:   "numeric",
+            year:  "numeric",
+          }),
         })
       } catch {
         setError("Could not reach the server. Please check your connection and try again.")
@@ -494,13 +618,13 @@ export default function RequestPage({
               <div>
                 <FieldLabel htmlFor="trade">Type of work</FieldLabel>
                 <select
-  id="trade"
-  name="trade"
-  data-testid="request-trade-select"
-  required
-  defaultValue=""
-  className={cn(inputClass, "appearance-none cursor-pointer")}
->
+                  id="trade"
+                  name="trade"
+                  data-testid="request-trade-select"
+                  required
+                  defaultValue=""
+                  className={cn(inputClass, "appearance-none cursor-pointer")}
+                >
                   <option value="" disabled>Select a trade...</option>
                   {(trades.length > 1 ? trades : CONTRACTOR_TRADES).map((t) => (
                     <option key={t} value={t}>{t}</option>
@@ -509,11 +633,11 @@ export default function RequestPage({
               </div>
             ) : (
               <input
-  type="hidden"
-  name="trade"
-  value={trades[0]}
-  data-testid="request-trade-hidden"
-/>
+                type="hidden"
+                name="trade"
+                value={trades[0]}
+                data-testid="request-trade-hidden"
+              />
             )}
 
             <div>
@@ -523,7 +647,7 @@ export default function RequestPage({
                 name="description"
                 required
                 rows={5}
-                placeholder="Describe the work you need done â€” include any measurements, materials, timeline, or other details that will help your contractor prepare an accurate estimate."
+                placeholder="Describe the work you need done — include any measurements, materials, timeline, or other details that will help your contractor prepare an accurate estimate."
                 className={cn(inputClass, "resize-y")}
               />
             </div>
@@ -576,7 +700,7 @@ export default function RequestPage({
                 id="photo_notes"
                 name="photo_notes"
                 rows={2}
-                placeholder="Anything else your contractor should know â€” reference photos, access instructions, materials on hand, etc."
+                placeholder="Anything else your contractor should know — reference photos, access instructions, materials on hand, etc."
                 className={cn(inputClass, "resize-none")}
               />
             </div>
