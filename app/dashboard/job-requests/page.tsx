@@ -704,8 +704,7 @@ export default function ContractorJobRequestsPage() {
     }))
   }
 
-  async function saveEstimateDraft(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function saveEstimateFromRequest(sendToClient: boolean) {
     if (!userId || !estimateRequest || isSaving) return
     setIsSaving(true)
 
@@ -716,6 +715,13 @@ export default function ContractorJobRequestsPage() {
       estimateForm.lineItems.length > 0
         ? estimateTotal
         : parseAmount(estimateForm.flatAmount)
+
+    if (sendToClient && finalAmount <= 0) {
+      toast.error("Add an amount before sending this estimate.")
+      setIsSaving(false)
+      return
+    }
+
     const client = await ensureClientForRequest(
       estimateRequest,
       estimateForm.clientName
@@ -736,7 +742,7 @@ export default function ContractorJobRequestsPage() {
         estimateForm.estimateNumber.trim() ||
         `EST-${Date.now().toString().slice(-5)}`,
       amount: finalAmount,
-      status: "Draft",
+      status: sendToClient ? "Sent" : "Draft",
       sent_date: inputDate(),
       follow_up_date: nullableDate(estimateForm.followUpDate),
       notes: nullableText(estimateForm.notes),
@@ -761,10 +767,26 @@ export default function ContractorJobRequestsPage() {
       ...prev,
       [estimateRequest.id]: data,
     }))
+
+    if (sendToClient) {
+      await updateRequestStatus(estimateRequest, {
+        status: "estimate_created",
+      })
+    }
+
     window.dispatchEvent(new Event("estg:badge-refresh"))
-    toast.success(`Estimate ${data.estimate_number} saved as draft`)
+    toast.success(
+      sendToClient
+        ? `Estimate ${data.estimate_number} sent to client`
+        : `Estimate ${data.estimate_number} saved as draft`
+    )
     closeEstimateDialog(false)
     setIsSaving(false)
+  }
+
+  function saveEstimateDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void saveEstimateFromRequest(false)
   }
 
   async function shareEstimateWithClient(
@@ -1156,7 +1178,7 @@ export default function ContractorJobRequestsPage() {
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                    variant="outline"
                     disabled={isSaving}
                     data-testid="estimate-save-draft"
                   >
@@ -1166,6 +1188,20 @@ export default function ContractorJobRequestsPage() {
                       <FileText className="size-4" />
                     )}
                     Save draft
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                    disabled={isSaving}
+                    data-testid="estimate-send-to-client"
+                    onClick={() => void saveEstimateFromRequest(true)}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                    Send to client
                   </Button>
                 </DialogFooter>
               </form>
