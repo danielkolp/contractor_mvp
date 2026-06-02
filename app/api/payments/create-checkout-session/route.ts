@@ -3,6 +3,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { stripe } from "@/lib/stripe/server"
+import {
+  getAccountsV2ConnectedStatus,
+  retrieveAccountsV2ConnectedAccount,
+} from "@/lib/stripe/accounts-v2"
 
 export async function POST(req: NextRequest) {
   // ── 1. Auth: authenticated user (client or contractor) ───────────────────────
@@ -42,6 +46,24 @@ export async function POST(req: NextRequest) {
   // ── 4. Validate estimate is payable ──────────────────────────────────────────
   if (estimate.payment_status === "paid") {
     return NextResponse.json({ error: "This estimate has already been paid" }, { status: 409 })
+  }
+
+  if (estimate.payment_status === "checkout_created" && estimate.stripe_checkout_session_id) {
+    try {
+      const existingSession = await stripe.checkout.sessions.retrieve(
+        estimate.stripe_checkout_session_id
+      )
+
+      if (existingSession.status === "open" && existingSession.url) {
+        return NextResponse.json({ url: existingSession.url })
+      }
+
+      if (existingSession.payment_status === "paid" || existingSession.status === "complete") {
+        return NextResponse.json({ error: "This estimate has already been paid" }, { status: 409 })
+      }
+    } catch (err) {
+      console.warn("[checkout] Failed to retrieve existing checkout session:", err)
+    }
   }
 
   if (estimate.status !== "Accepted" && estimate.status !== "Won") {
@@ -89,7 +111,22 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  if (!contractorProfile.stripe_charges_enabled || !contractorProfile.stripe_payouts_enabled) {
+  const connectedAccount = await retrieveAccountsV2ConnectedAccount(
+    contractorProfile.stripe_account_id
+  )
+  const connectedStatus = getAccountsV2ConnectedStatus(connectedAccount)
+
+  await service
+    .from("profiles")
+    .update({
+      stripe_charges_enabled:     connectedStatus.chargesEnabled,
+      stripe_payouts_enabled:     connectedStatus.payoutsEnabled,
+      stripe_details_submitted:   connectedStatus.detailsSubmitted,
+      stripe_onboarding_complete: connectedStatus.onboardingComplete,
+    })
+    .eq("user_id", estimate.user_id)
+
+  if (connectedStatus.stripeTransfersStatus !== "active") {
     return NextResponse.json(
       { error: "Contractor Stripe account is not fully active" },
       { status: 422 }
