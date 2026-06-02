@@ -1168,7 +1168,7 @@ export default function EstimatesPage() {
       </Dialog>
 
       {/* ── List ── */}
-      <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader className="gap-4">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -1237,24 +1237,27 @@ export default function EstimatesPage() {
                             "bg-ef-mist ring-1 ring-inset ring-ef-300 dark:bg-ef-ink/20 dark:ring-ef-ocean/50"
                         )}
                       >
-                        <div className="grid min-w-0 gap-3 rounded-md xl:grid-cols-[120px_1fr_120px_120px_130px_80px] xl:items-center">
-                          <div className="min-w-0">
+                        <div className="grid min-w-0 grid-cols-2 items-start gap-x-3 gap-y-2 rounded-md xl:grid-cols-[120px_1fr_120px_120px_130px_80px] xl:items-center xl:gap-3">
+                          <div className="order-1 min-w-0 xl:order-none">
                             <div className="truncate font-medium">
                               {estimate.estimate_number}
                             </div>
-                            <div className="mt-1 text-xs text-muted-foreground xl:hidden">
+                            <div className="mt-0.5 text-xs text-muted-foreground xl:hidden">
                               Sent {formatDate(estimate.sent_date)}
                             </div>
                           </div>
-                          <div className="min-w-0">
+                          <div className="order-3 min-w-0 xl:order-none">
                             <div className="truncate font-medium">
                               {estimate.client_name || "No client"}
                             </div>
                           </div>
-                          <div className="text-sm">
+                          <div className="order-5 min-w-0 text-sm xl:order-none">
+                            <div className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground xl:hidden">
+                              Follow-up
+                            </div>
                             <span>{formatDate(estimate.follow_up_date)}</span>
                           </div>
-                          <div className="font-semibold tabular-nums">
+                          <div className="order-4 text-right font-semibold tabular-nums xl:order-none xl:text-left">
                             {moneyFormatter.format(estimate.amount)}
                             {estimate.contractor_amount_cents && estimate.payment_status !== "paid" && (
                               <div className="text-[0.65rem] font-normal text-muted-foreground">
@@ -1262,7 +1265,7 @@ export default function EstimatesPage() {
                               </div>
                             )}
                           </div>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="order-2 flex flex-wrap justify-end gap-1 xl:order-none xl:justify-start">
                             <Badge variant={statusTone[estimate.status]}>
                               {estimate.status}
                             </Badge>
@@ -1273,7 +1276,7 @@ export default function EstimatesPage() {
                               <Badge variant="outline">Checkout pending</Badge>
                             )}
                           </div>
-                          <div className="flex justify-start gap-2 xl:justify-end">
+                          <div className="order-6 flex justify-end gap-2 xl:order-none">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button

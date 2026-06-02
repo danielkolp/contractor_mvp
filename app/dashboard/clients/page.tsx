@@ -597,7 +597,7 @@ export default function ClientsPage() {
         </Button>
       </PageHeader>
 
-      <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader className="gap-4">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -680,7 +680,7 @@ export default function ClientsPage() {
                         <ReliabilityBadge label={client.payment_reliability} />
                       </div>
 
-                      <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
+                      <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3">
                         <div>
                           <div className="text-xs text-muted-foreground">
                             Unpaid
