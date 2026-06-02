@@ -268,7 +268,7 @@ function ClientRequestLinkCard({ requestSlug }: { requestSlug: string }) {
       </CardHeader>
       <CardContent className="grid gap-3">
         <div className="flex items-center gap-2">
-          <code className="flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
             {link}
           </code>
           <Button
@@ -600,8 +600,8 @@ export default function SettingsPage() {
       />
 
       <ContentReveal isLoading={isLoading} skeleton={<SettingsSkeleton />} minDisplayMs={300}>
-        <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
-          <div className="mx-auto w-full max-w-3xl grid gap-6">
+        <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6">
         {errorMessage ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             <div className="font-medium">Error loading settings</div>

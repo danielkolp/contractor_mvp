@@ -1315,7 +1315,7 @@ export default function ContractorJobRequestsPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
         {/* Shareable link card */}
         {shareableLink && (
           <div className="flex flex-col gap-3 rounded-xl border border-ef-200 bg-ef-mist p-4 dark:border-ef-navy/60 dark:bg-ef-ink/20 sm:flex-row sm:items-center sm:justify-between">
