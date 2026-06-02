@@ -2,7 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
-import { stripe } from "@/lib/stripe/server"
+import {
+  createAccountsV2ConnectedAccount,
+  createAccountsV2OnboardingLink,
+} from "@/lib/stripe/accounts-v2"
 
 export async function POST(_req: NextRequest) {
   // ── 1. Auth: contractor only ─────────────────────────────────────────────────
@@ -37,21 +40,11 @@ export async function POST(_req: NextRequest) {
 
   try {
     if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: "express",
-        country: process.env.STRIPE_CONNECT_COUNTRY ?? "CA",
+      stripeAccountId = await createAccountsV2ConnectedAccount({
         email: user.email,
-        capabilities: {
-          card_payments: { requested: true },
-          transfers: { requested: true },
-        },
-        business_type: "individual",
-        individual: {
-          email: user.email,
-        },
+        userId: user.id,
+        displayName: profile.company_name ?? profile.owner_name,
       })
-
-      stripeAccountId = account.id
 
       const { error: updateError } = await service
         .from("profiles")
@@ -68,12 +61,7 @@ export async function POST(_req: NextRequest) {
     }
 
     // ── 4. Create Account Link for onboarding ──────────────────────────────────
-    const accountLink = await stripe.accountLinks.create({
-      account: stripeAccountId,
-      refresh_url: `${appUrl}/dashboard/settings?stripe=refresh`,
-      return_url: `${appUrl}/dashboard/settings?stripe=return`,
-      type: "account_onboarding",
-    })
+    const accountLink = await createAccountsV2OnboardingLink(stripeAccountId, appUrl)
 
     return NextResponse.json({ url: accountLink.url })
   } catch (err) {
