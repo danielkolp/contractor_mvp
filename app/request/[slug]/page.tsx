@@ -135,8 +135,7 @@ function PostSubmitScreen({
 
   useEffect(() => {
     if (fallbackGuestToken) {
-      const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
-      setGuestLink(`${base}/guest/project/${fallbackGuestToken}`)
+      setGuestLink(`${window.location.origin}/guest/project/${fallbackGuestToken}`)
     }
   }, [fallbackGuestToken])
 
@@ -694,6 +693,7 @@ export default function RequestPage({
                   {(trades.length > 1 ? trades : CONTRACTOR_TRADES).map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
+                  <option value="Something else">Something else / not sure</option>
                 </select>
               </div>
             ) : (
@@ -712,7 +712,7 @@ export default function RequestPage({
                 name="description"
                 required
                 rows={5}
-                placeholder="Describe the work you need done — include any measurements, materials, timeline, or other details that will help your contractor prepare an accurate estimate."
+                placeholder="Describe the work you need done. A sentence or two is fine to start — add measurements, materials, or timing if you have them."
                 className={cn(inputClass, "resize-y")}
               />
             </div>
@@ -797,8 +797,8 @@ export default function RequestPage({
         </div>
 
         <p className="mt-5 text-center text-xs text-gray-400">
-          By submitting, a project tracking account is created for your email
-          address. No password required.
+          We&apos;ll email you a private link to track this job. No password, no
+          account to manage.
         </p>
       </div>
     </div>

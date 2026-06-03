@@ -623,7 +623,7 @@ function CustomerCard({
           onClick={onAddRecovery}
         >
           <Plus className="size-3.5" />
-          Add recovery
+          Follow up
         </Button>
         <Button
           size="sm"

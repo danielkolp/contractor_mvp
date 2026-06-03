@@ -123,6 +123,24 @@ function PasswordMeter({ password }: { password: string }) {
   )
 }
 
+function friendlyAuthError(message: string) {
+  const lower = message.toLowerCase()
+
+  if (lower.includes("rate limit") || lower.includes("too many") || lower.includes("email rate")) {
+    return "Too many signup emails were requested. Try again in a minute, or log in if you already have an account."
+  }
+
+  if (
+    lower.includes("already registered") ||
+    lower.includes("already been registered") ||
+    lower.includes("user already registered")
+  ) {
+    return "That email already has an account. Log in instead, or resend the verification email."
+  }
+
+  return message
+}
+
 export function SignupForm() {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -176,7 +194,7 @@ export function SignupForm() {
       )
 
       if (error) {
-        setResendMessage({ type: "error", text: error.message })
+        setResendMessage({ type: "error", text: friendlyAuthError(error.message) })
         return
       }
 
@@ -229,7 +247,7 @@ export function SignupForm() {
       })
 
       if (error) {
-        setErrorMessage(error.message)
+        setErrorMessage(friendlyAuthError(error.message))
         return
       }
 

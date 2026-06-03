@@ -712,7 +712,7 @@ export default function EstimatesPage() {
         current.map((e) => (e.id === estimate.id ? data : e))
       )
       window.dispatchEvent(new Event("estg:badge-refresh"))
-      toast.success("Estimate shared with client")
+      toast.success("Estimate sent to client")
     }
 
     setIsSaving(false)
@@ -795,7 +795,7 @@ export default function EstimatesPage() {
     )
 
     toast.success(`Invoice ${data.invoice_number} created`, {
-      description: "Estimate marked as Won.",
+      description: "Estimate marked as won.",
       action: {
         label: "View Invoices",
         onClick: () => router.push("/dashboard/invoices"),
@@ -1129,15 +1129,16 @@ export default function EstimatesPage() {
             {/* ── Online Payment (Euroflo) ── */}
             <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4">
               <div>
-                <p className="text-sm font-semibold">Online payment via Euroflo</p>
+                <p className="text-sm font-semibold">Collect deposit online</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Enter your desired payout. Euroflo adds a 15% platform fee + 5% GST.
-                  Leave blank to skip online payment for this estimate.
+                  Enter what you want to receive. Euroflo adds the service fee and GST on top
+                  so the customer sees the full card price. Leave blank if you will collect by
+                  cash, cheque, or e-transfer.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="contractor-payout">Your payout (CAD)</Label>
+                  <Label htmlFor="contractor-payout">I want to receive (CAD)</Label>
                   <Input
                     id="contractor-payout"
                     value={form.contractorAmountCents}
@@ -1151,7 +1152,7 @@ export default function EstimatesPage() {
                 </div>
                 {hasStripePayment && (
                   <div className="grid gap-2">
-                    <Label htmlFor="deposit-amount">Deposit due from client (CAD)</Label>
+                    <Label htmlFor="deposit-amount">Deposit to collect now (CAD)</Label>
                     <Input
                       id="deposit-amount"
                       data-testid="estimate-deposit-amount-input"
@@ -1169,16 +1170,16 @@ export default function EstimatesPage() {
               {hasStripePayment && (
                 <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-3">
                   {[
-                    { label: "Your payout",       value: moneyFormatter.format(contractorCents / 100) },
-                    { label: "Platform fee 15%",  value: moneyFormatter.format(platformFeeCents / 100) },
-                    { label: "GST 5%",            value: moneyFormatter.format(gstCents / 100) },
-                    { label: "Client total",      value: moneyFormatter.format(clientTotalCents / 100) },
-                    { label: "Deposit due",       value: moneyFormatter.format(depositCents / 100) },
-                    { label: "Remaining balance", value: moneyFormatter.format(remainingCents / 100) },
+                    { label: "You receive",   value: moneyFormatter.format(contractorCents / 100) },
+                    { label: "Euroflo fee",   value: moneyFormatter.format(platformFeeCents / 100) },
+                    { label: "GST on fee",    value: moneyFormatter.format(gstCents / 100) },
+                    { label: "Customer pays", value: moneyFormatter.format(clientTotalCents / 100) },
+                    { label: "Deposit today", value: moneyFormatter.format(depositCents / 100) },
+                    { label: "Balance later", value: moneyFormatter.format(remainingCents / 100) },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded border border-border bg-background px-3 py-2 text-center">
                       <p className="text-[0.6rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
-                      <p className="mt-0.5 text-sm font-bold tabular-nums" data-testid={label === "Client total" ? "estimate-client-total" : undefined}>{value}</p>
+                      <p className="mt-0.5 text-sm font-bold tabular-nums" data-testid={label === "Customer pays" ? "estimate-client-total" : undefined}>{value}</p>
                     </div>
                   ))}
                 </div>
@@ -1297,7 +1298,7 @@ export default function EstimatesPage() {
                             {moneyFormatter.format(estimate.amount)}
                             {estimate.contractor_amount_cents && estimate.payment_status !== "paid" && (
                               <div className="text-[0.65rem] font-normal text-muted-foreground">
-                                Payout {moneyFormatter.format(estimate.contractor_amount_cents / 100)}
+                                Receive {moneyFormatter.format(estimate.contractor_amount_cents / 100)}
                               </div>
                             )}
                           </div>
@@ -1348,7 +1349,7 @@ export default function EstimatesPage() {
                                     onSelect={() => void shareEstimate(estimate)}
                                   >
                                     <Send className="size-4" />
-                                    Share with client
+                                    Send to client
                                   </DropdownMenuItem>
                                 ) : null}
 
@@ -1359,7 +1360,7 @@ export default function EstimatesPage() {
                                     rel="noreferrer"
                                   >
                                     <Printer className="size-4" />
-                                    View / Print PDF
+                                    View / print PDF
                                     <ExternalLink className="ml-auto size-3 opacity-50" />
                                   </a>
                                 </DropdownMenuItem>
@@ -1372,7 +1373,7 @@ export default function EstimatesPage() {
                                   }
                                 >
                                   <Receipt className="size-4" />
-                                  Convert to Invoice
+                                  Convert to invoice
                                 </DropdownMenuItem>
 
                                 <DropdownMenuSeparator />
@@ -1383,7 +1384,7 @@ export default function EstimatesPage() {
                                   }
                                 >
                                   <CheckCircle2 className="size-4" />
-                                  Mark Won
+                                  Mark won
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onSelect={() =>
@@ -1391,7 +1392,7 @@ export default function EstimatesPage() {
                                   }
                                 >
                                   <XCircle className="size-4" />
-                                  Mark Lost
+                                  Mark lost
                                 </DropdownMenuItem>
 
                                 <DropdownMenuSeparator />

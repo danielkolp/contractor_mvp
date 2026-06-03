@@ -6,20 +6,25 @@ import { PortalPage } from "./portal-page"
 
 export default async function ProjectPortalPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ jobId: string }>
+  searchParams?: Promise<{ payment?: string }>
 }) {
   const { jobId } = await params
+  const query = searchParams ? await searchParams : {}
+  const paymentStatus = query.payment === "success" ? "success" : undefined
+  const portalPath = `/client/portal/${jobId}${paymentStatus ? "?payment=success" : ""}`
 
   if (!hasSupabaseEnv()) {
-    return <PortalPage jobId={jobId} />
+    return <PortalPage jobId={jobId} paymentStatus={paymentStatus} />
   }
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect(`/login?next=/client/portal/${jobId}`)
+    redirect(`/login?next=${encodeURIComponent(portalPath)}`)
   }
 
   // Verify the client owns this job request.
@@ -34,5 +39,5 @@ export default async function ProjectPortalPage({
     redirect("/client/dashboard")
   }
 
-  return <PortalPage jobId={jobId} />
+  return <PortalPage jobId={jobId} paymentStatus={paymentStatus} />
 }

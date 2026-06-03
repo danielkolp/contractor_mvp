@@ -1042,7 +1042,7 @@ export default function InvoicesPage() {
         toast.success(
           isWaitingRecoveryDraft(activeDraft)
             ? "Follow-up already sent. Opening Follow-ups."
-            : "Follow-up draft ready to review."
+            : "Draft ready — opening Follow-ups to review and send."
         )
         router.push("/dashboard/recoveries")
         return
@@ -1079,7 +1079,7 @@ export default function InvoicesPage() {
         }
       }
 
-      toast.success("Follow-up draft ready to review.")
+      toast.success("Draft ready — opening Follow-ups to review and send.")
       router.push("/dashboard/recoveries")
     } catch (error) {
       const message = getRecoveryDraftErrorMessage(error)
@@ -1253,7 +1253,7 @@ export default function InvoicesPage() {
     <div className="min-h-[calc(100vh-4rem)] bg-background text-foreground dark:bg-background dark:text-foreground">
       <PageHeader
         title="Invoices"
-        description="Find unpaid invoices, create recovery drafts, and keep payment follow-up connected."
+        description="Your record of what's owed and paid. To collect online, send the estimate — clients pay from there. Use an invoice for cash, cheque, or e-transfer, then mark it paid."
         className="dark:border-border dark:bg-background dark:[&_h1]:text-foreground dark:[&_p]:text-muted-foreground"
       >
         <Dialog open={dialogOpen} onOpenChange={closeInvoiceDialog}>

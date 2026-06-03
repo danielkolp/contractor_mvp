@@ -77,7 +77,8 @@ export default async function SignupPage() {
             <CardHeader className="pb-4">
               <CardTitle className="text-xl">Create your account</CardTitle>
               <CardDescription>
-                Sign up with email and password. Free to try.
+                Sign up with email and password. Free to try — no credit card
+                required.
               </CardDescription>
             </CardHeader>
             <CardContent>

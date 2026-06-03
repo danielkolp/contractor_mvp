@@ -102,28 +102,47 @@ type StripeStatus = {
   onboarding_complete: boolean
 }
 
+const disconnectedStripeStatus: StripeStatus = {
+  connected: false,
+  charges_enabled: false,
+  payouts_enabled: false,
+  details_submitted: false,
+  onboarding_complete: false,
+}
+
 function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null }) {
   const [status, setStatus]       = useState<StripeStatus | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const fetchStatus = useCallback(async () => {
-    if (!stripeAccountId) return
+    if (!stripeAccountId) {
+      setStatus(disconnectedStripeStatus)
+      return
+    }
     setIsRefreshing(true)
     try {
       const res = await fetch("/api/stripe/connect/status", { method: "POST" })
       if (res.ok) {
         const data = await res.json() as StripeStatus
         setStatus(data)
+      } else {
+        setStatus(disconnectedStripeStatus)
       }
+    } catch {
+      setStatus(disconnectedStripeStatus)
     } finally {
       setIsRefreshing(false)
     }
   }, [stripeAccountId])
 
   useEffect(() => {
-    if (stripeAccountId) void fetchStatus()
-    else setStatus({ connected: false, charges_enabled: false, payouts_enabled: false, details_submitted: false, onboarding_complete: false })
+    if (stripeAccountId) {
+      setStatus(null)
+      void fetchStatus()
+    } else {
+      setStatus(disconnectedStripeStatus)
+    }
   }, [stripeAccountId, fetchStatus])
 
   async function handleConnect() {
@@ -145,6 +164,7 @@ function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null
 
   const connected = status?.connected ?? false
   const complete  = status?.onboarding_complete ?? false
+  const isCheckingStripe = Boolean(stripeAccountId && status === null)
 
   return (
     <Card>
@@ -155,7 +175,17 @@ function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        {!connected ? (
+        {isCheckingStripe ? (
+          <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Checking Stripe connection...</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Euroflo is confirming whether this account can accept payments.
+              </p>
+            </div>
+          </div>
+        ) : !connected ? (
           <>
             <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
@@ -386,11 +416,11 @@ function validateSettingsForm(form: SettingsForm): {
     !(firstReminderDays < secondReminderDays && secondReminderDays < finalNoticeDays)
   ) {
     errors.first_reminder_days =
-      "Reminder timing must be first < second < final notice."
+      "Each reminder should come later than the one before it (e.g. 3, 7, 14 days)."
     errors.second_reminder_days =
-      "Reminder timing must be first < second < final notice."
+      "Each reminder should come later than the one before it (e.g. 3, 7, 14 days)."
     errors.final_notice_days =
-      "Reminder timing must be first < second < final notice."
+      "Each reminder should come later than the one before it (e.g. 3, 7, 14 days)."
   }
 
   if (Object.keys(errors).length > 0) {

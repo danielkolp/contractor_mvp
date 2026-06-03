@@ -200,6 +200,21 @@ export default async function EstimatePrintPage({
     remainingDisplayAmt = total - depositDisplayAmt
   }
 
+  // When Stripe pricing is set, scale displayed line-item prices so they sum
+  // to client_total_cents. This means the PDF always shows the price the client
+  // actually pays — platform fee and GST are already folded in.
+  const lineItemScaleFactor =
+    hasStripePricing && clientTotalFromStripe && subtotal > 0
+      ? clientTotalFromStripe / subtotal
+      : 1
+  const displayLineItems = lineItems.map((item) => ({
+    ...item,
+    unit_price: item.unit_price * lineItemScaleFactor,
+  }))
+  const displaySubtotal = hasStripePricing && clientTotalFromStripe
+    ? clientTotalFromStripe
+    : subtotal
+
   const companyName = profile?.company_name || profile?.owner_name || "Your Company"
   const ownerName   = profile?.owner_name || ""
   const clientName  = client?.name || estimate.client_name || "Client"
@@ -327,7 +342,7 @@ export default async function EstimatePrintPage({
                 </div>
 
                 <div className="divide-y divide-zinc-100">
-                  {lineItems.map((item, i) => (
+                  {displayLineItems.map((item, i) => (
                     <div key={i} className="grid grid-cols-[1fr_44px_100px_100px] gap-3 py-2.5 text-xs">
                       <span className="text-zinc-800">{item.description || "—"}</span>
                       <span className="text-right tabular-nums text-zinc-500">{item.quantity}</span>
@@ -341,15 +356,16 @@ export default async function EstimatePrintPage({
                   <div className="w-60 space-y-2">
                     <div className="flex justify-between text-xs text-zinc-500">
                       <span>Subtotal</span>
-                      <span className="tabular-nums font-medium text-zinc-700">{money.format(subtotal)}</span>
+                      <span className="tabular-nums font-medium text-zinc-700">{money.format(displaySubtotal)}</span>
                     </div>
-                    {taxLines.map((t, i) => (
+                    {/* Only show tax lines when not using Stripe pricing (fees already included) */}
+                    {!hasStripePricing && taxLines.map((t, i) => (
                       <div key={i} className="flex justify-between text-xs text-zinc-500">
                         <span>{t.name} ({t.rate}%)</span>
                         <span className="tabular-nums font-medium text-zinc-700">{money.format(subtotal * (t.rate / 100))}</span>
                       </div>
                     ))}
-                    {taxLines.length > 1 && (
+                    {!hasStripePricing && taxLines.length > 1 && (
                       <div className="flex justify-between text-xs text-zinc-400">
                         <span>Total Tax</span>
                         <span className="tabular-nums">{money.format(totalTax)}</span>
@@ -376,40 +392,22 @@ export default async function EstimatePrintPage({
           {/* ── Price breakdown + Notes side by side ── */}
           <div className="print-avoid-break border-t border-zinc-200 grid grid-cols-[1fr_auto] gap-px bg-zinc-200">
             <div className="bg-white px-8 py-4 print:py-3">
-              {hasStripePricing && stripeEst.contractor_amount_cents && stripeEst.platform_fee_cents && stripeEst.client_total_cents ? (
+              {hasStripePricing && depositDisplayAmt > 0 ? (
                 <>
-                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">Price Breakdown</p>
+                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">Payment Schedule</p>
                   <div className="w-full max-w-xs space-y-1.5">
-                    <div className="flex justify-between text-xs text-zinc-500">
-                      <span>Contractor subtotal</span>
-                      <span className="tabular-nums font-medium text-zinc-700">{money.format(stripeEst.contractor_amount_cents / 100)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-zinc-500">
-                      <span>Euroflo platform fee (15%)</span>
-                      <span className="tabular-nums font-medium text-zinc-700">{money.format(stripeEst.platform_fee_cents / 100)}</span>
-                    </div>
-                    {(stripeEst.gst_cents ?? 0) > 0 && (
-                      <div className="flex justify-between text-xs text-zinc-500">
-                        <span>GST (5%)</span>
-                        <span className="tabular-nums font-medium text-zinc-700">{money.format((stripeEst.gst_cents ?? 0) / 100)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs font-bold text-zinc-900 border-t border-zinc-200 pt-1.5">
+                    <div className="flex justify-between text-xs font-bold text-zinc-900">
                       <span>Total</span>
-                      <span className="tabular-nums text-ef-ocean">{money.format(stripeEst.client_total_cents / 100)}</span>
+                      <span className="tabular-nums text-ef-ocean">{money.format(total)}</span>
                     </div>
-                    {depositDisplayAmt > 0 && (
-                      <>
-                        <div className="flex justify-between text-xs text-zinc-500 pt-1">
-                          <span>Deposit due now</span>
-                          <span className="tabular-nums font-semibold text-ef-ocean">{money.format(depositDisplayAmt)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs text-zinc-500">
-                          <span>Remaining balance</span>
-                          <span className="tabular-nums font-medium text-zinc-700">{money.format(remainingDisplayAmt)}</span>
-                        </div>
-                      </>
-                    )}
+                    <div className="flex justify-between text-xs text-zinc-500 border-t border-zinc-200 pt-1.5">
+                      <span>Deposit due now</span>
+                      <span className="tabular-nums font-semibold text-ef-ocean">{money.format(depositDisplayAmt)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>Remaining balance</span>
+                      <span className="tabular-nums font-medium text-zinc-700">{money.format(remainingDisplayAmt)}</span>
+                    </div>
                   </div>
                 </>
               ) : (
@@ -469,12 +467,12 @@ export default async function EstimatePrintPage({
               <div className="mb-3 rounded border border-zinc-200 bg-zinc-50 px-4 py-2">
                 <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Payment breakdown (contractor view)</p>
                 <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-                  <div><span className="text-zinc-400">Your payout: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.contractor_amount_cents / 100)}</span></div>
-                  <div><span className="text-zinc-400">Platform fee 15%: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.platform_fee_cents / 100)}</span></div>
+                  <div><span className="text-zinc-400">You receive: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.contractor_amount_cents / 100)}</span></div>
+                  <div><span className="text-zinc-400">Euroflo fee: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.platform_fee_cents / 100)}</span></div>
                   {(stripeEst.gst_cents ?? 0) > 0 && (
-                    <div><span className="text-zinc-400">GST 5%: </span><span className="font-semibold text-zinc-800">{money.format((stripeEst.gst_cents ?? 0) / 100)}</span></div>
+                    <div><span className="text-zinc-400">GST on fee: </span><span className="font-semibold text-zinc-800">{money.format((stripeEst.gst_cents ?? 0) / 100)}</span></div>
                   )}
-                  <div><span className="text-zinc-400">Client total: </span><span className="font-semibold text-ef-ocean">{money.format(total)}</span></div>
+                  <div><span className="text-zinc-400">Customer pays: </span><span className="font-semibold text-ef-ocean">{money.format(total)}</span></div>
                 </div>
               </div>
             )}

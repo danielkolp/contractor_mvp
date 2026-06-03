@@ -131,15 +131,15 @@ test.describe("Retest QA", () => {
       await firstRow.getByTestId("estimate-line-item-unit-price").fill("400")
 
       // Assert Online payment section is present in dialog
-      await expect(createDialog.getByText("Online payment via Euroflo")).toBeVisible()
+      await expect(createDialog.getByText("Collect deposit online")).toBeVisible()
       const payoutField = createDialog.getByTestId("estimate-contractor-amount-input")
       await expect(payoutField).toBeVisible()
-      console.log("✓ 'Online payment via Euroflo' section found in create dialog")
+      console.log("✓ 'Collect deposit online' section found in create dialog")
 
       // Fill payout: $400 → 15% fee → $460 client total
       await payoutField.fill("400")
-      await expect(createDialog.getByText("Client total")).toBeVisible()
-      console.log("✓ Payout $400 entered; fee breakdown preview visible")
+      await expect(createDialog.getByText("Customer pays")).toBeVisible()
+      console.log("✓ Receive amount $400 entered; fee breakdown preview visible")
 
       await createDialog.getByTestId("estimate-save-draft").click()
       await expect(createDialog).toBeHidden()
@@ -155,7 +155,7 @@ test.describe("Retest QA", () => {
       expect(draft.contractor_amount_cents, "contractor_amount_cents saved from dialog").toBe(40000)
       expect(draft.platform_fee_cents,      "platform_fee_cents saved from dialog").toBe(6000)
       expect(draft.client_total_cents,      "client_total_cents saved from dialog").toBe(46000)
-      console.log("✓ Payout persisted in DB: $400 contractor / $60 fee / $460 client total")
+      console.log("✓ Payment amounts persisted in DB: $400 contractor / $60 fee / $460 customer total")
 
       // Share estimate
       await page.goto("/dashboard/job-requests")
@@ -364,15 +364,15 @@ test.describe("Retest QA", () => {
       await expect(dlg).toBeVisible()
 
       // Assert all three elements of the Online payment section
-      await expect(dlg.getByText("Online payment via Euroflo")).toBeVisible()
+      await expect(dlg.getByText("Collect deposit online")).toBeVisible()
       await expect(dlg.getByTestId("estimate-contractor-amount-input")).toBeVisible()
-      console.log("✓ 'Online payment via Euroflo' heading visible")
+      console.log("✓ 'Collect deposit online' heading visible")
       console.log("✓ estimate-contractor-amount-input visible")
 
       // Fill payout and verify fee preview appears
       await dlg.getByTestId("estimate-contractor-amount-input").fill("500")
-      await expect(dlg.getByText("Client total")).toBeVisible()
-      await expect(dlg.getByText(/Euroflo \d+%/)).toBeVisible()
+      await expect(dlg.getByText("Customer pays")).toBeVisible()
+      await expect(dlg.getByText("Euroflo fee")).toBeVisible()
       console.log("✓ Fee breakdown preview visible after filling payout amount")
 
       // Screenshot the completed dialog
@@ -414,11 +414,11 @@ test.describe("Retest QA", () => {
       const card = page.locator(`[data-testid="job-request-card"][data-request-id="${jobRequestId}"]`)
       await expect(card).toBeVisible({ timeout: 15_000 })
 
-      // Click "Propose site visit"
-      const proposeBtn = card.getByTestId("job-request-schedule-inspection")
-        .or(card.getByRole("button", { name: /propose site visit|site visit|schedule inspection/i }))
-      await expect(proposeBtn.first()).toBeVisible()
-      await proposeBtn.first().click()
+      // Open the "More" menu, then click "Propose a site visit"
+      await card.getByTestId("job-request-more-actions").click()
+      const proposeBtn = page.getByTestId("job-request-schedule-inspection")
+      await expect(proposeBtn).toBeVisible()
+      await proposeBtn.click()
 
       // Fill in the inspection dialog
       const inspDlg = page.getByRole("dialog").filter({ hasText: /site visit|inspection/i }).first()
@@ -536,9 +536,10 @@ test.describe("Retest QA", () => {
       const card = page.locator(`[data-testid="job-request-card"][data-request-id="${jobRequestId}"]`)
       await expect(card).toBeVisible({ timeout: 15_000 })
 
-      const proposeBtn = card.getByTestId("job-request-schedule-inspection")
-        .or(card.getByRole("button", { name: /propose site visit|site visit|schedule inspection/i }))
-      await proposeBtn.first().click()
+      await card.getByTestId("job-request-more-actions").click()
+      const proposeBtn = page.getByTestId("job-request-schedule-inspection")
+      await expect(proposeBtn).toBeVisible()
+      await proposeBtn.click()
 
       const inspDlg = page.getByRole("dialog").filter({ hasText: /site visit|inspection/i }).first()
       await expect(inspDlg).toBeVisible()

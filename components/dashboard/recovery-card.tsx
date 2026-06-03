@@ -2,13 +2,17 @@
 
 import { useState } from "react"
 import {
+  Ban,
   Bell,
   Check,
+  CheckCheck,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   ClipboardCopy,
   ClipboardList,
+  Clock,
+  EyeOff,
   FileText,
   Mail,
   MessageSquare,
@@ -83,19 +87,11 @@ function StatusPill({
   isCheckIn: boolean
 }) {
   if (isCheckIn) {
-    return (
-      <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200">
-        Check-in due
-      </Badge>
-    )
+    return <Badge variant="info">Check-in due</Badge>
   }
   switch (status) {
     case "needs_follow_up":
-      return (
-        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-          Needs follow-up
-        </Badge>
-      )
+      return <Badge variant="warning">Needs follow-up</Badge>
     case "message_ready":
       return (
         <Badge variant="outline" className="border-ef-200 bg-ef-mist text-ef-ocean dark:border-ef-navy/60 dark:bg-ef-ink/40 dark:text-ef-200">
@@ -104,14 +100,10 @@ function StatusPill({
       )
     case "sent":
     case "waiting":
-      return (
-        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200">
-          Waiting for reply
-        </Badge>
-      )
+      return <Badge variant="info">Waiting for reply</Badge>
     default:
       return (
-        <Badge variant="outline" className="text-muted-foreground">
+        <Badge variant="muted">
           {status.replace(/_/g, " ")}
         </Badge>
       )
@@ -170,6 +162,8 @@ function StandardCard({
   replyInfo,
   onMarkSentManually,
   onSendFollowUp,
+  onSnooze,
+  onDone,
   onRemindLater,
   onResolve,
   onLost,
@@ -180,6 +174,8 @@ function StandardCard({
   replyInfo?: ReplyInfo
   onMarkSentManually: (item: RecoveryItem) => void
   onSendFollowUp:     (item: RecoveryItem) => void
+  onSnooze:           (item: RecoveryItem, days: number) => void
+  onDone:             (item: RecoveryItem) => void
   onRemindLater:      (item: RecoveryItem) => void
   onResolve:          (item: RecoveryItem) => void
   onLost:             (item: RecoveryItem) => void
@@ -212,7 +208,7 @@ function StandardCard({
         accentBar
       )}
     >
-      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
+      <div className="flex flex-col gap-3 py-3.5 pl-5 pr-4">
         {/* Compact main row */}
         <div className="flex items-center gap-3">
           <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", iconCls)}>
@@ -348,6 +344,34 @@ function StandardCard({
             </Button>
           )}
 
+          {/* Snooze — Not now */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" disabled={isSaving} className="gap-1.5">
+                <Clock className="size-3.5" />
+                Not now
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-36">
+              <DropdownMenuItem onClick={() => onSnooze(item, 1)}>Tomorrow</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSnooze(item, 3)}>In 3 days</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSnooze(item, 7)}>Next week</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Done — This is handled */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDone(item)}
+            disabled={isSaving}
+            className="gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <CheckCheck className="size-3.5" />
+            This is handled
+          </Button>
+
           <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -394,6 +418,15 @@ function StandardCard({
                   <ThumbsDown className="mr-2 size-3.5" />
                   Mark lost
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onDone(item)} className="text-muted-foreground">
+                  <EyeOff className="mr-2 size-3.5" />
+                  Hide suggestion
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onLost(item)} className="text-muted-foreground">
+                  <Ban className="mr-2 size-3.5" />
+                  Not relevant
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -413,6 +446,8 @@ function CheckInCard({
   onFollowUpAgain,
   onNoResponse,
   onNotInterested,
+  onSnooze,
+  onDone,
   onRemindLater,
   onViewReplies,
 }: {
@@ -423,12 +458,14 @@ function CheckInCard({
   onFollowUpAgain:  (item: RecoveryItem) => void
   onNoResponse:     (item: RecoveryItem) => void
   onNotInterested:  (item: RecoveryItem) => void
+  onSnooze:         (item: RecoveryItem, days: number) => void
+  onDone:           (item: RecoveryItem) => void
   onRemindLater:    (item: RecoveryItem) => void
   onViewReplies:    (item: RecoveryItem) => void
 }) {
   return (
-    <div className="euroflo-card-transition relative overflow-hidden rounded-xl border-2 border-sky-200 bg-sky-50/30 shadow-sm hover:shadow-md dark:border-sky-900/50 dark:bg-sky-950/10 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-sky-400">
-      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
+    <div className="euroflo-card-transition relative overflow-hidden rounded-xl border border-sky-200 bg-sky-50/20 shadow-sm hover:shadow-md dark:border-sky-900/50 dark:bg-sky-950/10 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-sky-400">
+      <div className="flex flex-col gap-3 py-3.5 pl-5 pr-4">
         {/* Compact main row */}
         <div className="flex items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-900/25 dark:text-sky-400">
@@ -494,6 +531,34 @@ function CheckInCard({
             No response
           </Button>
 
+          {/* Snooze — Not now */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" disabled={isSaving} className="gap-1.5">
+                <Clock className="size-3.5" />
+                Not now
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-36">
+              <DropdownMenuItem onClick={() => onSnooze(item, 1)}>Tomorrow</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSnooze(item, 3)}>In 3 days</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSnooze(item, 7)}>Next week</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Done — This is handled */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDone(item)}
+            disabled={isSaving}
+            className="gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <CheckCheck className="size-3.5" />
+            This is handled
+          </Button>
+
           <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -525,6 +590,15 @@ function CheckInCard({
                 >
                   <ThumbsDown className="mr-2 size-3.5" />
                   Not interested
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onDone(item)} className="text-muted-foreground">
+                  <EyeOff className="mr-2 size-3.5" />
+                  Hide suggestion
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onNotInterested(item)} className="text-muted-foreground">
+                  <Ban className="mr-2 size-3.5" />
+                  Not relevant
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -572,7 +646,7 @@ function WaitingCard({
         ? "border-blue-200 before:bg-blue-500 dark:border-blue-900/50"
         : "opacity-80 before:bg-blue-300 dark:before:bg-blue-700"
     )}>
-      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3">
+      <div className="flex flex-col gap-3 py-3.5 pl-5 pr-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <div className="min-w-0">
@@ -676,6 +750,8 @@ export function RecoveryCard({
   replyInfo,
   onMarkSent,
   onSendFollowUp,
+  onSnooze,
+  onDone,
   onRemindLater,
   onResolve,
   onLost,
@@ -691,6 +767,8 @@ export function RecoveryCard({
   replyInfo?:      ReplyInfo
   onMarkSent:      (item: RecoveryItem) => void
   onSendFollowUp:  (item: RecoveryItem) => void
+  onSnooze:        (item: RecoveryItem, days: number) => void
+  onDone:          (item: RecoveryItem) => void
   onRemindLater:   (item: RecoveryItem) => void
   onResolve:       (item: RecoveryItem) => void
   onLost:          (item: RecoveryItem) => void
@@ -709,6 +787,8 @@ export function RecoveryCard({
         onFollowUpAgain={onFollowUpAgain}
         onNoResponse={onNoResponse}
         onNotInterested={onLost}
+        onSnooze={onSnooze}
+        onDone={onDone}
         onRemindLater={onRemindLater}
         onViewReplies={onViewReplies}
       />
@@ -737,6 +817,8 @@ export function RecoveryCard({
       replyInfo={replyInfo}
       onMarkSentManually={onMarkSent}
       onSendFollowUp={onSendFollowUp}
+      onSnooze={onSnooze}
+      onDone={onDone}
       onRemindLater={onRemindLater}
       onResolve={onResolve}
       onLost={onLost}

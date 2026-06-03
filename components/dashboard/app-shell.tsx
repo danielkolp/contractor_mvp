@@ -70,7 +70,7 @@ const navigation = [
     icon: ClipboardList,
   },
   {
-    name: "Recovery",
+    name: "Follow-ups",
     href: "/dashboard/recoveries",
     icon: RotateCcw,
   },
@@ -130,7 +130,7 @@ function SidebarNav({
             className={cn(
               "flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
               active
-                ? "bg-ef-mist text-ef-ocean ring-1 ring-ef-mist dark:bg-ef-ink/40 dark:text-ef-200 dark:ring-ef-navy/60"
+                ? "border-l-2 border-l-ef-ocean bg-ef-mist pl-2.5 text-ef-ocean dark:border-l-ef-sky dark:bg-ef-ink/40 dark:text-ef-200"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
@@ -160,7 +160,7 @@ function Sidebar({ counts }: { counts: Record<string, number> }) {
       </div>
       <SidebarNav counts={counts} />
       <div className="px-3 pb-4 pt-2">
-        <div className="rounded-xl border border-ef-mist bg-ef-mist p-4 text-ef-ink dark:border-ef-navy/60 dark:bg-ef-ink/30 dark:text-ef-mist">
+        <div className="rounded-xl border border-ef-200 bg-ef-mist p-4 text-ef-ink dark:border-ef-navy/60 dark:bg-ef-ink/30 dark:text-ef-mist">
           <div className="flex items-center gap-2 text-sm font-medium">
             <ShieldCheck className="size-4 text-ef-ocean" />
             You stay in control
@@ -328,7 +328,7 @@ export function AppShell({
         <Sidebar counts={counts} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar userEmail={userEmail} counts={counts} />
-          <main className="flex-1">{children}</main>
+          <main key={pathname} className="flex-1 ef-page-in">{children}</main>
         </div>
       </div>
     </div>

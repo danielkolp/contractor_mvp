@@ -86,7 +86,7 @@ const colorMap: Record<StatusColor, { bg: string; text: string; border: string; 
 }
 
 export function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+  const diff = Date.now() - portalDateMs(iso)
   const mins = Math.floor(diff / 60_000)
   if (mins < 1)  return "Just now"
   if (mins < 60) return `${mins}m ago`
@@ -95,7 +95,7 @@ export function relativeTime(iso: string): string {
   const days = Math.floor(hrs / 24)
   if (days < 7)  return `${days}d ago`
   return new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric" }).format(
-    new Date(iso)
+    new Date(portalDateInput(iso))
   )
 }
 
@@ -104,7 +104,15 @@ export function formatDate(iso: string): string {
     month: "short",
     day:   "numeric",
     year:  "numeric",
-  }).format(new Date(iso))
+  }).format(new Date(portalDateInput(iso)))
+}
+
+function portalDateInput(iso: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso
+}
+
+function portalDateMs(iso: string): number {
+  return new Date(portalDateInput(iso)).getTime()
 }
 
 function jobWorkAddress(job: JobRequest): string | null {
@@ -147,7 +155,7 @@ export function buildTimeline(
     items.push({
       title:    "Estimate Sent",
       notes:    `${sentEstimate.estimate_number} — ${money.format(sentEstimate.amount)}`,
-      date:     sentEstimate.sent_date ?? sentEstimate.created_at,
+      date:     sentEstimate.sent_date ? portalDateInput(sentEstimate.sent_date) : sentEstimate.created_at,
       priority: 2,
     })
   }
@@ -164,7 +172,7 @@ export function buildTimeline(
     items.push({ title: ev.title, notes: ev.notes, date: ev.event_date, priority: 4 })
   }
 
-  items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  items.sort((a, b) => portalDateMs(a.date) - portalDateMs(b.date))
 
   return items.map((item, idx) => ({
     id:       `${item.priority}-${idx}`,

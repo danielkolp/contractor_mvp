@@ -6,6 +6,7 @@ import Link from "next/link"
 import {
   Calendar,
   Check,
+  ChevronDown,
   ClipboardList,
   Clock,
   Copy,
@@ -166,6 +167,16 @@ function requestNotes(request: JobRequest) {
   ]
     .filter(Boolean)
     .join("\n")
+}
+
+const closedRequestStatuses = new Set(["closed", "declined", "declined_by_contractor"])
+
+function isClosedRequest(request: JobRequest) {
+  return closedRequestStatuses.has(request.status ?? "")
+}
+
+function requestSortTime(request: JobRequest) {
+  return new Date(request.updated_at ?? request.created_at).getTime() || 0
 }
 
 function nullableText(value: string) {
@@ -484,7 +495,7 @@ function EstimateActionButton({
             onClick={() => onShareEstimate(estimate, request)}
           >
             <Send className="size-4" />
-            Share with client
+            Send to client
           </Button>
         )}
       </>
@@ -520,12 +531,12 @@ function EstimateActionButton({
             data-testid="accept-client-proposal"
           >
             <Check className="size-4" />
-            Accept client&apos;s time
+            Accept their time
           </Button>
         )}
         <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)}>
           <Calendar className="size-4" />
-          Re-propose time
+          Suggest a different time
         </Button>
         <Button
           className="bg-ef-ocean text-white hover:bg-ef-ocean"
@@ -571,25 +582,6 @@ function EstimateActionButton({
 
   return (
     <>
-      <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onRequestDetails(request)} data-testid="job-request-request-details">
-        <HelpCircle className="size-4" />
-        Request details
-      </Button>
-      <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)} data-testid="job-request-schedule-inspection">
-        <Calendar className="size-4" />
-        Propose site visit
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={isSaving}
-        className="text-red-600 hover:text-red-700"
-        onClick={() => onDeclineRequest(request)}
-        data-testid="job-request-decline"
-      >
-        <X className="size-4" />
-        Decline
-      </Button>
       <Button
         data-testid="job-request-create-estimate"
         className="bg-ef-ocean text-white hover:bg-ef-ocean"
@@ -599,6 +591,44 @@ function EstimateActionButton({
         <Plus className="size-4" />
         Create estimate
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isSaving}
+            data-testid="job-request-more-actions"
+          >
+            More
+            <ChevronDown className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={() => onRequestDetails(request)}
+            data-testid="job-request-request-details"
+          >
+            <HelpCircle className="size-4" />
+            Ask the client a question
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => onScheduleInspection(request)}
+            data-testid="job-request-schedule-inspection"
+          >
+            <Calendar className="size-4" />
+            Propose a site visit
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => onDeclineRequest(request)}
+            data-testid="job-request-decline"
+          >
+            <X className="size-4" />
+            Decline request
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   )
 }
@@ -628,6 +658,7 @@ export default function ContractorJobRequestsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [estimateByRequestId, setEstimateByRequestId] = useState<Record<string, EstimateRow>>({})
+  const [showClosedRequests, setShowClosedRequests] = useState(false)
 
   // Decline request dialog
   const [declineRequestTarget, setDeclineRequestTarget]   = useState<JobRequest | null>(null)
@@ -1171,13 +1202,31 @@ export default function ContractorJobRequestsPage() {
 
     if (updatedRequest) {
       window.dispatchEvent(new Event("estg:badge-refresh"))
-      toast.success("Estimate shared with client")
+      toast.success("Estimate sent to client")
     }
 
     setIsSaving(false)
   }
 
   const newCount = requests.filter((r) => r.status === "new").length
+  const closedCount = requests.filter(isClosedRequest).length
+  const visibleRequests = useMemo(() => {
+    const list = showClosedRequests
+      ? [...requests]
+      : requests.filter((request) => !isClosedRequest(request))
+
+    return list.sort((a, b) => {
+      const aClosed = isClosedRequest(a)
+      const bClosed = isClosedRequest(b)
+      if (aClosed !== bClosed) return aClosed ? 1 : -1
+
+      const aNew = a.status === "new"
+      const bNew = b.status === "new"
+      if (aNew !== bNew) return aNew ? -1 : 1
+
+      return requestSortTime(b) - requestSortTime(a)
+    })
+  }, [requests, showClosedRequests])
 
   return (
     <>
@@ -1534,18 +1583,19 @@ export default function ContractorJobRequestsPage() {
                   </div>
                 ) : null}
 
-                {/* ── Online payment via Euroflo ── */}
+                {/* Online card payment */}
                 <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4">
                   <div>
-                    <p className="text-sm font-semibold">Online payment via Euroflo</p>
+                    <p className="text-sm font-semibold">Collect deposit online</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Enter your desired payout. Euroflo adds a 15% platform fee + 5% GST.
-                      Leave blank to skip online payment for this estimate.
+                      Enter what you want to receive. Euroflo adds the service fee and GST on top
+                      so the customer sees the full card price. Leave blank if you will collect by
+                      cash, cheque, or e-transfer.
                     </p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="grid gap-2">
-                      <Label htmlFor="estimate-contractor-payout">Your payout (CAD)</Label>
+                      <Label htmlFor="estimate-contractor-payout">I want to receive (CAD)</Label>
                       <Input
                         id="estimate-contractor-payout"
                         data-testid="estimate-contractor-amount-input"
@@ -1560,7 +1610,7 @@ export default function ContractorJobRequestsPage() {
                     </div>
                     {hasStripePayment && (
                       <div className="grid gap-2">
-                        <Label htmlFor="estimate-deposit-amount">Deposit due from client (CAD)</Label>
+                        <Label htmlFor="estimate-deposit-amount">Deposit to collect now (CAD)</Label>
                         <Input
                           id="estimate-deposit-amount"
                           data-testid="estimate-deposit-amount-input"
@@ -1578,12 +1628,12 @@ export default function ContractorJobRequestsPage() {
                   {hasStripePayment && (
                     <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-3">
                       {[
-                        { label: "Your payout",       value: money.format(contractorCents / 100) },
-                        { label: "Platform fee 15%",  value: money.format(platformFeeCents / 100) },
-                        { label: "GST 5%",            value: money.format(gstCents / 100) },
-                        { label: "Client total",      value: money.format(clientTotalCents / 100) },
-                        { label: "Deposit due",       value: money.format(depositCents / 100) },
-                        { label: "Remaining balance", value: money.format(remainingCents / 100) },
+                        { label: "You receive",   value: money.format(contractorCents / 100) },
+                        { label: "Euroflo fee",   value: money.format(platformFeeCents / 100) },
+                        { label: "GST on fee",    value: money.format(gstCents / 100) },
+                        { label: "Customer pays", value: money.format(clientTotalCents / 100) },
+                        { label: "Deposit today", value: money.format(depositCents / 100) },
+                        { label: "Balance later", value: money.format(remainingCents / 100) },
                       ].map(({ label, value }) => (
                         <div key={label} className="rounded border border-border bg-background px-3 py-2 text-center">
                           <p className="text-[0.6rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -1923,9 +1973,22 @@ export default function ContractorJobRequestsPage() {
                   Client job requests submitted to your workspace.
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="w-fit">
-                {newCount} new
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="w-fit">
+                  {newCount} new
+                </Badge>
+                {closedCount > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowClosedRequests((value) => !value)}
+                    className="h-7 px-2 text-xs text-muted-foreground"
+                  >
+                    {showClosedRequests ? "Hide closed" : `Show closed (${closedCount})`}
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -1936,9 +1999,9 @@ export default function ContractorJobRequestsPage() {
             ) : null}
 
             <ContentReveal isLoading={isLoading} skeleton={<RequestsSkeleton />}>
-              {requests.length > 0 ? (
+              {visibleRequests.length > 0 ? (
                 <div className="grid gap-3">
-                  {requests.map((request) => (
+                  {visibleRequests.map((request) => (
                     <div
                       key={request.id}
                       data-testid="job-request-card"
@@ -2046,10 +2109,12 @@ export default function ContractorJobRequestsPage() {
                     <ClipboardList className="size-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">
-                    No incoming requests
+                    {requests.length > 0 ? "No active requests" : "No incoming requests"}
                   </h3>
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                    Share your client request link so clients can submit job requests directly to you.
+                    {requests.length > 0
+                      ? "Closed requests are hidden so current work stays easy to scan."
+                      : "Share your client request link so clients can submit job requests directly to you."}
                   </p>
                 </div>
               )}

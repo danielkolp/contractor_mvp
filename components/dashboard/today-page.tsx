@@ -7,7 +7,13 @@ import {
   useRef,
   useState,
 } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
+
+const OceanScene = dynamic(
+  () => import("@/components/dashboard/ocean-scene"),
+  { ssr: false }
+)
 import {
   ArrowUpRight,
   ChevronDown,
@@ -274,10 +280,22 @@ export function TodayPage() {
     setIsSaving(false)
   }
 
-  async function handleRemindLater(item: RecoveryItem) {
+  async function handleSnooze(item: RecoveryItem, days: number) {
     setIsSaving(true)
-    const ok = await updateItem(item.id, { check_back_date: addDaysIso(1) })
-    if (ok) toast.success("Snoozed until tomorrow.")
+    const label = days === 1 ? "tomorrow" : days === 3 ? "in 3 days" : "next week"
+    const ok = await updateItem(item.id, { check_back_date: addDaysIso(days) })
+    if (ok) toast.success(`Snoozed — check back ${label}.`)
+    setIsSaving(false)
+  }
+
+  async function handleRemindLater(item: RecoveryItem) {
+    return handleSnooze(item, 1)
+  }
+
+  async function handleDone(item: RecoveryItem) {
+    setIsSaving(true)
+    const ok = await updateItem(item.id, { status: "archived" })
+    if (ok) toast.success(`${item.client_name} — marked as handled.`)
     setIsSaving(false)
   }
 
@@ -404,7 +422,7 @@ export function TodayPage() {
 
     setOverdueInvoices((prev) => prev.filter((i) => i.id !== invoice.id))
     setItems((prev) => [...prev, data])
-    toast.success(`${invoice.client_name || invoice.invoice_number} added to recovery queue.`)
+    toast.success(`${invoice.client_name || invoice.invoice_number} added to your follow-ups.`)
     setIsSaving(false)
   }
 
@@ -455,7 +473,7 @@ export function TodayPage() {
       .single()
     if (error) { toast.error(error.message); return }
     setItems((prev) => [...prev, data])
-    toast.success(`${data.client_name} added to your recovery queue.`)
+    toast.success(`${data.client_name} added to your follow-ups.`)
   }
 
   async function handleSaveAndMarkSent(payload: Omit<RecoveryItemInsert, "user_id">) {
@@ -489,6 +507,8 @@ export function TodayPage() {
     isSaving,
     onMarkSent:      handleMarkSent,
     onSendFollowUp:  handleSendFollowUp,
+    onSnooze:        handleSnooze,
+    onDone:          handleDone,
     onRemindLater:   handleRemindLater,
     onResolve:       handleResolve,
     onLost:          handleLost,
@@ -533,89 +553,101 @@ export function TodayPage() {
       <div className="grid gap-4 p-4 sm:p-6 lg:p-8">
         <ContentReveal isLoading={isLoading} skeleton={<LoadingSkeleton />}>
           {!hasAnyItems ? (
-            <OnboardingState
-              onAdd={() => setAddOpen(true)}
-              onDemo={() => void handleUseDemoData()}
-              isDemoSeeding={isDemoSeeding}
-            />
-          ) : totalActionCount === 0 ? (
-            <div className="grid gap-4 euroflo-fade-up">
-              <AllCaughtUp atRisk={atRisk} waitingCount={waitingItems.length} onAdd={() => setAddOpen(true)} />
-              {waitingItems.length > 0 && (
-                <WaitingSection
-                  items={waitingItems}
-                  replyInfoMap={replyInfoMap}
-                  defaultOpen
-                  sharedCardProps={sharedCardProps}
-                />
-              )}
-            </div>
-          ) : (
-            <div className="grid gap-4 euroflo-fade-up">
-              <CompactSummary
-                actionCount={totalActionCount}
-                atRisk={atRisk}
+            <div className="ef-reveal ef-d0">
+              <OnboardingState
                 onAdd={() => setAddOpen(true)}
-                onStartNextTask={() =>
-                  actionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
+                onDemo={() => void handleUseDemoData()}
+                isDemoSeeding={isDemoSeeding}
               />
-
-              <div ref={actionSectionRef} className="grid gap-6">
-                <ActionSection
-                  label="Needs your attention"
-                  count={totalActionCount}
-                  urgent
-                >
-                  {overdueInvoices.map((inv) => (
-                    <InvoiceActionCard
-                      key={inv.id}
-                      invoice={inv}
-                      isSaving={isSaving}
-                      onMarkPaid={handleInvoiceMarkPaid}
-                      onAddToQueue={handleInvoiceAddToQueue}
-                    />
-                  ))}
-                  {checkInDueItems.map((item) => (
-                    <RecoveryCard
-                      key={item.id}
-                      item={item}
-                      isCheckIn
-                      replyInfo={replyInfoMap[item.id]}
-                      {...sharedCardProps}
-                    />
-                  ))}
-                  {needsFollowUpItems.map((item) => (
-                    <RecoveryCard
-                      key={item.id}
-                      item={item}
-                      isCheckIn={false}
-                      replyInfo={replyInfoMap[item.id]}
-                      {...sharedCardProps}
-                    />
-                  ))}
-                  {acceptedEstimates.map((est) => (
-                    <AcceptedEstimateActionCard key={est.id} estimate={est} />
-                  ))}
-                  {pendingEstimates.map((est) => (
-                    <EstimateActionCard
-                      key={est.id}
-                      estimate={est}
-                      isSaving={isSaving}
-                      onWon={handleEstimateWon}
-                      onLost={handleEstimateLost}
-                      onSnooze={handleEstimateSnooze}
-                    />
-                  ))}
-                </ActionSection>
-
-                {waitingItems.length > 0 && (
+            </div>
+          ) : totalActionCount === 0 ? (
+            <div className="grid gap-6">
+              <div className="ef-reveal ef-d0">
+                <AllCaughtUp atRisk={atRisk} waitingCount={waitingItems.length} onAdd={() => setAddOpen(true)} />
+              </div>
+              {waitingItems.length > 0 && (
+                <div className="ef-reveal ef-d2">
                   <WaitingSection
                     items={waitingItems}
                     replyInfoMap={replyInfoMap}
-                    defaultOpen={false}
+                    defaultOpen
                     sharedCardProps={sharedCardProps}
                   />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-6">
+              <div className="ef-reveal ef-d0 order-2 sm:order-1">
+                <CompactSummary
+                  actionCount={totalActionCount}
+                  atRisk={atRisk}
+                  onAdd={() => setAddOpen(true)}
+                  onStartNextTask={() =>
+                    actionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                />
+              </div>
+
+              <div ref={actionSectionRef} className="order-1 grid gap-6 sm:order-2">
+                <div className="ef-reveal ef-d2">
+                  <ActionSection
+                    label="Needs your attention"
+                    count={totalActionCount}
+                    urgent
+                  >
+                    {overdueInvoices.map((inv) => (
+                      <InvoiceActionCard
+                        key={inv.id}
+                        invoice={inv}
+                        isSaving={isSaving}
+                        onMarkPaid={handleInvoiceMarkPaid}
+                        onAddToQueue={handleInvoiceAddToQueue}
+                      />
+                    ))}
+                    {checkInDueItems.map((item) => (
+                      <RecoveryCard
+                        key={item.id}
+                        item={item}
+                        isCheckIn
+                        replyInfo={replyInfoMap[item.id]}
+                        {...sharedCardProps}
+                      />
+                    ))}
+                    {needsFollowUpItems.map((item) => (
+                      <RecoveryCard
+                        key={item.id}
+                        item={item}
+                        isCheckIn={false}
+                        replyInfo={replyInfoMap[item.id]}
+                        {...sharedCardProps}
+                      />
+                    ))}
+                    {acceptedEstimates.map((est) => (
+                      <AcceptedEstimateActionCard key={est.id} estimate={est} />
+                    ))}
+                    {pendingEstimates.map((est) => (
+                      <EstimateActionCard
+                        key={est.id}
+                        estimate={est}
+                        isSaving={isSaving}
+                        onWon={handleEstimateWon}
+                        onLost={handleEstimateLost}
+                        onSnooze={handleEstimateSnooze}
+                      />
+                    ))}
+                  </ActionSection>
+                </div>
+
+                {waitingItems.length > 0 && (
+                  <div className="ef-reveal ef-d4">
+                    <WaitingSection
+                      items={waitingItems}
+                      replyInfoMap={replyInfoMap}
+                      defaultOpen={false}
+                      sharedCardProps={sharedCardProps}
+                    />
+                  </div>
                 )}
               </div>
             </div>
@@ -640,33 +672,61 @@ function CompactSummary({
   onStartNextTask: () => void
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <StatusPulse variant="warning" pulse label="Actions pending" />
-            <h2 className="text-base font-semibold text-foreground">Today</h2>
-          </div>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {actionCount === 1
-              ? "You have 1 thing to handle."
-              : `You have ${actionCount} things to handle.`}{" "}
-            <span className="font-medium text-foreground">
-              {money.format(atRisk)}
-            </span>{" "}
-            on the table.
-          </p>
+    <div className="relative overflow-hidden rounded-2xl shadow-lg">
+      {/* CSS gradient base — also fallback if WebGL unavailable */}
+      <div className="absolute inset-0 bg-gradient-to-br from-ef-ink via-[#013060] to-ef-ocean" />
+      {/* Subtle dot texture */}
+      <div className="absolute inset-0 ef-dot-grid opacity-[0.10]" />
+
+      {/* 3D ocean scene */}
+      <div className="absolute inset-0">
+        <OceanScene />
+      </div>
+
+      {/* Left-side vignette — text legibility over the 3D scene */}
+      <div className="absolute inset-0 bg-gradient-to-r from-ef-ink/[0.92] via-ef-ink/50 to-transparent" />
+      {/* Bottom vignette — blends ocean into card edge */}
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-ef-ink/40 to-transparent" />
+
+      {/* Content */}
+      <div className="relative px-5 py-6 sm:px-10 sm:py-12">
+        {/* Today label */}
+        <div className="mb-3 flex items-center gap-2.5 sm:mb-5">
+          <StatusPulse variant="warning" pulse />
+          <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/50">
+            Today
+          </span>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+
+        {/* Headline */}
+        <h2 className="text-3xl font-bold leading-none tracking-tight text-white sm:text-5xl">
+          {actionCount === 1 ? "1 thing" : `${actionCount} things`}
+          <span className="text-white/40"> to handle</span>
+        </h2>
+
+        {/* Money on the table */}
+        <p className="mt-4 flex items-baseline gap-2.5">
+          <span className="text-2xl font-bold tabular-nums text-ef-orange">
+            {money.format(atRisk)}
+          </span>
+          <span className="text-base text-white/50">on the table</span>
+        </p>
+
+        {/* CTAs */}
+        <div className="mt-5 flex flex-wrap gap-3 sm:mt-8">
           <Button
-            className="gap-1.5 bg-ef-orange text-white hover:bg-ef-orange"
+            className="bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
             onClick={onStartNextTask}
           >
             Start next task
           </Button>
-          <Button variant="outline" onClick={onAdd} className="gap-1.5">
+          <Button
+            variant="outline"
+            onClick={onAdd}
+            className="gap-1.5 border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
+          >
             <Plus className="size-4" />
-            Add recovery
+            Follow up
           </Button>
         </div>
       </div>
@@ -695,10 +755,10 @@ function ActionSection({
           pulse={urgent}
           className="shrink-0"
         />
-        <span className="shrink-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+        <span className="shrink-0 rounded-full border border-border bg-background px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
           {count}
         </span>
         <div className="h-px flex-1 bg-border" />
@@ -723,6 +783,8 @@ function WaitingSection({
     isSaving: boolean
     onMarkSent: (item: RecoveryItem) => void
     onSendFollowUp: (item: RecoveryItem) => void
+    onSnooze: (item: RecoveryItem, days: number) => void
+    onDone: (item: RecoveryItem) => void
     onRemindLater: (item: RecoveryItem) => void
     onResolve: (item: RecoveryItem) => void
     onLost: (item: RecoveryItem) => void
@@ -742,10 +804,10 @@ function WaitingSection({
         className="flex w-full items-center gap-2.5 text-left"
       >
         <StatusPulse variant="neutral" className="shrink-0" />
-        <span className="shrink-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
           Waiting on clients
         </span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+        <span className="shrink-0 rounded-full border border-border bg-background px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
           {items.length}
         </span>
         <div className="h-px flex-1 bg-border" />
@@ -797,7 +859,7 @@ function InvoiceActionCard({
         isOverdue ? "before:bg-orange-500" : "before:bg-amber-400"
       )}
     >
-      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 py-3.5 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div
             className={cn(
@@ -884,7 +946,7 @@ function EstimateActionCard({
 }) {
   return (
     <div className="euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan">
-      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 py-3.5 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
             <ClipboardList className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
@@ -946,7 +1008,7 @@ function EstimateActionCard({
 function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
   return (
     <div className="euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-ocean">
-      <div className="flex flex-col gap-2.5 py-3 pl-5 pr-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 py-3.5 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
             <ClipboardList className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
@@ -995,41 +1057,49 @@ function OnboardingState({
   isDemoSeeding: boolean
 }) {
   return (
-    <div className="mx-auto max-w-md px-4 py-16 text-center euroflo-fade-up">
-      <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-2xl bg-ef-mist dark:bg-ef-navy/30">
-        <Sparkles className="size-7 text-ef-ocean dark:text-ef-cyan" />
+    <div className="relative overflow-hidden rounded-2xl shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-br from-ef-ink via-[#013060] to-ef-ocean" />
+      <div className="absolute inset-0 ef-dot-grid opacity-[0.18]" />
+      <div className="pointer-events-none absolute -right-12 top-1/4 size-48 rounded-full bg-ef-sky/12 blur-3xl" />
+      <div className="pointer-events-none absolute -top-8 left-1/4 size-40 rounded-full bg-ef-cyan/10 blur-2xl" />
+
+      <div className="relative mx-auto max-w-sm px-6 py-16 text-center sm:py-20">
+        <div className="mx-auto mb-7 flex size-16 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
+          <Sparkles className="size-7 text-ef-sky" />
+        </div>
+        <h2 className="text-3xl font-bold tracking-tight text-white">
+          Follow up with your first customer.
+        </h2>
+        <p className="mt-4 text-sm leading-7 text-white/55">
+          Add a customer and the reason you&apos;re chasing them — an unpaid
+          invoice or a quiet estimate — and Euroflo drafts the message and shows
+          you who to contact today.
+        </p>
+        <div className="mt-9 flex flex-col gap-3">
+          <Button
+            className="w-full gap-2 bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
+            onClick={onAdd}
+          >
+            <Plus className="size-4" />
+            Add a real customer
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full gap-2 border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
+            onClick={onDemo}
+            disabled={isDemoSeeding}
+          >
+            <Database className="size-4" />
+            {isDemoSeeding ? "Loading demo data…" : "Use demo data"}
+          </Button>
+        </div>
+        <p className="mt-7 text-xs text-white/35">
+          Already have customers?{" "}
+          <Link href="/dashboard/clients" className="font-medium text-white/60 transition-colors hover:text-white">
+            Go to Clients
+          </Link>
+        </p>
       </div>
-      <h2 className="text-xl font-semibold text-foreground">
-        Let&apos;s set up your first recovery job.
-      </h2>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        Add a customer and what happened — Euroflo will generate a follow-up
-        message and show you who to contact today.
-      </p>
-      <div className="mt-8 flex flex-col gap-3">
-        <Button
-          className="w-full gap-2 bg-ef-orange text-white hover:bg-ef-orange"
-          onClick={onAdd}
-        >
-          <Plus className="size-4" />
-          Add a real customer
-        </Button>
-        <Button
-          variant="outline"
-          className="w-full gap-2"
-          onClick={onDemo}
-          disabled={isDemoSeeding}
-        >
-          <Database className="size-4" />
-          {isDemoSeeding ? "Loading demo data…" : "Use demo data"}
-        </Button>
-      </div>
-      <p className="mt-6 text-xs text-muted-foreground">
-        Already have customers?{" "}
-        <Link href="/dashboard/clients" className="font-medium text-foreground hover:underline">
-          Go to Clients
-        </Link>
-      </p>
     </div>
   )
 }
@@ -1046,40 +1116,52 @@ function AllCaughtUp({
   onAdd: () => void
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-6 py-8 text-center shadow-sm">
-      <div className="mx-auto mb-4 flex size-10 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/30">
-        <svg
-          className="size-5 text-emerald-600 dark:text-emerald-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-      <h3 className="text-base font-semibold text-foreground">
-        You&apos;re caught up.
-      </h3>
-      <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
-        {atRisk > 0
-          ? `${money.format(atRisk)} is being tracked.${waitingCount > 0 ? ` ${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.` : ""} Come back tomorrow.`
-          : "No pending follow-ups. Come back tomorrow or add a new recovery job."}
-      </p>
-      <div className="mt-5 flex flex-wrap justify-center gap-2">
-        <Button
-          className="gap-2 bg-ef-orange text-white hover:bg-ef-orange"
-          onClick={onAdd}
-        >
-          <Plus className="size-4" />
-          Add recovery job
-        </Button>
-        <Button variant="outline" className="gap-2" asChild>
-          <Link href="/dashboard/recoveries">
-            <ArrowUpRight className="size-4" />
-            View all recoveries
-          </Link>
-        </Button>
+    <div className="relative overflow-hidden rounded-2xl shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-900 via-emerald-700 to-emerald-500" />
+      <div className="absolute inset-0 ef-dot-grid opacity-[0.10]" />
+      <div className="pointer-events-none absolute -bottom-12 -right-8 size-56 rounded-full bg-emerald-400/10 blur-3xl" />
+
+      <div className="relative px-6 py-12 text-center sm:px-10 sm:py-14">
+        <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-full bg-emerald-400/15 ring-1 ring-emerald-400/25">
+          <svg
+            className="size-7 text-emerald-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+
+        <h3 className="text-3xl font-bold tracking-tight text-white">
+          You&apos;re caught up.
+        </h3>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-white/50">
+          {atRisk > 0
+            ? `${money.format(atRisk)} is being tracked.${waitingCount > 0 ? ` ${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.` : ""} Come back tomorrow.`
+            : "No follow-ups due. Come back tomorrow, or follow up with someone new."}
+        </p>
+
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Button
+            className="gap-2 bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
+            onClick={onAdd}
+          >
+            <Plus className="size-4" />
+            Follow up
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2 border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
+            asChild
+          >
+            <Link href="/dashboard/recoveries">
+              <ArrowUpRight className="size-4" />
+              View all follow-ups
+            </Link>
+          </Button>
+        </div>
       </div>
     </div>
   )

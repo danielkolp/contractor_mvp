@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
     ? `${appUrl}/client/portal/${jobRequestId}`
     : `${appUrl}/client/dashboard`
   const successUrl   = jobRequestId
-    ? `${appUrl}/client/portal/${jobRequestId}/success?session_id={CHECKOUT_SESSION_ID}`
+    ? `${appUrl}/client/portal/${jobRequestId}?payment=success&session_id={CHECKOUT_SESSION_ID}`
     : `${appUrl}/client/dashboard`
 
   // ── 9. Create Stripe Checkout Session ─────────────────────────────────────────

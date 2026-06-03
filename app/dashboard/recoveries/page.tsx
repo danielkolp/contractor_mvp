@@ -427,7 +427,7 @@ export default function RecoveriesPage() {
   return (
     <>
       <PageHeader
-        title="Recoveries"
+        title="Follow-ups"
         description="All your follow-up jobs in one place."
       >
         <Button
@@ -445,7 +445,7 @@ export default function RecoveriesPage() {
           onClick={() => setAddOpen(true)}
         >
           <Plus className="size-4" />
-          Add recovery
+          Follow up
         </Button>
       </PageHeader>
 
@@ -824,7 +824,7 @@ function EmptyTabState({ tab, onAdd }: { tab: TabFilter; onAdd: () => void }) {
         {tab === "all" && (
           <Button className="mt-4 gap-2 bg-ef-ocean text-white hover:bg-ef-ocean" onClick={onAdd}>
             <Plus className="size-4" />
-            Add recovery
+            Follow up
           </Button>
         )}
       </CardContent>

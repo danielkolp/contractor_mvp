@@ -36,8 +36,8 @@ import {
   UsersRound,
 } from "lucide-react"
 
-const HeroOcean = dynamic(
-  () => import("./hero-ocean").then((mod) => mod.HeroOcean),
+const OceanScene = dynamic(
+  () => import("@/components/dashboard/ocean-scene"),
   {
     ssr: false,
     loading: () => <div className="ef-ocean-scene" aria-hidden="true" />,
@@ -516,7 +516,9 @@ function HeroPreview() {
 function HeroSection() {
   return (
     <section className="ef-hero" id="top" data-screen-label="Hero">
-      <HeroOcean />
+      <div className="ef-ocean-scene" aria-hidden="true">
+        <OceanScene />
+      </div>
       <div className="ef-hero-veil" aria-hidden="true" />
       <div className="ef-hero-dots" aria-hidden="true" />
 

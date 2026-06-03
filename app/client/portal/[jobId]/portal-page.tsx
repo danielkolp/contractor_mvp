@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -28,7 +28,13 @@ type Estimate      = Database["public"]["Tables"]["estimates"]["Row"]
 type Invoice       = Database["public"]["Tables"]["invoices"]["Row"]
 type TimelineEvent = Database["public"]["Tables"]["project_timeline_events"]["Row"]
 
-export function PortalPage({ jobId }: { jobId: string }) {
+export function PortalPage({
+  jobId,
+  paymentStatus,
+}: {
+  jobId: string
+  paymentStatus?: "success"
+}) {
   const supabase = useMemo(() => createClient(), [])
 
   const [job,       setJob]     = useState<JobRequest | null>(null)
@@ -181,6 +187,17 @@ export function PortalPage({ jobId }: { jobId: string }) {
         </div>
       ) : (
         <>
+          {paymentStatus === "success" && (
+            <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 shadow-sm">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+              <div>
+                <p className="text-sm font-semibold">Payment received</p>
+                <p className="mt-1 text-sm leading-6 text-emerald-900/80">
+                  Your contractor can see this payment and follow up with the next step.
+                </p>
+              </div>
+            </div>
+          )}
           <StatusCard job={job} hasEstimate={hasEstimate} />
           <FlowBar job={job} hasEstimate={hasEstimate} invoices={invoices} estimates={visibleEstimates} />
           {timeline.length > 0 && <Timeline items={timeline} />}

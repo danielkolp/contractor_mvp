@@ -226,7 +226,7 @@
 }
 
 .ef-dot-grid {
-  background-image: radial-gradient(circle, rgba(2, 77, 139, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(2, 77, 139, 1.08) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 
@@ -298,6 +298,47 @@
 
 .euroflo-card-transition:hover {
   transform: translateY(-1px);
+}
+
+/* ── Staggered reveal system ──────────────────────────────────── */
+@keyframes ef-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ef-reveal {
+  animation: ef-reveal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ef-d0 { animation-delay: 0ms; }
+.ef-d1 { animation-delay: 55ms; }
+.ef-d2 { animation-delay: 110ms; }
+.ef-d3 { animation-delay: 165ms; }
+.ef-d4 { animation-delay: 220ms; }
+.ef-d5 { animation-delay: 275ms; }
+.ef-d6 { animation-delay: 330ms; }
+.ef-d7 { animation-delay: 385ms; }
+
+/* Page transition */
+@keyframes ef-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ef-page-in {
+  animation: ef-page-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Skeleton shimmer animation */
@@ -391,8 +432,12 @@
   }
 
   .euroflo-fade-up,
-  .euroflo-soft-pulse {
+  .euroflo-soft-pulse,
+  .ef-reveal,
+  .ef-page-in {
     animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 
   .euroflo-card-transition,

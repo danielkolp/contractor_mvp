@@ -81,6 +81,14 @@ type StripeStatus = {
   onboarding_complete: boolean
 }
 
+const disconnectedStripeStatus: StripeStatus = {
+  connected: false,
+  charges_enabled: false,
+  payouts_enabled: false,
+  details_submitted: false,
+  onboarding_complete: false,
+}
+
 // ── Validation Helpers ─────────────────────────────────────────────────────────
 
 function parsePositiveInteger(value: string) {
@@ -432,28 +440,23 @@ export function SetupWizard() {
 
       if (profile.stripe_account_id) {
         // Inline Stripe status fetch to avoid forward-reference issues
-        const stripeRes = await fetch("/api/stripe/connect/status", { method: "POST" })
-        if (stripeRes.ok) {
-          const stripeData = (await stripeRes.json()) as StripeStatus
-          setStripeStatus(stripeData)
+        setStripeStatus(null)
+        try {
+          const stripeRes = await fetch("/api/stripe/connect/status", { method: "POST" })
+          if (stripeRes.ok) {
+            const stripeData = (await stripeRes.json()) as StripeStatus
+            setStripeStatus(stripeData)
+          } else {
+            setStripeStatus(disconnectedStripeStatus)
+          }
+        } catch {
+          setStripeStatus(disconnectedStripeStatus)
         }
       } else {
-        setStripeStatus({
-          connected: false,
-          charges_enabled: false,
-          payouts_enabled: false,
-          details_submitted: false,
-          onboarding_complete: false,
-        })
+        setStripeStatus(disconnectedStripeStatus)
       }
     } else {
-      setStripeStatus({
-        connected: false,
-        charges_enabled: false,
-        payouts_enabled: false,
-        details_submitted: false,
-        onboarding_complete: false,
-      })
+      setStripeStatus(disconnectedStripeStatus)
     }
 
     if (settings) {
@@ -480,13 +483,22 @@ export function SetupWizard() {
 
   // ── Stripe helpers (plain async, called imperatively) ──
   async function fetchStripeStatus() {
+    if (!profileRow?.stripe_account_id) {
+      setStripeStatus(disconnectedStripeStatus)
+      return
+    }
+
     setIsRefreshingStripe(true)
     try {
       const res = await fetch("/api/stripe/connect/status", { method: "POST" })
       if (res.ok) {
         const data = (await res.json()) as StripeStatus
         setStripeStatus(data)
+      } else {
+        setStripeStatus(disconnectedStripeStatus)
       }
+    } catch {
+      setStripeStatus(disconnectedStripeStatus)
     } finally {
       setIsRefreshingStripe(false)
     }
@@ -671,7 +683,7 @@ export function SetupWizard() {
 
     if (first !== null && second !== null && final_ !== null) {
       if (!(first < second && second < final_)) {
-        const msg = "Timing must increase: first < second < final notice."
+        const msg = "Each reminder should come later than the one before it (e.g. 3, 7, 14 days)."
         errors.first_reminder_days = msg
         errors.second_reminder_days = msg
         errors.final_notice_days = msg
@@ -776,13 +788,9 @@ export function SetupWizard() {
   // STAGE 0 — Welcome
   function renderWelcome() {
     const checklist = [
-      "Business profile",
-      "Services and service area",
-      "Estimate defaults",
-      "Follow-up timing",
-      "Client request link",
-      "Online payments",
-      "Test your first job",
+      "Share one request link with clients",
+      "Build estimates and collect deposits",
+      "Set follow-up timing for quiet jobs",
     ]
 
     return (
@@ -792,23 +800,56 @@ export function SetupWizard() {
             <span className="text-2xl">🐊</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Set up your contractor workspace
+            Get one job request link working first
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Euroflo gives you one link for job requests, a place to create
-            estimates, a way to collect payments, and a simple follow-up system
-            so jobs do not get lost in texts.
+            Text clients this link instead of collecting job details across
+            messages, notes, photos, and missed calls. You can finish the rest
+            of setup later.
           </p>
         </div>
 
+        {requestLink ? (
+          <div className="grid gap-3 rounded-xl border border-ef-200 bg-ef-mist/50 p-4 dark:border-ef-navy/40 dark:bg-ef-ink/20">
+            <div className="flex items-start gap-3">
+              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-ef-ocean shadow-sm dark:bg-ef-ink">
+                <Link2 className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ef-ocean dark:text-ef-300">
+                  Your request link is ready
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  This is the first thing worth testing with a real customer.
+                </p>
+              </div>
+            </div>
+            <div className="truncate rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+              {requestLink}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" onClick={() => void handleCopyLink()} className="gap-2 sm:w-auto w-full">
+                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
+                Copy request link
+              </Button>
+              <Button type="button" variant="outline" className="gap-2 sm:w-auto w-full" asChild>
+                <a href={requestLink} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" />
+                  Preview form
+                </a>
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <SetupInsight
-          title="What you will set up"
-          description="This takes about 5 minutes. You can skip any step and come back later from Settings."
+          title="Keep setup short"
+          description="Set the basics now. Skip anything you do not need yet and finish it later from Settings."
         />
 
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Setup checklist
+            Setup covers
           </p>
           <div className="grid gap-1">
             {checklist.map((item) => (
@@ -825,7 +866,7 @@ export function SetupWizard() {
             onClick={advance}
             className="gap-2 bg-ef-ocean text-white hover:bg-ef-ocean/90 sm:w-auto w-full"
           >
-            Start setup
+            Set up basics
             <ArrowRight className="size-4" />
           </Button>
           <Button
@@ -833,7 +874,7 @@ export function SetupWizard() {
             onClick={skipToDashboard}
             className="text-muted-foreground sm:w-auto w-full"
           >
-            Skip for now
+            Go to dashboard
           </Button>
         </div>
       </div>
@@ -885,7 +926,7 @@ export function SetupWizard() {
                   setProfileForm((p) => ({ ...p, owner_name: e.target.value }))
                   setProfileErrors((p) => ({ ...p, owner_name: undefined }))
                 }}
-                placeholder="e.g. Daniel Smith"
+                placeholder="e.g. Sam Carter"
                 aria-invalid={Boolean(profileErrors.owner_name)}
               />
               <FieldError message={profileErrors.owner_name} />
@@ -1286,6 +1327,7 @@ export function SetupWizard() {
   function renderPayments() {
     const connected = stripeStatus?.connected ?? false
     const complete = stripeStatus?.onboarding_complete ?? false
+    const isCheckingStripe = Boolean(profileRow?.stripe_account_id && stripeStatus === null)
 
     return (
       <div className="flex flex-col gap-5">
@@ -1298,11 +1340,21 @@ export function SetupWizard() {
 
         <SetupInsight
           title="How payments work"
-          description="Connect Stripe so clients can pay accepted estimates online. You receive the amount you set, and Euroflo adds its platform fee on top."
+          description="Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set — Euroflo adds a 15% platform fee on top, which your client pays."
         />
 
         {/* Status card */}
-        {!connected ? (
+        {isCheckingStripe ? (
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4">
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Checking Stripe connection...</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Euroflo is confirming whether this account can accept payments.
+              </p>
+            </div>
+          </div>
+        ) : !connected ? (
           <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
             <div>
@@ -1365,7 +1417,7 @@ export function SetupWizard() {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
-          {!complete && (
+          {!complete && !isCheckingStripe && (
             <Button
               onClick={() => void handleStripeConnect()}
               disabled={isConnecting}
@@ -1566,7 +1618,7 @@ export function SetupWizard() {
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {requiredComplete
-              ? "Your workspace is ready. Go to your dashboard or start sending job requests."
+              ? "Your workspace is ready. Go to your dashboard or start receiving job requests."
               : "A few items are still incomplete. You can finish them in Settings anytime."}
           </p>
         </div>

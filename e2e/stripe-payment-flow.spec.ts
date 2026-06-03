@@ -1114,7 +1114,7 @@ test.describe("Stripe payment flow", () => {
         .or(dialog.getByText(/\$1,207|\$1207/))
       if (await clientTotalEl.count() > 0) {
         const text = await clientTotalEl.first().textContent()
-        console.log(`✓ Client total displayed: "${text}"`)
+        console.log(`✓ Customer total displayed: "${text}"`)
       }
 
       // Look for GST display
