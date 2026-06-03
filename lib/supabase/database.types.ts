@@ -162,6 +162,8 @@ export type Database = {
           scheduled_visit_ends_at: string | null
           scheduled_visit_notes: string | null
           billing_type: string | null
+          decline_reason: string | null
+          decline_comment: string | null
           notes: string | null
           line_items: Json
           tax_rate: number
@@ -193,6 +195,8 @@ export type Database = {
           scheduled_visit_ends_at?: string | null
           scheduled_visit_notes?: string | null
           billing_type?: string | null
+          decline_reason?: string | null
+          decline_comment?: string | null
           notes?: string | null
           line_items?: Json
           tax_rate?: number
@@ -224,6 +228,8 @@ export type Database = {
           scheduled_visit_ends_at?: string | null
           scheduled_visit_notes?: string | null
           billing_type?: string | null
+          decline_reason?: string | null
+          decline_comment?: string | null
           notes?: string | null
           line_items?: Json
           tax_rate?: number
@@ -371,6 +377,9 @@ export type Database = {
           photo_urls: string[]
           more_details_message: string | null
           more_details_response: string | null
+          visit_client_proposed_at: string | null
+          visit_client_notes: string | null
+          contractor_decline_reason: string | null
           status: Database["public"]["Enums"]["job_request_status"]
           created_at: string
           updated_at: string
@@ -400,6 +409,9 @@ export type Database = {
           photo_urls?: string[]
           more_details_message?: string | null
           more_details_response?: string | null
+          visit_client_proposed_at?: string | null
+          visit_client_notes?: string | null
+          contractor_decline_reason?: string | null
           status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string
@@ -429,6 +441,9 @@ export type Database = {
           photo_urls?: string[]
           more_details_message?: string | null
           more_details_response?: string | null
+          visit_client_proposed_at?: string | null
+          visit_client_notes?: string | null
+          contractor_decline_reason?: string | null
           status?: Database["public"]["Enums"]["job_request_status"]
           created_at?: string
           updated_at?: string
@@ -970,8 +985,10 @@ export type Database = {
         | "new"
         | "reviewed"
         | "needs_info"
+        | "declined_by_contractor"
         | "inspection_scheduled"
         | "inspection_confirmed"
+        | "visit_completed"
         | "estimate_created"
         | "accepted"
         | "declined"

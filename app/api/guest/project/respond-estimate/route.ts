@@ -11,10 +11,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { guestToken, estimateId, response } = body as {
-    guestToken?: string
-    estimateId?: string
-    response?:   string
+  const { guestToken, estimateId, response, declineReason, declineComment } = body as {
+    guestToken?:     string
+    estimateId?:     string
+    response?:       string
+    declineReason?:  string
+    declineComment?: string
   }
 
   if (!guestToken || typeof guestToken !== "string") {
@@ -59,10 +61,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Update estimate and job request atomically
+  const estUpdate: Record<string, unknown> = { status: response }
+  if (response === "Declined") {
+    estUpdate.decline_reason  = declineReason  ?? null
+    estUpdate.decline_comment = declineComment ?? null
+  }
+
   const [estResult, jobResult] = await Promise.all([
     supabase
       .from("estimates")
-      .update({ status: response })
+      .update(estUpdate)
       .eq("id", estimateId)
       .select()
       .single(),

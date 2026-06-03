@@ -364,6 +364,17 @@ function RequestContext({ request }: { request: JobRequest }) {
         </div>
       ) : null}
       <RequestPhotos request={request} />
+      {request.visit_client_proposed_at && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="text-xs font-medium uppercase text-blue-700">Client suggested a new time</div>
+          <p className="mt-1 text-sm font-semibold text-blue-900">
+            {new Intl.DateTimeFormat("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(request.visit_client_proposed_at))}
+          </p>
+          {request.visit_client_notes && (
+            <p className="mt-1 text-xs text-blue-700">{request.visit_client_notes}</p>
+          )}
+        </div>
+      )}
       {(request.more_details_message || request.more_details_response) && (
         <div className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
           {request.more_details_message && (
@@ -403,30 +414,54 @@ function EstimateActionButton({
   onRequestDetails,
   onScheduleInspection,
   onScheduleWork,
+  onDeclineRequest,
+  onMarkVisitCompleted,
+  onAcceptClientProposal,
+  onCloseJob,
 }: {
-  request: JobRequest
-  estimate: EstimateRow | undefined
-  isSaving: boolean
-  onCreateEstimate: (r: JobRequest) => void
-  onShareEstimate: (estimate: EstimateRow, request: JobRequest) => void
-  onRequestDetails: (r: JobRequest) => void
-  onScheduleInspection: (r: JobRequest) => void
-  onScheduleWork: (estimate: EstimateRow) => void
+  request:               JobRequest
+  estimate:              EstimateRow | undefined
+  isSaving:              boolean
+  onCreateEstimate:      (r: JobRequest) => void
+  onShareEstimate:       (estimate: EstimateRow, request: JobRequest) => void
+  onRequestDetails:      (r: JobRequest) => void
+  onScheduleInspection:  (r: JobRequest) => void
+  onScheduleWork:        (estimate: EstimateRow) => void
+  onDeclineRequest:      (r: JobRequest) => void
+  onMarkVisitCompleted:  (r: JobRequest) => void
+  onAcceptClientProposal:(r: JobRequest) => void
+  onCloseJob:            (r: JobRequest) => void
 }) {
-  const hasEstimate =
-    request.status === "estimate_created" ||
-    request.status === "accepted" ||
-    request.status === "declined"
+  const status = request.status
 
-  // Estimate exists in local cache — show estimate actions + schedule work
+  // ── Estimate exists ───────────────────────────────────────────────────────
   if (estimate) {
+    // After client declined: revise / propose visit / close
+    if (estimate.status === "Declined" || estimate.status === "Lost") {
+      return (
+        <>
+          <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onCreateEstimate(request)}>
+            <Plus className="size-4" />
+            Revise estimate
+          </Button>
+          <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)}>
+            <Calendar className="size-4" />
+            Propose site visit
+          </Button>
+          <Button variant="outline" size="sm" disabled={isSaving} className="text-red-600 hover:text-red-700" onClick={() => onCloseJob(request)}>
+            Close job
+          </Button>
+        </>
+      )
+    }
+
     return (
       <>
-        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)} data-testid="job-request-schedule-inspection">
+        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)}>
           <Calendar className="size-4" />
-          {request.status === "inspection_scheduled" || request.status === "inspection_confirmed" ? "Reschedule" : "Schedule inspection"}
+          {status === "inspection_scheduled" || status === "inspection_confirmed" ? "Reschedule" : "Site visit"}
         </Button>
-        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleWork(estimate)} data-testid="job-request-schedule-work">
+        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleWork(estimate)}>
           <Clock className="size-4" />
           Schedule work
         </Button>
@@ -436,7 +471,7 @@ function EstimateActionButton({
             View estimate
           </Link>
         </Button>
-        {estimate.status === "Draft" ? (
+        {estimate.status === "Draft" && (
           <Button
             data-testid="job-request-share-estimate"
             className="bg-ef-ocean text-white hover:bg-ef-ocean"
@@ -446,50 +481,109 @@ function EstimateActionButton({
             <Send className="size-4" />
             Share with client
           </Button>
-        ) : null}
+        )}
       </>
     )
   }
 
-  if (hasEstimate) {
+  // ── Terminal / no-action states ───────────────────────────────────────────
+  if (
+    status === "estimate_created" ||
+    status === "accepted" ||
+    status === "declined" ||
+    status === "declined_by_contractor" ||
+    status === "closed"
+  ) {
     return (
       <Button variant="outline" disabled>
         <FileText className="size-4" />
-        Estimate created
+        {status === "estimate_created" ? "Estimate sent" : labelFromSlug(status)}
       </Button>
     )
   }
 
+  // ── Visit negotiation state ───────────────────────────────────────────────
+  if (status === "inspection_scheduled") {
+    return (
+      <>
+        {request.visit_client_proposed_at && (
+          <Button
+            size="sm"
+            className="bg-ef-ocean text-white hover:bg-ef-ocean"
+            disabled={isSaving}
+            onClick={() => onAcceptClientProposal(request)}
+            data-testid="accept-client-proposal"
+          >
+            <Check className="size-4" />
+            Accept client&apos;s time
+          </Button>
+        )}
+        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)}>
+          <Calendar className="size-4" />
+          Re-propose time
+        </Button>
+        <Button
+          className="bg-ef-ocean text-white hover:bg-ef-ocean"
+          disabled={isSaving}
+          onClick={() => onCreateEstimate(request)}
+          data-testid="job-request-create-estimate"
+        >
+          <Plus className="size-4" />
+          Create estimate
+        </Button>
+      </>
+    )
+  }
+
+  if (status === "inspection_confirmed") {
+    return (
+      <>
+        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onMarkVisitCompleted(request)} data-testid="mark-visit-completed">
+          <Check className="size-4" />
+          Mark visit completed
+        </Button>
+        <Button
+          className="bg-ef-ocean text-white hover:bg-ef-ocean"
+          disabled={isSaving}
+          onClick={() => onCreateEstimate(request)}
+          data-testid="job-request-create-estimate"
+        >
+          <Plus className="size-4" />
+          Create estimate
+        </Button>
+      </>
+    )
+  }
+
+  // ── Pre-estimate actions (new / reviewed / needs_info / visit_completed) ──
   const canAct =
-    request.status === "new" ||
-    request.status === "reviewed" ||
-    request.status === "needs_info" ||
-    request.status === "inspection_scheduled" ||
-    request.status === "inspection_confirmed"
+    status === "new" ||
+    status === "reviewed" ||
+    status === "needs_info" ||
+    status === "visit_completed"
 
   if (!canAct) return null
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={isSaving}
-        onClick={() => onRequestDetails(request)}
-        data-testid="job-request-request-details"
-      >
+      <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onRequestDetails(request)} data-testid="job-request-request-details">
         <HelpCircle className="size-4" />
         Request details
+      </Button>
+      <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)} data-testid="job-request-schedule-inspection">
+        <Calendar className="size-4" />
+        Propose site visit
       </Button>
       <Button
         variant="outline"
         size="sm"
         disabled={isSaving}
-        onClick={() => onScheduleInspection(request)}
-        data-testid="job-request-schedule-inspection"
+        className="text-red-600 hover:text-red-700"
+        onClick={() => onDeclineRequest(request)}
+        data-testid="job-request-decline"
       >
-        <Calendar className="size-4" />
-        {request.status === "inspection_scheduled" || request.status === "inspection_confirmed" ? "Reschedule inspection" : "Schedule inspection"}
+        <X className="size-4" />
+        Decline
       </Button>
       <Button
         data-testid="job-request-create-estimate"
@@ -529,6 +623,11 @@ export default function ContractorJobRequestsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [estimateByRequestId, setEstimateByRequestId] = useState<Record<string, EstimateRow>>({})
+
+  // Decline request dialog
+  const [declineRequestTarget, setDeclineRequestTarget]   = useState<JobRequest | null>(null)
+  const [declineRequestReason, setDeclineRequestReason]   = useState("")
+  const [isSubmittingDecline,  setIsSubmittingDecline]    = useState(false)
 
   // Request more details dialog
   const [detailsRequest, setDetailsRequest] = useState<JobRequest | null>(null)
@@ -799,6 +898,42 @@ export default function ContractorJobRequestsPage() {
       ...current,
       taxLines: current.taxLines.filter((line) => line.id !== id),
     }))
+  }
+
+  async function submitDeclineRequest() {
+    if (!declineRequestTarget || isSubmittingDecline) return
+    setIsSubmittingDecline(true)
+    const updated = await updateRequestStatus(declineRequestTarget, {
+      status: "declined_by_contractor",
+      contractor_decline_reason: declineRequestReason.trim() || null,
+    })
+    setIsSubmittingDecline(false)
+    if (!updated) return
+    setDeclineRequestTarget(null)
+    setDeclineRequestReason("")
+    toast.success("Request declined")
+  }
+
+  async function markVisitCompleted(request: JobRequest) {
+    await updateRequestStatus(request, { status: "visit_completed" })
+    toast.success("Site visit marked as completed")
+  }
+
+  async function acceptClientVisitProposal(request: JobRequest) {
+    if (!request.visit_client_proposed_at) return
+    await updateRequestStatus(request, {
+      status:                      "inspection_confirmed",
+      scheduled_visit_starts_at:   request.visit_client_proposed_at,
+      scheduled_visit_notes:       request.visit_client_notes ?? request.scheduled_visit_notes,
+      visit_client_proposed_at:    null,
+      visit_client_notes:          null,
+    })
+    toast.success("Client's suggested time accepted — visit confirmed")
+  }
+
+  async function closeJob(request: JobRequest) {
+    await updateRequestStatus(request, { status: "closed" })
+    toast.success("Job closed")
   }
 
   async function submitDetailsRequest() {
@@ -1451,11 +1586,49 @@ export default function ContractorJobRequestsPage() {
                     onRequestDetails={(r) => { setSelectedRequest(null); setDetailsRequest(r); setDetailsMessage("") }}
                     onScheduleInspection={(r) => { setSelectedRequest(null); setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
                     onScheduleWork={(e) => { setSelectedRequest(null); setWorkEstimate(e); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") }}
+                    onDeclineRequest={(r) => { setSelectedRequest(null); setDeclineRequestTarget(r); setDeclineRequestReason("") }}
+                    onMarkVisitCompleted={(r) => { setSelectedRequest(null); void markVisitCompleted(r) }}
+                    onAcceptClientProposal={(r) => { setSelectedRequest(null); void acceptClientVisitProposal(r) }}
+                    onCloseJob={(r) => { setSelectedRequest(null); void closeJob(r) }}
                   />
                 </div>
               </div>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Decline request dialog */}
+      <Dialog open={declineRequestTarget !== null} onOpenChange={(open) => { if (!open) { setDeclineRequestTarget(null); setDeclineRequestReason("") } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Decline this request</DialogTitle>
+            <DialogDescription>
+              The client will be notified that you cannot take this job.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="decline-reason">Reason (optional)</Label>
+            <Textarea
+              id="decline-reason"
+              value={declineRequestReason}
+              onChange={(e) => setDeclineRequestReason(e.target.value)}
+              placeholder="e.g. Outside our service area, fully booked, etc."
+              className="min-h-20"
+              disabled={isSubmittingDecline}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeclineRequestTarget(null)} disabled={isSubmittingDecline}>Cancel</Button>
+            <Button
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={isSubmittingDecline}
+              onClick={() => void submitDeclineRequest()}
+            >
+              {isSubmittingDecline ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+              Decline request
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1733,6 +1906,10 @@ export default function ContractorJobRequestsPage() {
                             onRequestDetails={(r) => { setDetailsRequest(r); setDetailsMessage("") }}
                             onScheduleInspection={(r) => { setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
                             onScheduleWork={(e) => { setWorkEstimate(e); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") }}
+                            onDeclineRequest={(r) => { setDeclineRequestTarget(r); setDeclineRequestReason("") }}
+                            onMarkVisitCompleted={(r) => void markVisitCompleted(r)}
+                            onAcceptClientProposal={(r) => void acceptClientVisitProposal(r)}
+                            onCloseJob={(r) => void closeJob(r)}
                           />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

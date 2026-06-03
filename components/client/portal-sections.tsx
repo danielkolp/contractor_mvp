@@ -33,41 +33,47 @@ export type TimelineEvent = Database["public"]["Tables"]["project_timeline_event
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
 export const STATUS_LABEL: Record<string, string> = {
-  new:                   "Under Review",
-  reviewed:              "Estimate Pending",
-  needs_info:            "More Info Requested",
-  inspection_scheduled:  "Inspection Scheduled",
-  inspection_confirmed:  "Inspection Confirmed",
-  estimate_created:      "Estimate Ready",
-  accepted:              "Accepted",
-  declined:              "Declined",
-  closed:                "Closed",
+  new:                    "Under Review",
+  reviewed:               "Estimate Pending",
+  needs_info:             "More Info Requested",
+  declined_by_contractor: "Request Declined",
+  inspection_scheduled:   "Site Visit Proposed",
+  inspection_confirmed:   "Site Visit Confirmed",
+  visit_completed:        "Site Visit Completed",
+  estimate_created:       "Estimate Ready",
+  accepted:               "Accepted",
+  declined:               "Estimate Declined",
+  closed:                 "Closed",
 }
 
 export const STATUS_NEXT: Record<string, string> = {
-  new:                   "Your contractor is reviewing your request. You'll be notified when there's an update.",
-  reviewed:              "Your contractor is working on an estimate. We'll notify you when it's ready.",
-  needs_info:            "Your contractor needs more information before preparing an estimate. Please respond below.",
-  inspection_scheduled:  "An on-site inspection has been scheduled. Please confirm your availability below.",
-  inspection_confirmed:  "Inspection confirmed. Your contractor will prepare an estimate after the visit.",
-  estimate_created:      "An estimate is ready for your review. Accept or decline it below.",
-  accepted:              "Your contractor will be in touch shortly to schedule the work.",
-  declined:              "The estimate was declined. Contact your contractor if you have questions.",
-  closed:                "This project has been closed.",
+  new:                    "Your contractor is reviewing your request. You'll be notified when there's an update.",
+  reviewed:               "Your contractor is working on an estimate. We'll notify you when it's ready.",
+  needs_info:             "Your contractor needs more information before preparing an estimate. Please respond below.",
+  declined_by_contractor: "Your contractor has declined this request.",
+  inspection_scheduled:   "A site visit has been proposed. Please confirm or suggest a different time below.",
+  inspection_confirmed:   "Site visit confirmed. Your contractor will prepare an estimate after the visit.",
+  visit_completed:        "The site visit is complete. Your contractor is preparing an estimate.",
+  estimate_created:       "An estimate is ready for your review. Accept or decline it below.",
+  accepted:               "You accepted the estimate. Your contractor will schedule the work.",
+  declined:               "You declined the estimate. Your contractor is reviewing your feedback.",
+  closed:                 "This project has been closed.",
 }
 
 type StatusColor = "gray" | "yellow" | "green" | "red"
 
 export const STATUS_COLOR: Record<string, StatusColor> = {
-  new:                   "gray",
-  reviewed:              "yellow",
-  needs_info:            "yellow",
-  inspection_scheduled:  "yellow",
-  inspection_confirmed:  "green",
-  estimate_created:      "green",
-  accepted:              "green",
-  declined:              "red",
-  closed:                "gray",
+  new:                    "gray",
+  reviewed:               "yellow",
+  needs_info:             "yellow",
+  declined_by_contractor: "red",
+  inspection_scheduled:   "yellow",
+  inspection_confirmed:   "green",
+  visit_completed:        "green",
+  estimate_created:       "green",
+  accepted:               "green",
+  declined:               "red",
+  closed:                 "gray",
 }
 
 const colorMap: Record<StatusColor, { bg: string; text: string; border: string; dot: string }> = {
@@ -443,6 +449,30 @@ export function PayButton({
   )
 }
 
+// ── Declined by contractor card ───────────────────────────────────────────────
+
+export function DeclinedByContractorCard({ job }: { job: JobRequest }) {
+  const reason = job.contractor_decline_reason
+  return (
+    <div className="rounded-2xl border border-red-200 bg-red-50 p-5" data-testid="declined-by-contractor-card">
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
+          <Circle className="h-4 w-4 text-red-500" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Your contractor has declined this request</p>
+          {reason && (
+            <p className="mt-1 text-sm text-gray-600">{reason}</p>
+          )}
+          <p className="mt-2 text-xs text-gray-400">
+            If you believe this is an error, you can reach out to your contractor directly.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── More details card ─────────────────────────────────────────────────────────
 
 export function MoreDetailsCard({
@@ -454,9 +484,9 @@ export function MoreDetailsCard({
 }) {
   const [response, setResponse] = useState("")
   const [isSaving, setIsSaving]  = useState(false)
-  const hasResponse = Boolean((job as JobRequest & { more_details_response?: string | null }).more_details_response)
-  const message     = (job as JobRequest & { more_details_message?: string | null }).more_details_message
-  const savedResponse = (job as JobRequest & { more_details_response?: string | null }).more_details_response
+  const hasResponse   = Boolean(job.more_details_response)
+  const message       = job.more_details_message
+  const savedResponse = job.more_details_response
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5" data-testid="more-details-card">
@@ -506,30 +536,44 @@ export function MoreDetailsCard({
   )
 }
 
-// ── Inspection card ───────────────────────────────────────────────────────────
+// ── Inspection / site-visit card ──────────────────────────────────────────────
+
+const VISIT_DT_FMT = new Intl.DateTimeFormat("en-CA", {
+  weekday: "long", month: "long", day: "numeric",
+  year: "numeric", hour: "numeric", minute: "2-digit",
+})
 
 export function InspectionCard({
   job,
   onConfirm,
+  onSuggestTime,
 }: {
-  job:       JobRequest
-  onConfirm: () => void
+  job:           JobRequest
+  onConfirm:     () => void
+  onSuggestTime: (proposedAt: string, notes: string) => void
 }) {
-  const [isSaving, setIsSaving] = useState(false)
-  const confirmed  = job.status === "inspection_confirmed"
-  const startsAt   = job.scheduled_visit_starts_at
-  const notes      = job.scheduled_visit_notes
+  const [isSaving,        setIsSaving]        = useState(false)
+  const [showSuggest,     setShowSuggest]     = useState(false)
+  const [suggestDate,     setSuggestDate]     = useState("")
+  const [suggestTime,     setSuggestTime]     = useState("")
+  const [suggestNotes,    setSuggestNotes]    = useState("")
 
-  const formattedDate = startsAt
-    ? new Intl.DateTimeFormat("en-CA", {
-        weekday: "long",
-        month:   "long",
-        day:     "numeric",
-        year:    "numeric",
-        hour:    "numeric",
-        minute:  "2-digit",
-      }).format(new Date(startsAt))
-    : null
+  const confirmed    = job.status === "inspection_confirmed" || job.status === "visit_completed"
+  const awaitingAck  = Boolean(job.visit_client_proposed_at)
+  const startsAt     = job.scheduled_visit_starts_at
+  const notes        = job.scheduled_visit_notes
+  const clientProp   = job.visit_client_proposed_at
+
+  const fmtDate = (d: string | null) =>
+    d ? VISIT_DT_FMT.format(new Date(d)) : null
+
+  function handleSuggest() {
+    if (!suggestDate) return
+    setIsSaving(true)
+    const timeStr  = suggestTime || "09:00"
+    const proposed = new Date(`${suggestDate}T${timeStr}`).toISOString()
+    onSuggestTime(proposed, suggestNotes.trim())
+  }
 
   return (
     <div
@@ -537,37 +581,97 @@ export function InspectionCard({
       data-testid="inspection-card"
     >
       <div className="flex items-start gap-3">
-        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${confirmed ? "bg-ef-mist" : "bg-amber-100"}`}>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${confirmed ? "bg-white" : "bg-amber-100"}`}>
           <CalendarDays className={`h-4 w-4 ${confirmed ? "text-ef-ocean" : "text-amber-600"}`} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-900">
-            {confirmed ? "Inspection confirmed" : "Inspection scheduled"}
+            {confirmed ? "Site visit confirmed" : "Site visit proposed"}
           </p>
-          {formattedDate && (
-            <p className="mt-1 text-sm text-gray-700">{formattedDate}</p>
-          )}
-          {notes && (
-            <p className="mt-2 text-xs leading-relaxed text-gray-500 whitespace-pre-wrap">{notes}</p>
+          {startsAt && <p className="mt-1 text-sm text-gray-700">{fmtDate(startsAt)}</p>}
+          {notes && <p className="mt-1 text-xs text-gray-500 whitespace-pre-wrap">{notes}</p>}
+          {awaitingAck && (
+            <p className="mt-2 text-xs text-amber-700 font-medium">
+              You suggested {fmtDate(clientProp)} — waiting for contractor to confirm.
+            </p>
           )}
         </div>
       </div>
 
-      {!confirmed && (
-        <div className="mt-4">
-          <Button
-            size="sm"
-            className="bg-ef-ocean text-white hover:bg-ef-ocean"
-            disabled={isSaving}
-            data-testid="inspection-confirm-button"
-            onClick={() => {
-              setIsSaving(true)
-              onConfirm()
-            }}
-          >
-            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            Confirm inspection
-          </Button>
+      {!confirmed && !awaitingAck && (
+        <div className="mt-4 space-y-3">
+          {!showSuggest ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                disabled={isSaving}
+                data-testid="inspection-confirm-button"
+                onClick={() => { setIsSaving(true); onConfirm() }}
+              >
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                Confirm this time
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-300 bg-white text-amber-700 hover:bg-amber-50"
+                onClick={() => setShowSuggest(true)}
+              >
+                Suggest a different time
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-xl border border-amber-200 bg-white p-3.5">
+              <p className="text-xs font-semibold text-amber-700">Suggest a different time</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500">Date</label>
+                  <input
+                    type="date"
+                    value={suggestDate}
+                    onChange={(e) => setSuggestDate(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Time (optional)</label>
+                  <input
+                    type="time"
+                    value={suggestTime}
+                    onChange={(e) => setSuggestTime(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+              </div>
+              <textarea
+                value={suggestNotes}
+                onChange={(e) => setSuggestNotes(e.target.value)}
+                placeholder="Any notes for your contractor? (optional)"
+                rows={2}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                  disabled={!suggestDate || isSaving}
+                  onClick={handleSuggest}
+                >
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Send suggestion
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-gray-300 bg-white text-gray-700"
+                  onClick={() => setShowSuggest(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -621,16 +725,28 @@ export function WorkScheduleCard({ estimates }: { estimates: Estimate[] }) {
 
 // ── Estimates section ─────────────────────────────────────────────────────────
 
+const DECLINE_REASONS: { value: string; label: string }[] = [
+  { value: "price_too_high",    label: "Price is too high" },
+  { value: "scope_changed",     label: "Scope of work has changed" },
+  { value: "hired_another",     label: "I hired someone else" },
+  { value: "no_longer_needed",  label: "No longer needed" },
+  { value: "timeline",          label: "Timeline doesn't work" },
+  { value: "other",             label: "Other" },
+]
+
 export function EstimatesSection({
   estimates,
   onRespond,
   guestToken,
 }: {
   estimates:  Estimate[]
-  onRespond:  (est: Estimate, response: "Accepted" | "Declined") => void
+  onRespond:  (est: Estimate, response: "Accepted" | "Declined", declineReason?: string, declineComment?: string) => void
   guestToken?: string
 }) {
-  const [isSaving, setIsSaving] = useState(false)
+  const [isSaving,        setIsSaving]       = useState(false)
+  const [decliningEst,    setDecliningEst]   = useState<Estimate | null>(null)
+  const [declineReason,   setDeclineReason]  = useState("")
+  const [declineComment,  setDeclineComment] = useState("")
 
   if (estimates.length === 0) return null
 
@@ -646,9 +762,12 @@ export function EstimatesSection({
           est.status !== "Won" &&
           est.status !== "Lost"
 
-        const isAccepted = est.status === "Accepted" || est.status === "Won"
-        const stripeEst  = est as Estimate & { payment_status?: string | null }
-        const isPaid     = stripeEst.payment_status === "paid"
+        const isAccepted  = est.status === "Accepted" || est.status === "Won"
+        const isDeclined  = est.status === "Declined" || est.status === "Lost"
+        const stripeEst   = est as Estimate & { payment_status?: string | null }
+        const isPaid      = stripeEst.payment_status === "paid"
+        const extEst      = est as Estimate & { decline_reason?: string | null; decline_comment?: string | null }
+        const isDeclining = decliningEst?.id === est.id
 
         return (
           <div
@@ -669,7 +788,7 @@ export function EstimatesSection({
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                     isAccepted
                       ? "bg-ef-mist text-ef-ocean"
-                      : est.status === "Declined" || est.status === "Lost"
+                      : isDeclined
                       ? "bg-red-100 text-red-700"
                       : "bg-amber-50 text-amber-700"
                   }`}
@@ -690,54 +809,119 @@ export function EstimatesSection({
               </p>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50" asChild>
-                <a
-                  href={`/print/estimate/${est.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  data-testid="estimate-pdf-link"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  View PDF
-                </a>
-              </Button>
+            {isDeclined && extEst.decline_reason && (
+              <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3.5 py-3">
+                <p className="text-xs font-semibold text-red-700">
+                  {DECLINE_REASONS.find((r) => r.value === extEst.decline_reason)?.label ?? extEst.decline_reason}
+                </p>
+                {extEst.decline_comment && (
+                  <p className="mt-1 text-xs text-red-600">{extEst.decline_comment}</p>
+                )}
+              </div>
+            )}
 
-              {canRespond && (
-                <>
+            {/* Inline decline reason form */}
+            {isDeclining && (
+              <div className="mt-4 space-y-3 rounded-xl border border-red-100 bg-red-50 p-3.5">
+                <p className="text-sm font-semibold text-gray-900">Why are you declining?</p>
+                <div className="grid gap-2">
+                  {DECLINE_REASONS.map((r) => (
+                    <label key={r.value} className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`decline-reason-${est.id}`}
+                        value={r.value}
+                        checked={declineReason === r.value}
+                        onChange={() => setDeclineReason(r.value)}
+                        className="accent-red-600"
+                      />
+                      <span className="text-sm text-gray-700">{r.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <textarea
+                  value={declineComment}
+                  onChange={(e) => setDeclineComment(e.target.value)}
+                  placeholder="Optional comment for your contractor…"
+                  rows={2}
+                  className="w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-300"
+                />
+                <div className="flex gap-2">
                   <Button
                     size="sm"
-                    disabled={isSaving}
-                    className="bg-ef-ocean text-white hover:bg-ef-ocean"
-                    data-testid="estimate-accept-button"
+                    disabled={!declineReason || isSaving}
+                    className="bg-red-600 text-white hover:bg-red-700"
+                    data-testid="estimate-decline-confirm"
                     onClick={() => {
                       setIsSaving(true)
-                      onRespond(est, "Accepted")
+                      onRespond(est, "Declined", declineReason, declineComment || undefined)
+                      setDecliningEst(null)
+                      setDeclineReason("")
+                      setDeclineComment("")
                     }}
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Accept Estimate
+                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Confirm decline
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={isSaving}
-                    className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                    data-testid="estimate-decline-button"
-                    onClick={() => {
-                      setIsSaving(true)
-                      onRespond(est, "Declined")
-                    }}
+                    className="border-gray-300 bg-white text-gray-700"
+                    onClick={() => { setDecliningEst(null); setDeclineReason(""); setDeclineComment("") }}
                   >
-                    Decline
+                    Cancel
                   </Button>
-                </>
-              )}
+                </div>
+              </div>
+            )}
 
-              {isAccepted && !isPaid && (
-                <PayButton estimate={est} guestToken={guestToken} />
-              )}
-            </div>
+            {!isDeclining && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50" asChild>
+                  <a
+                    href={`/print/estimate/${est.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="estimate-pdf-link"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    View PDF
+                  </a>
+                </Button>
+
+                {canRespond && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={isSaving}
+                      className="bg-ef-ocean text-white hover:bg-ef-ocean"
+                      data-testid="estimate-accept-button"
+                      onClick={() => {
+                        setIsSaving(true)
+                        onRespond(est, "Accepted")
+                      }}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Accept Estimate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSaving}
+                      className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                      data-testid="estimate-decline-button"
+                      onClick={() => { setDecliningEst(est); setDeclineReason(""); setDeclineComment("") }}
+                    >
+                      Decline
+                    </Button>
+                  </>
+                )}
+
+                {isAccepted && !isPaid && (
+                  <PayButton estimate={est} guestToken={guestToken} />
+                )}
+              </div>
+            )}
           </div>
         )
       })}

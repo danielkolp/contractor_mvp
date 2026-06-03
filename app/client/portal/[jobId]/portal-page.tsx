@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import {
   buildTimeline,
+  DeclinedByContractorCard,
   EstimatesSection,
   FlowBar,
   InspectionCard,
@@ -94,16 +95,35 @@ export function PortalPage({ jobId }: { jobId: string }) {
     toast.success("Inspection confirmed")
   }
 
-  async function respondToEstimate(est: Estimate, response: "Accepted" | "Declined") {
+  async function suggestVisitTime(proposedAt: string, notes: string) {
+    if (!job) return
+    const { data, error } = await supabase
+      .from("job_requests")
+      .update({ visit_client_proposed_at: proposedAt, visit_client_notes: notes || null })
+      .eq("id", jobId)
+      .select()
+      .single()
+    if (error) { toast.error("Could not send your suggestion. Please try again."); return }
+    if (data) setJob(data)
+    toast.success("Suggestion sent to your contractor")
+  }
+
+  async function respondToEstimate(
+    est: Estimate,
+    response: "Accepted" | "Declined",
+    declineReason?: string,
+    declineComment?: string,
+  ) {
     if (!job) return
 
+    const estUpdate: Record<string, unknown> = { status: response }
+    if (response === "Declined") {
+      estUpdate.decline_reason  = declineReason ?? null
+      estUpdate.decline_comment = declineComment ?? null
+    }
+
     const [estResult, jobResult] = await Promise.all([
-      supabase
-        .from("estimates")
-        .update({ status: response })
-        .eq("id", est.id)
-        .select()
-        .single(),
+      supabase.from("estimates").update(estUpdate).eq("id", est.id).select().single(),
       supabase
         .from("job_requests")
         .update({ status: response === "Accepted" ? "accepted" : "declined" })
@@ -155,16 +175,21 @@ export function PortalPage({ jobId }: { jobId: string }) {
           <StatusCard job={job} hasEstimate={hasEstimate} />
           <FlowBar job={job} hasEstimate={hasEstimate} invoices={invoices} estimates={visibleEstimates} />
           {timeline.length > 0 && <Timeline items={timeline} />}
+          {job.status === "declined_by_contractor" && <DeclinedByContractorCard job={job} />}
           {job.status === "needs_info" && (
             <MoreDetailsCard job={job} onRespond={(r) => void respondToDetails(r)} />
           )}
-          {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed") && (
-            <InspectionCard job={job} onConfirm={() => void confirmInspection()} />
+          {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed" || job.status === "visit_completed") && (
+            <InspectionCard
+              job={job}
+              onConfirm={() => void confirmInspection()}
+              onSuggestTime={(at, notes) => void suggestVisitTime(at, notes)}
+            />
           )}
           <WorkScheduleCard estimates={visibleEstimates} />
           <EstimatesSection
             estimates={visibleEstimates}
-            onRespond={(est, r) => void respondToEstimate(est, r)}
+            onRespond={(est, r, reason, comment) => void respondToEstimate(est, r, reason, comment)}
           />
           <InvoicesSection invoices={invoices} />
         </>

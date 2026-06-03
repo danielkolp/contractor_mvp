@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import {
   buildTimeline,
+  DeclinedByContractorCard,
   EstimatesSection,
   FlowBar,
   InspectionCard,
@@ -107,12 +108,30 @@ export function GuestPortalPage({
     }
   }
 
-  async function respondToEstimate(est: Estimate, response: "Accepted" | "Declined") {
+  async function suggestVisitTime(proposedAt: string, notes: string) {
+    try {
+      const res  = await fetch("/api/guest/project/suggest-visit-time", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guestToken: token, proposedAt, notes }),
+      })
+      const data = await res.json() as { job?: JobRequest; error?: string }
+      if (!res.ok || data.error) { toast.error(data.error ?? "Could not send suggestion."); return }
+      if (data.job) setJob(data.job)
+      toast.success("Suggestion sent to your contractor")
+    } catch { toast.error("Could not reach the server. Please try again.") }
+  }
+
+  async function respondToEstimate(
+    est: Estimate,
+    response: "Accepted" | "Declined",
+    declineReason?: string,
+    declineComment?: string,
+  ) {
     try {
       const res = await fetch("/api/guest/project/respond-estimate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ guestToken: token, estimateId: est.id, response }),
+        body:    JSON.stringify({ guestToken: token, estimateId: est.id, response, declineReason, declineComment }),
       })
       const data = await res.json() as { estimate?: Estimate; job?: JobRequest; error?: string }
 
@@ -171,11 +190,16 @@ export function GuestPortalPage({
       {/* Timeline */}
       {timeline.length > 0 && <Timeline items={timeline} />}
 
+      {job.status === "declined_by_contractor" && <DeclinedByContractorCard job={job} />}
       {job.status === "needs_info" && (
         <MoreDetailsCard job={job} onRespond={(r) => void respondToDetails(r)} />
       )}
-      {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed") && (
-        <InspectionCard job={job} onConfirm={() => void confirmInspection()} />
+      {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed" || job.status === "visit_completed") && (
+        <InspectionCard
+          job={job}
+          onConfirm={() => void confirmInspection()}
+          onSuggestTime={(at, notes) => void suggestVisitTime(at, notes)}
+        />
       )}
 
       <WorkScheduleCard estimates={visibleEstimates} />
@@ -184,7 +208,7 @@ export function GuestPortalPage({
       <EstimatesSection
         estimates={visibleEstimates}
         guestToken={token}
-        onRespond={(est, r) => void respondToEstimate(est, r)}
+        onRespond={(est, r, reason, comment) => void respondToEstimate(est, r, reason, comment)}
       />
 
       {/* Invoices */}
