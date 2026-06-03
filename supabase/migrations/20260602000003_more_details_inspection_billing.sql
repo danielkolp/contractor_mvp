@@ -16,4 +16,10 @@ alter table public.estimates
   add column if not exists billing_type text default 'flat_rate'
     check (billing_type in ('flat_rate', 'hourly'));
 
+-- Ensure service_role (used by guest API routes) can update these tables.
+-- The initial schema only granted to authenticated/anon.
+grant all on public.job_requests to service_role;
+grant all on public.estimates    to service_role;
+grant all on public.invoices     to service_role;
+
 notify pgrst, 'reload schema';
