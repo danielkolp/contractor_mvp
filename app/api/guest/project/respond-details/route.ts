@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   if (error || !data) {
     console.error("[guest/respond-details] update error:", error)
-    return NextResponse.json({ error: "Could not save your response. Please try again." }, { status: 500 })
+    return NextResponse.json({ error: error?.message ?? "No rows updated — possible RLS or missing column" }, { status: 500 })
   }
 
   return NextResponse.json({ job: data })
