@@ -18,11 +18,8 @@ export function Spinner({
 
   return (
     <div className={className}>
-      <l-mirage
-        size={size}
-        speed="2.5"
-        color={color ?? "currentColor"}
-      />
+      {/* @ts-expect-error - ldrs web component not in React JSX types */}
+      <l-mirage size={size} speed="2.5" color={color ?? "currentColor"} />
     </div>
   )
 }
