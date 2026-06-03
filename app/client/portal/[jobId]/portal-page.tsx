@@ -116,14 +116,17 @@ export function PortalPage({ jobId }: { jobId: string }) {
   ) {
     if (!job) return
 
-    const estUpdate: Record<string, unknown> = { status: response }
-    if (response === "Declined") {
-      estUpdate.decline_reason  = declineReason ?? null
-      estUpdate.decline_comment = declineComment ?? null
-    }
-
     const [estResult, jobResult] = await Promise.all([
-      supabase.from("estimates").update(estUpdate).eq("id", est.id).select().single(),
+      supabase
+        .from("estimates")
+        .update(
+          response === "Declined"
+            ? { status: response, decline_reason: declineReason ?? null, decline_comment: declineComment ?? null }
+            : { status: response }
+        )
+        .eq("id", est.id)
+        .select()
+        .single(),
       supabase
         .from("job_requests")
         .update({ status: response === "Accepted" ? "accepted" : "declined" })

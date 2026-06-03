@@ -61,16 +61,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Update estimate and job request atomically
-  const estUpdate: Record<string, unknown> = { status: response }
-  if (response === "Declined") {
-    estUpdate.decline_reason  = declineReason  ?? null
-    estUpdate.decline_comment = declineComment ?? null
-  }
-
   const [estResult, jobResult] = await Promise.all([
     supabase
       .from("estimates")
-      .update(estUpdate)
+      .update(
+        response === "Declined"
+          ? { status: response, decline_reason: declineReason ?? null, decline_comment: declineComment ?? null }
+          : { status: response }
+      )
       .eq("id", estimateId)
       .select()
       .single(),
