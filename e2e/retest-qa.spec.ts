@@ -302,11 +302,15 @@ test.describe("Retest QA", () => {
       expect(clientShowsPaid).toBe(true)
 
       // ── Second payment attempt: should be blocked ──────────────────────────
+      // Use the guest checkout endpoint (no auth required) with the same estimate.
+      // The existing stripe-payment-flow.spec.ts test 3 also verifies 409 via the
+      // authenticated endpoint — this confirms the guest path also blocks.
       const blockResp = await page.request.post(
-        `${process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3107"}/api/stripe/create-checkout-session`,
+        `${process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3107"}/api/payments/create-guest-checkout-session`,
         {
           data: {
             estimateId: draft.id,
+            guestToken: guestRow?.token ?? "invalid",
             successUrl: "https://example.com/success",
             cancelUrl:  "https://example.com/cancel",
           },
@@ -368,7 +372,7 @@ test.describe("Retest QA", () => {
       // Fill payout and verify fee preview appears
       await dlg.getByTestId("estimate-contractor-amount-input").fill("500")
       await expect(dlg.getByText("Client total")).toBeVisible()
-      await expect(dlg.getByText(`Euroflo`)).toBeVisible()
+      await expect(dlg.getByText(/Euroflo \d+%/)).toBeVisible()
       console.log("✓ Fee breakdown preview visible after filling payout amount")
 
       // Screenshot the completed dialog
