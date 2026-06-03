@@ -158,7 +158,7 @@ function PostSubmitScreen({
   }
 
   return (
-    <div className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist/40 px-4 pb-16 pt-12">
+    <div data-testid="request-confirmed" className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist/40 px-4 pb-16 pt-12">
       <div className="mx-auto max-w-lg space-y-5">
 
         {/* Check + headline */}
