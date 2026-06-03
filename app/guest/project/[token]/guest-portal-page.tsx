@@ -15,6 +15,7 @@ import {
   PortalSkeleton,
   StatusCard,
   Timeline,
+  WorkScheduleCard,
 } from "@/components/client/portal-sections"
 import { Button } from "@/components/ui/button"
 import type { Database } from "@/lib/supabase/database.types"
@@ -176,6 +177,8 @@ export function GuestPortalPage({
       {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed") && (
         <InspectionCard job={job} onConfirm={() => void confirmInspection()} />
       )}
+
+      <WorkScheduleCard estimates={visibleEstimates} />
 
       {/* Estimates — accept/decline + pay (via guest routes) */}
       <EstimatesSection

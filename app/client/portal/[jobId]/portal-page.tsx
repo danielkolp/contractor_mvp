@@ -15,6 +15,7 @@ import {
   PortalSkeleton,
   StatusCard,
   Timeline,
+  WorkScheduleCard,
 } from "@/components/client/portal-sections"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
@@ -160,6 +161,7 @@ export function PortalPage({ jobId }: { jobId: string }) {
           {(job.status === "inspection_scheduled" || job.status === "inspection_confirmed") && (
             <InspectionCard job={job} onConfirm={() => void confirmInspection()} />
           )}
+          <WorkScheduleCard estimates={visibleEstimates} />
           <EstimatesSection
             estimates={visibleEstimates}
             onRespond={(est, r) => void respondToEstimate(est, r)}

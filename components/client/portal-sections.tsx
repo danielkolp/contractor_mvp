@@ -574,6 +574,51 @@ export function InspectionCard({
   )
 }
 
+// ── Work schedule card ────────────────────────────────────────────────────────
+
+const dtFmt = new Intl.DateTimeFormat("en-CA", {
+  weekday: "long",
+  month:   "long",
+  day:     "numeric",
+  year:    "numeric",
+  hour:    "numeric",
+  minute:  "2-digit",
+})
+
+export function WorkScheduleCard({ estimates }: { estimates: Estimate[] }) {
+  const work = estimates.find(
+    (e) =>
+      (e.scheduled_visit_type === "job_start" || e.scheduled_visit_type === "site_visit") &&
+      e.scheduled_visit_starts_at
+  )
+  if (!work) return null
+
+  const start = dtFmt.format(new Date(work.scheduled_visit_starts_at!))
+  const end   = work.scheduled_visit_ends_at
+    ? dtFmt.format(new Date(work.scheduled_visit_ends_at))
+    : null
+
+  return (
+    <div className="rounded-2xl border border-ef-200 bg-ef-mist p-5" data-testid="work-schedule-card">
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white">
+          <CalendarDays className="h-4 w-4 text-ef-ocean" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900">Work day scheduled</p>
+          <p className="mt-1 text-sm text-gray-700">{start}</p>
+          {end && <p className="mt-0.5 text-xs text-gray-500">Through {end}</p>}
+          {work.scheduled_visit_notes && (
+            <p className="mt-2 text-xs leading-relaxed text-gray-500 whitespace-pre-wrap">
+              {work.scheduled_visit_notes}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Estimates section ─────────────────────────────────────────────────────────
 
 export function EstimatesSection({
@@ -646,7 +691,7 @@ export function EstimatesSection({
             )}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="outline" size="sm" className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50" asChild>
                 <a
                   href={`/print/estimate/${est.id}`}
                   target="_blank"
@@ -677,6 +722,7 @@ export function EstimatesSection({
                     size="sm"
                     variant="outline"
                     disabled={isSaving}
+                    className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                     data-testid="estimate-decline-button"
                     onClick={() => {
                       setIsSaving(true)

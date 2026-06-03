@@ -402,6 +402,7 @@ function EstimateActionButton({
   onShareEstimate,
   onRequestDetails,
   onScheduleInspection,
+  onScheduleWork,
 }: {
   request: JobRequest
   estimate: EstimateRow | undefined
@@ -410,20 +411,27 @@ function EstimateActionButton({
   onShareEstimate: (estimate: EstimateRow, request: JobRequest) => void
   onRequestDetails: (r: JobRequest) => void
   onScheduleInspection: (r: JobRequest) => void
+  onScheduleWork: (estimate: EstimateRow) => void
 }) {
   const hasEstimate =
     request.status === "estimate_created" ||
     request.status === "accepted" ||
     request.status === "declined"
 
+  // Estimate exists in local cache — show estimate actions + schedule work
   if (estimate) {
     return (
       <>
-        <Button variant="outline" asChild>
-          <Link
-            href={`/dashboard/estimates?highlight=${estimate.id}`}
-            data-testid="job-request-view-estimate"
-          >
+        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleInspection(request)} data-testid="job-request-schedule-inspection">
+          <Calendar className="size-4" />
+          {request.status === "inspection_scheduled" || request.status === "inspection_confirmed" ? "Reschedule" : "Schedule inspection"}
+        </Button>
+        <Button variant="outline" size="sm" disabled={isSaving} onClick={() => onScheduleWork(estimate)} data-testid="job-request-schedule-work">
+          <Clock className="size-4" />
+          Schedule work
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/dashboard/estimates?highlight=${estimate.id}`} data-testid="job-request-view-estimate">
             <FileText className="size-4" />
             View estimate
           </Link>
@@ -442,6 +450,7 @@ function EstimateActionButton({
       </>
     )
   }
+
   if (hasEstimate) {
     return (
       <Button variant="outline" disabled>
@@ -480,7 +489,7 @@ function EstimateActionButton({
         data-testid="job-request-schedule-inspection"
       >
         <Calendar className="size-4" />
-        Schedule inspection
+        {request.status === "inspection_scheduled" || request.status === "inspection_confirmed" ? "Reschedule inspection" : "Schedule inspection"}
       </Button>
       <Button
         data-testid="job-request-create-estimate"
@@ -532,6 +541,14 @@ export default function ContractorJobRequestsPage() {
   const [inspectionStartTime, setInspectionStartTime] = useState("")
   const [inspectionNotes, setInspectionNotes] = useState("")
   const [isSubmittingInspection, setIsSubmittingInspection] = useState(false)
+
+  // Schedule work dialog
+  const [workEstimate, setWorkEstimate] = useState<EstimateRow | null>(null)
+  const [workDate, setWorkDate] = useState("")
+  const [workStartTime, setWorkStartTime] = useState("")
+  const [workEndTime, setWorkEndTime] = useState("")
+  const [workNotes, setWorkNotes] = useState("")
+  const [isSubmittingWork, setIsSubmittingWork] = useState(false)
 
   const estimateSubtotal = useMemo(
     () => lineItemSubtotal(estimateForm.lineItems),
@@ -816,6 +833,51 @@ export default function ContractorJobRequestsPage() {
     setInspectionStartTime("")
     setInspectionNotes("")
     toast.success("Inspection scheduled — client will be asked to confirm")
+  }
+
+  async function submitWorkSchedule() {
+    if (!workEstimate || !workDate || isSubmittingWork) return
+    setIsSubmittingWork(true)
+    const timeStr = workStartTime || "08:00"
+    const startsAt = new Date(`${workDate}T${timeStr}`).toISOString()
+    const endsAt = workEndTime
+      ? new Date(`${workDate}T${workEndTime}`).toISOString()
+      : null
+
+    const { error } = await supabase
+      .from("estimates")
+      .update({
+        scheduled_visit_type:      "job_start",
+        scheduled_visit_starts_at: startsAt,
+        scheduled_visit_ends_at:   endsAt,
+        scheduled_visit_notes:     workNotes.trim() || null,
+      })
+      .eq("id", workEstimate.id)
+
+    setIsSubmittingWork(false)
+    if (error) { toast.error(error.message); return }
+
+    // Update local estimate cache
+    setEstimateByRequestId((prev) => {
+      if (!workEstimate.job_request_id) return prev
+      return {
+        ...prev,
+        [workEstimate.job_request_id]: {
+          ...workEstimate,
+          scheduled_visit_type:      "job_start",
+          scheduled_visit_starts_at: startsAt,
+          scheduled_visit_ends_at:   endsAt,
+          scheduled_visit_notes:     workNotes.trim() || null,
+        },
+      }
+    })
+
+    setWorkEstimate(null)
+    setWorkDate("")
+    setWorkStartTime("")
+    setWorkEndTime("")
+    setWorkNotes("")
+    toast.success("Work day scheduled — client will see it in their portal")
   }
 
   async function saveEstimateFromRequest(sendToClient: boolean) {
@@ -1388,6 +1450,7 @@ export default function ContractorJobRequestsPage() {
                     }
                     onRequestDetails={(r) => { setSelectedRequest(null); setDetailsRequest(r); setDetailsMessage("") }}
                     onScheduleInspection={(r) => { setSelectedRequest(null); setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
+                    onScheduleWork={(e) => { setSelectedRequest(null); setWorkEstimate(e); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") }}
                   />
                 </div>
               </div>
@@ -1477,6 +1540,62 @@ export default function ContractorJobRequestsPage() {
             >
               {isSubmittingInspection ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
               Schedule inspection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule work dialog */}
+      <Dialog open={workEstimate !== null} onOpenChange={(open) => { if (!open) { setWorkEstimate(null); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Schedule work day</DialogTitle>
+            <DialogDescription>
+              Set the date and time when work will begin. The client will see this in their portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2">
+                <Label htmlFor="work-date">
+                  <Calendar className="mr-1 inline-block size-3.5" />
+                  Date
+                </Label>
+                <Input id="work-date" type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} disabled={isSubmittingWork} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="work-start-time">
+                  <Clock className="mr-1 inline-block size-3.5" />
+                  Start time
+                </Label>
+                <Input id="work-start-time" type="time" value={workStartTime} onChange={(e) => setWorkStartTime(e.target.value)} disabled={isSubmittingWork} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="work-end-time">End time</Label>
+                <Input id="work-end-time" type="time" value={workEndTime} onChange={(e) => setWorkEndTime(e.target.value)} disabled={isSubmittingWork} placeholder="optional" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="work-notes">Notes (optional)</Label>
+              <Textarea
+                id="work-notes"
+                value={workNotes}
+                onChange={(e) => setWorkNotes(e.target.value)}
+                placeholder="e.g. Please ensure access to the back yard. Materials will be delivered the day before."
+                className="min-h-20"
+                disabled={isSubmittingWork}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWorkEstimate(null)} disabled={isSubmittingWork}>Cancel</Button>
+            <Button
+              className="bg-ef-ocean text-white hover:bg-ef-ocean"
+              disabled={!workDate || isSubmittingWork}
+              onClick={() => void submitWorkSchedule()}
+            >
+              {isSubmittingWork ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
+              Save work day
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1613,6 +1732,7 @@ export default function ContractorJobRequestsPage() {
                             }
                             onRequestDetails={(r) => { setDetailsRequest(r); setDetailsMessage("") }}
                             onScheduleInspection={(r) => { setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
+                            onScheduleWork={(e) => { setWorkEstimate(e); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") }}
                           />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
