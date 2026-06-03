@@ -2,17 +2,6 @@
 
 import { useEffect } from "react"
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "l-mirage": {
-        size?: number | string
-        speed?: number | string
-        color?: string
-      }
-    }
-  }
-}
 
 export function Spinner({
   size = 60,
