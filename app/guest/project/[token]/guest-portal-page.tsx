@@ -14,6 +14,7 @@ import {
   InvoicesSection,
   MoreDetailsCard,
   PortalSkeleton,
+  RatingCard,
   StatusCard,
   Timeline,
   WorkScheduleCard,

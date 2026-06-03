@@ -18,11 +18,13 @@ import {
   MapPin,
   Printer,
   Receipt,
+  Star,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { money } from "@/lib/format-money"
+import { resolveBalanceCents, resolveDepositCents } from "@/lib/pricing"
 import type { Database } from "@/lib/supabase/database.types"
 
 export type JobRequest    = Database["public"]["Tables"]["job_requests"]["Row"]
@@ -206,8 +208,10 @@ export function FlowBar({
   const isPaid =
     invoices.some((inv) => inv.status === "Paid") ||
     estimates.some(
-      (e) =>
-        (e as Estimate & { payment_status?: string | null }).payment_status === "paid"
+      (e) => {
+        const s = (e as StripeEstimate).payment_status
+        return s === "paid" || s === "deposit_paid"
+      }
     )
   const complete = [true, hasEstimate, hasApproved, hasInvoice, isPaid]
 
@@ -371,6 +375,16 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
 
 // ── Pay button ────────────────────────────────────────────────────────────────
 
+type StripeEstimate = Estimate & {
+  payment_status?: string | null
+  client_total_cents?: number | null
+  platform_fee_cents?: number | null
+  gst_cents?: number | null
+  deposit_amount_cents?: number | null
+  deposit_percentage?: number | null
+  deposit_paid_at?: string | null
+}
+
 export function PayButton({
   estimate,
   guestToken,
@@ -380,27 +394,31 @@ export function PayButton({
 }) {
   const [isLoading, setIsLoading] = useState(false)
 
-  const stripeEst        = estimate as Estimate & { client_total_cents?: number | null; payment_status?: string | null }
-  const clientTotalCents = stripeEst.client_total_cents
-  const paymentStatus    = stripeEst.payment_status ?? "unpaid"
+  const stripeEst     = estimate as StripeEstimate
+  const clientTotal   = stripeEst.client_total_cents ?? 0
+  const paymentStatus = stripeEst.payment_status ?? "unpaid"
 
-  if (!clientTotalCents || clientTotalCents <= 0) return null
+  if (!clientTotal || clientTotal <= 0) return null
+
+  const depositCents = resolveDepositCents(
+    stripeEst.deposit_amount_cents,
+    stripeEst.deposit_percentage,
+    clientTotal
+  )
+  const isDepositPaid = paymentStatus === "deposit_paid"
 
   if (paymentStatus === "paid") {
     return (
       <div className="flex items-center gap-1.5 rounded-full bg-ef-mist px-3 py-1.5 text-sm font-semibold text-ef-ocean">
         <CheckCircle2 className="h-3.5 w-3.5" />
-        Paid
+        Paid in full
       </div>
     )
   }
 
-  const label = new Intl.NumberFormat("en-CA", {
-    style:                 "currency",
-    currency:              "CAD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(clientTotalCents / 100)
+  if (isDepositPaid) return null   // BalanceButton handles this state
+
+  const depositLabel = money.format(depositCents / 100)
 
   async function handlePay() {
     setIsLoading(true)
@@ -444,7 +462,79 @@ export function PayButton({
       ) : (
         <CreditCard className="h-3.5 w-3.5" />
       )}
-      {isLoading ? "Redirecting…" : `Pay ${label}`}
+      {isLoading ? "Redirecting…" : `Pay deposit ${depositLabel}`}
+    </Button>
+  )
+}
+
+// ── Balance button ────────────────────────────────────────────────────────────
+
+export function BalanceButton({
+  estimate,
+  guestToken,
+}: {
+  estimate:   Estimate
+  guestToken?: string
+}) {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const stripeEst    = estimate as StripeEstimate
+  const clientTotal  = stripeEst.client_total_cents ?? 0
+  const payStatus    = stripeEst.payment_status ?? "unpaid"
+
+  if (payStatus !== "deposit_paid") return null
+  if (!clientTotal) return null
+
+  const balanceCents = resolveBalanceCents(
+    clientTotal,
+    stripeEst.deposit_amount_cents,
+    stripeEst.deposit_percentage
+  )
+  if (balanceCents <= 0) return null
+
+  const balanceLabel = money.format(balanceCents / 100)
+
+  async function handlePayBalance() {
+    setIsLoading(true)
+    try {
+      const endpoint = guestToken
+        ? "/api/payments/create-guest-checkout-session"
+        : "/api/payments/create-checkout-session"
+      const body = guestToken
+        ? JSON.stringify({ estimateId: estimate.id, guestToken, paymentType: "balance" })
+        : JSON.stringify({ estimateId: estimate.id, paymentType: "balance" })
+      const res  = await fetch(endpoint, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      })
+      const data = await res.json() as { url?: string; error?: string }
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Could not start balance payment. Please try again.")
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      toast.error("Could not reach the payment server. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <Button
+      size="sm"
+      className="bg-ef-ocean text-white hover:bg-ef-ocean"
+      disabled={isLoading}
+      data-testid="estimate-pay-balance-button"
+      onClick={() => void handlePayBalance()}
+    >
+      {isLoading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <CreditCard className="h-3.5 w-3.5" />
+      )}
+      {isLoading ? "Redirecting…" : `Pay remaining ${balanceLabel}`}
     </Button>
   )
 }
@@ -764,10 +854,18 @@ export function EstimatesSection({
 
         const isAccepted  = est.status === "Accepted" || est.status === "Won"
         const isDeclined  = est.status === "Declined" || est.status === "Lost"
-        const stripeEst   = est as Estimate & { payment_status?: string | null }
-        const isPaid      = stripeEst.payment_status === "paid"
+        const stripeEst   = est as StripeEstimate
+        const payStatus   = stripeEst.payment_status ?? "unpaid"
+        const isPaid      = payStatus === "paid"
+        const isDepPaid   = payStatus === "deposit_paid"
         const extEst      = est as Estimate & { decline_reason?: string | null; decline_comment?: string | null }
         const isDeclining = decliningEst?.id === est.id
+
+        // Pricing breakdown for display
+        const clientTotal      = stripeEst.client_total_cents ?? 0
+        const depositCents     = clientTotal > 0 ? resolveDepositCents(stripeEst.deposit_amount_cents, stripeEst.deposit_percentage, clientTotal) : 0
+        const remainingCents   = clientTotal > 0 ? resolveBalanceCents(clientTotal, stripeEst.deposit_amount_cents, stripeEst.deposit_percentage) : 0
+        const hasOnlinePayment = clientTotal > 0
 
         return (
           <div
@@ -780,8 +878,37 @@ export function EstimatesSection({
               <div>
                 <p className="font-semibold text-gray-900">{est.estimate_number}</p>
                 <p className="mt-1 text-2xl font-bold text-ef-ocean">
-                  {money.format(est.amount)}
+                  {money.format(hasOnlinePayment ? clientTotal / 100 : est.amount)}
                 </p>
+                {hasOnlinePayment && !isPaid && !isDepPaid && (
+                  <div className="mt-1.5 space-y-0.5">
+                    <p className="text-xs text-gray-500">
+                      Deposit due: <span className="font-semibold text-ef-ocean">{money.format(depositCents / 100)}</span>
+                    </p>
+                    {remainingCents > 0 && (
+                      <p className="text-xs text-gray-400">
+                        Remaining on completion: {money.format(remainingCents / 100)}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {isDepPaid && (
+                  <div className="mt-1.5 space-y-0.5">
+                    {stripeEst.deposit_paid_at && (
+                      <p className="text-xs text-amber-600 font-medium">
+                        Deposit paid {new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric" }).format(new Date(stripeEst.deposit_paid_at))}
+                      </p>
+                    )}
+                    {remainingCents > 0 && (
+                      <p className="text-xs text-gray-500">
+                        Remaining balance: <span className="font-semibold text-gray-800">{money.format(remainingCents / 100)}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+                {isPaid && hasOnlinePayment && (
+                  <p className="mt-1 text-xs text-green-600 font-medium">Paid in full</p>
+                )}
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <span
@@ -797,7 +924,12 @@ export function EstimatesSection({
                 </span>
                 {isPaid && (
                   <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
-                    Paid
+                    Paid in full
+                  </span>
+                )}
+                {isDepPaid && (
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    Deposit paid
                   </span>
                 )}
               </div>
@@ -917,14 +1049,134 @@ export function EstimatesSection({
                   </>
                 )}
 
-                {isAccepted && !isPaid && (
+                {isAccepted && !isPaid && !isDepPaid && (
                   <PayButton estimate={est} guestToken={guestToken} />
+                )}
+                {isAccepted && isDepPaid && (
+                  <BalanceButton estimate={est} guestToken={guestToken} />
                 )}
               </div>
             )}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Rating card ───────────────────────────────────────────────────────────────
+
+export function RatingCard({
+  estimate,
+  jobRequestId,
+  contractorId,
+  existingRating,
+}: {
+  estimate:       Estimate
+  jobRequestId:   string
+  contractorId:   string
+  existingRating?: number | null
+}) {
+  const stripeEst   = estimate as StripeEstimate
+  const payStatus   = stripeEst.payment_status ?? "unpaid"
+  const isEligible  = payStatus === "paid" || payStatus === "deposit_paid"
+
+  const [selected,  setSelected]  = useState<number>(existingRating ?? 0)
+  const [comment,   setComment]   = useState("")
+  const [submitted, setSubmitted] = useState(!!existingRating)
+  const [isSaving,  setIsSaving]  = useState(false)
+
+  if (!isEligible) return null
+  if (submitted) {
+    return (
+      <div className="rounded-2xl border border-ef-200 bg-ef-mist p-5">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-ef-ocean" />
+          <p className="text-sm font-semibold text-ef-ocean">
+            Thank you for your rating!
+          </p>
+        </div>
+        <div className="mt-2 flex gap-1">
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Star
+              key={s}
+              className={`h-4 w-4 ${s <= selected ? "fill-ef-ocean text-ef-ocean" : "text-gray-300"}`}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  async function submitRating() {
+    if (selected < 1 || isSaving) return
+    setIsSaving(true)
+    try {
+      const res = await fetch("/api/reviews", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          estimateId:   estimate.id,
+          jobRequestId,
+          contractorId,
+          rating:       selected,
+          comment:      comment.trim() || null,
+        }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not submit rating.")
+        return
+      }
+      setSubmitted(true)
+      toast.success("Rating submitted — thank you!")
+    } catch {
+      toast.error("Could not reach the server. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5" data-testid="rating-card">
+      <p className="text-sm font-bold text-gray-900">Rate your contractor</p>
+      <p className="mt-0.5 text-xs text-gray-500">How was your experience?</p>
+      <div className="mt-3 flex gap-1.5">
+        {[1, 2, 3, 4, 5].map((s) => (
+          <button
+            key={s}
+            type="button"
+            data-testid={`star-${s}`}
+            onClick={() => setSelected(s)}
+            className="rounded p-0.5 transition hover:scale-110 focus:outline-none"
+            aria-label={`${s} star${s > 1 ? "s" : ""}`}
+          >
+            <Star
+              className={`h-6 w-6 transition ${
+                s <= selected ? "fill-ef-ocean text-ef-ocean" : "text-gray-300 hover:text-ef-sky"
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Optional feedback for your contractor…"
+        rows={2}
+        className="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ef-sky/50"
+        disabled={isSaving}
+      />
+      <Button
+        size="sm"
+        className="mt-2 bg-ef-ocean text-white hover:bg-ef-ocean"
+        disabled={selected < 1 || isSaving}
+        data-testid="submit-rating-button"
+        onClick={() => void submitRating()}
+      >
+        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />}
+        Submit rating
+      </Button>
     </div>
   )
 }

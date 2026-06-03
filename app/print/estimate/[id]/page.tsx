@@ -172,6 +172,10 @@ export default async function EstimatePrintPage({
     client_total_cents?: number | null
     contractor_amount_cents?: number | null
     platform_fee_cents?: number | null
+    gst_cents?: number | null
+    deposit_amount_cents?: number | null
+    deposit_percentage?: number | null
+    deposit_paid_at?: string | null
     payment_status?: string | null
   }
   const clientTotalFromStripe = stripeEst.client_total_cents
@@ -181,9 +185,20 @@ export default async function EstimatePrintPage({
   const total = clientTotalFromStripe
     ?? (hasLineItems ? subtotal + totalTax : estimate.amount)
 
-  const depositAmt  = total * 0.30
-  const progressAmt = total * 0.40
-  const finalAmt    = total * 0.30
+  // Resolve deposit for the payment schedule
+  const hasStripePricing = !!(stripeEst.contractor_amount_cents && stripeEst.platform_fee_cents && stripeEst.client_total_cents)
+  let depositDisplayAmt = 0
+  let remainingDisplayAmt = 0
+  if (hasStripePricing && stripeEst.client_total_cents) {
+    if (stripeEst.deposit_amount_cents && stripeEst.deposit_amount_cents > 0) {
+      depositDisplayAmt = stripeEst.deposit_amount_cents / 100
+    } else if (stripeEst.deposit_percentage && stripeEst.deposit_percentage > 0) {
+      depositDisplayAmt = (stripeEst.client_total_cents * stripeEst.deposit_percentage) / 10000
+    } else {
+      depositDisplayAmt = stripeEst.client_total_cents * 0.3 / 100
+    }
+    remainingDisplayAmt = total - depositDisplayAmt
+  }
 
   const companyName = profile?.company_name || profile?.owner_name || "Your Company"
   const ownerName   = profile?.owner_name || ""
@@ -196,9 +211,10 @@ export default async function EstimatePrintPage({
   const workAddress = workAddressFor(estimateDetails, jobDetails)
   const scheduledVisit = scheduledVisitFor(estimateDetails, jobDetails)
 
-  const isAccepted  = estimate.status === "Won" || estimate.status === "Accepted"
-  const isPaid      = stripeEst.payment_status === "paid"
-  const isContractor = role !== "client"
+  const isAccepted    = estimate.status === "Won" || estimate.status === "Accepted"
+  const isPaid        = stripeEst.payment_status === "paid"
+  const isDepositPaid = stripeEst.payment_status === "deposit_paid"
+  const isContractor  = role !== "client"
 
   return (
     <>
@@ -357,23 +373,51 @@ export default async function EstimatePrintPage({
             )}
           </div>
 
-          {/* ── Payment schedule + Notes side by side ── */}
+          {/* ── Price breakdown + Notes side by side ── */}
           <div className="print-avoid-break border-t border-zinc-200 grid grid-cols-[1fr_auto] gap-px bg-zinc-200">
             <div className="bg-white px-8 py-4 print:py-3">
-              <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">Payment Schedule</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Deposit",          sub: "On acceptance", pct: "30%", amt: depositAmt  },
-                  { label: "Progress Payment", sub: "At midpoint",   pct: "40%", amt: progressAmt },
-                  { label: "Final Payment",    sub: "On completion", pct: "30%", amt: finalAmt    },
-                ].map(({ label, sub, pct, amt }) => (
-                  <div key={label} className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5">
-                    <p className="text-[0.6rem] font-bold text-zinc-600">{label}</p>
-                    <p className="text-[0.55rem] text-zinc-400 mt-0.5">{sub} · {pct}</p>
-                    <p className="mt-1.5 text-sm font-black text-ef-ocean tabular-nums">{money.format(amt)}</p>
+              {hasStripePricing && stripeEst.contractor_amount_cents && stripeEst.platform_fee_cents && stripeEst.client_total_cents ? (
+                <>
+                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">Price Breakdown</p>
+                  <div className="w-full max-w-xs space-y-1.5">
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>Contractor subtotal</span>
+                      <span className="tabular-nums font-medium text-zinc-700">{money.format(stripeEst.contractor_amount_cents / 100)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>Euroflo platform fee (15%)</span>
+                      <span className="tabular-nums font-medium text-zinc-700">{money.format(stripeEst.platform_fee_cents / 100)}</span>
+                    </div>
+                    {(stripeEst.gst_cents ?? 0) > 0 && (
+                      <div className="flex justify-between text-xs text-zinc-500">
+                        <span>GST (5%)</span>
+                        <span className="tabular-nums font-medium text-zinc-700">{money.format((stripeEst.gst_cents ?? 0) / 100)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-xs font-bold text-zinc-900 border-t border-zinc-200 pt-1.5">
+                      <span>Total</span>
+                      <span className="tabular-nums text-ef-ocean">{money.format(stripeEst.client_total_cents / 100)}</span>
+                    </div>
+                    {depositDisplayAmt > 0 && (
+                      <>
+                        <div className="flex justify-between text-xs text-zinc-500 pt-1">
+                          <span>Deposit due now</span>
+                          <span className="tabular-nums font-semibold text-ef-ocean">{money.format(depositDisplayAmt)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-zinc-500">
+                          <span>Remaining balance</span>
+                          <span className="tabular-nums font-medium text-zinc-700">{money.format(remainingDisplayAmt)}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
-                ))}
-              </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">Payment</p>
+                  <p className="text-xs text-zinc-500">Full amount due upon completion unless otherwise arranged.</p>
+                </>
+              )}
             </div>
             {estimate.notes && (
               <div className="bg-zinc-50 px-8 py-4 min-w-[220px] print:py-3">
@@ -405,9 +449,14 @@ export default async function EstimatePrintPage({
           {/* ── Authorization ── */}
           <div className="print-avoid-break border-t border-zinc-200 px-8 py-5 print:py-3">
             <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-3">Authorization</p>
-            {isAccepted && !isPaid && (
+            {isAccepted && !isPaid && !isDepositPaid && (
               <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-2">
                 <p className="text-xs font-semibold text-emerald-700">✓ This estimate has been accepted.</p>
+              </div>
+            )}
+            {isDepositPaid && !isPaid && (
+              <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-4 py-2">
+                <p className="text-xs font-semibold text-amber-700">✓ Deposit received. Remaining balance due on completion.</p>
               </div>
             )}
             {isPaid && (
@@ -419,9 +468,12 @@ export default async function EstimatePrintPage({
             {isContractor && stripeEst.contractor_amount_cents && stripeEst.platform_fee_cents && (
               <div className="mb-3 rounded border border-zinc-200 bg-zinc-50 px-4 py-2">
                 <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Payment breakdown (contractor view)</p>
-                <div className="grid grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
                   <div><span className="text-zinc-400">Your payout: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.contractor_amount_cents / 100)}</span></div>
-                  <div><span className="text-zinc-400">Euroflo fee: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.platform_fee_cents / 100)}</span></div>
+                  <div><span className="text-zinc-400">Platform fee 15%: </span><span className="font-semibold text-zinc-800">{money.format(stripeEst.platform_fee_cents / 100)}</span></div>
+                  {(stripeEst.gst_cents ?? 0) > 0 && (
+                    <div><span className="text-zinc-400">GST 5%: </span><span className="font-semibold text-zinc-800">{money.format((stripeEst.gst_cents ?? 0) / 100)}</span></div>
+                  )}
                   <div><span className="text-zinc-400">Client total: </span><span className="font-semibold text-ef-ocean">{money.format(total)}</span></div>
                 </div>
               </div>

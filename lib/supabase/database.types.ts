@@ -175,6 +175,11 @@ export type Database = {
           paid_at: string | null
           stripe_checkout_session_id: string | null
           stripe_payment_intent_id: string | null
+          gst_cents: number | null
+          deposit_amount_cents: number | null
+          deposit_percentage: number | null
+          deposit_paid_at: string | null
+          deposit_payment_intent_id: string | null
           created_at: string
           updated_at: string
         }
@@ -204,6 +209,11 @@ export type Database = {
           contractor_amount_cents?: number | null
           platform_fee_cents?: number | null
           client_total_cents?: number | null
+          gst_cents?: number | null
+          deposit_amount_cents?: number | null
+          deposit_percentage?: number | null
+          deposit_paid_at?: string | null
+          deposit_payment_intent_id?: string | null
           payment_status?: string
           paid_at?: string | null
           stripe_checkout_session_id?: string | null
@@ -237,12 +247,50 @@ export type Database = {
           contractor_amount_cents?: number | null
           platform_fee_cents?: number | null
           client_total_cents?: number | null
+          gst_cents?: number | null
+          deposit_amount_cents?: number | null
+          deposit_percentage?: number | null
+          deposit_paid_at?: string | null
+          deposit_payment_intent_id?: string | null
           payment_status?: string
           paid_at?: string | null
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
           created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      contractor_reviews: {
+        Row: {
+          id: string
+          contractor_id: string
+          client_id: string
+          job_request_id: string
+          estimate_id: string | null
+          rating: number
+          comment: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          contractor_id: string
+          client_id: string
+          job_request_id: string
+          estimate_id?: string | null
+          rating: number
+          comment?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          contractor_id?: string
+          client_id?: string
+          job_request_id?: string
+          estimate_id?: string | null
+          rating?: number
+          comment?: string | null
+          created_at?: string
         }
         Relationships: []
       }

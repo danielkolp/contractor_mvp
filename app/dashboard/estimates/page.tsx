@@ -59,6 +59,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { money as moneyFormatter } from "@/lib/format-money"
+import { computePricing, resolveDepositCents } from "@/lib/pricing"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -162,6 +163,7 @@ type EstimateForm = {
   lineItems: LineItem[]
   taxLines: TaxLine[]
   contractorAmountCents: string
+  depositAmountCents: string
 }
 
 const estimateStatuses: EstimateStatus[] = [
@@ -277,6 +279,7 @@ const initialForm: EstimateForm = {
   lineItems: [],
   taxLines: [],
   contractorAmountCents: "",
+  depositAmountCents: "",
 }
 
 function formFromEstimate(estimate: EstimateRow): EstimateForm {
@@ -301,6 +304,9 @@ function formFromEstimate(estimate: EstimateRow): EstimateForm {
     taxLines,
     contractorAmountCents: estimate.contractor_amount_cents
       ? String(estimate.contractor_amount_cents / 100)
+      : "",
+    depositAmountCents: (estimate as EstimateRow & { deposit_amount_cents?: number | null }).deposit_amount_cents
+      ? String(((estimate as EstimateRow & { deposit_amount_cents?: number | null }).deposit_amount_cents ?? 0) / 100)
       : "",
   }
 }
@@ -337,14 +343,19 @@ export default function EstimatesPage() {
   const computedTotal = useMemo(() => subtotal + totalTaxAmount, [subtotal, totalTaxAmount])
   const hasLineItems = form.lineItems.length > 0
 
-  // ─── Stripe payout breakdown ──────────────────────────────────────────────────
-  const feePercent = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? 15)
+  // ─── Stripe payout breakdown via shared pricing helper ───────────────────────
   const contractorDollars = parseFloat(form.contractorAmountCents) || 0
-  const contractorCents   = Math.round(contractorDollars * 100)
-  const platformFeeCents  = contractorCents > 0
-    ? Math.round(contractorCents * (feePercent / 100))
-    : 0
-  const clientTotalCents  = contractorCents + platformFeeCents
+  const rawContractorCents = Math.round(contractorDollars * 100)
+  const rawDepositCents    = Math.round((parseFloat(form.depositAmountCents) || 0) * 100)
+  const pricing = rawContractorCents > 0
+    ? computePricing(rawContractorCents, rawDepositCents > 0 ? rawDepositCents : null)
+    : null
+  const contractorCents   = pricing?.contractorSubtotalCents ?? 0
+  const platformFeeCents  = pricing?.platformFeeCents ?? 0
+  const gstCents          = pricing?.gstCents ?? 0
+  const clientTotalCents  = pricing?.clientTotalCents ?? 0
+  const depositCents      = pricing?.depositCents ?? 0
+  const remainingCents    = pricing?.remainingBalanceCents ?? 0
   const hasStripePayment  = contractorCents > 0
 
   // ─── Data loading ────────────────────────────────────────────────────────────
@@ -562,9 +573,11 @@ export default function EstimatesPage() {
       line_items: serializedItems,
       tax_rate: 0,
       tax_lines: serializedTaxLines,
-      contractor_amount_cents: hasStripePayment ? contractorCents    : null,
-      platform_fee_cents:      hasStripePayment ? platformFeeCents   : null,
-      client_total_cents:      hasStripePayment ? clientTotalCents   : null,
+      contractor_amount_cents: hasStripePayment ? contractorCents  : null,
+      platform_fee_cents:      hasStripePayment ? platformFeeCents : null,
+      gst_cents:               hasStripePayment ? gstCents         : null,
+      client_total_cents:      hasStripePayment ? clientTotalCents : null,
+      deposit_amount_cents:    hasStripePayment && depositCents > 0 ? depositCents : null,
     }
 
     if (editingEstimate) {
@@ -582,7 +595,9 @@ export default function EstimatesPage() {
         tax_lines: payload.tax_lines,
         contractor_amount_cents: payload.contractor_amount_cents,
         platform_fee_cents:      payload.platform_fee_cents,
+        gst_cents:               payload.gst_cents,
         client_total_cents:      payload.client_total_cents,
+        deposit_amount_cents:    payload.deposit_amount_cents,
       }
       const { data, error } = await supabase
         .from("estimates")
@@ -1112,37 +1127,58 @@ export default function EstimatesPage() {
             </div>
 
             {/* ── Online Payment (Euroflo) ── */}
-            <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-4">
+            <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4">
               <div>
                 <p className="text-sm font-semibold">Online payment via Euroflo</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Enter your desired payout. Euroflo adds a {feePercent}% platform fee on top — the
-                  client sees only their total. Leave blank to skip online payment for this estimate.
+                  Enter your desired payout. Euroflo adds a 15% platform fee + 5% GST.
+                  Leave blank to skip online payment for this estimate.
                 </p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="contractor-payout">Your payout (CAD)</Label>
-                <Input
-                  id="contractor-payout"
-                  value={form.contractorAmountCents}
-                  onChange={(e) => updateForm("contractorAmountCents", e.target.value)}
-                  placeholder="10000.00"
-                  type="number"
-                  min="0.50"
-                  step="0.01"
-                  disabled={isSaving}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="contractor-payout">Your payout (CAD)</Label>
+                  <Input
+                    id="contractor-payout"
+                    value={form.contractorAmountCents}
+                    onChange={(e) => updateForm("contractorAmountCents", e.target.value)}
+                    placeholder="10000.00"
+                    type="number"
+                    min="0.50"
+                    step="0.01"
+                    disabled={isSaving}
+                  />
+                </div>
+                {hasStripePayment && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="deposit-amount">Deposit due from client (CAD)</Label>
+                    <Input
+                      id="deposit-amount"
+                      data-testid="estimate-deposit-amount-input"
+                      value={form.depositAmountCents}
+                      onChange={(e) => updateForm("depositAmountCents", e.target.value)}
+                      placeholder={moneyFormatter.format(depositCents / 100).replace("$", "")}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      disabled={isSaving}
+                    />
+                  </div>
+                )}
               </div>
               {hasStripePayment && (
-                <div className="grid grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-3">
                   {[
-                    { label: "Your payout",   value: moneyFormatter.format(contractorCents / 100) },
-                    { label: `Euroflo ${feePercent}%`, value: moneyFormatter.format(platformFeeCents / 100) },
-                    { label: "Client total",  value: moneyFormatter.format(clientTotalCents / 100) },
+                    { label: "Your payout",       value: moneyFormatter.format(contractorCents / 100) },
+                    { label: "Platform fee 15%",  value: moneyFormatter.format(platformFeeCents / 100) },
+                    { label: "GST 5%",            value: moneyFormatter.format(gstCents / 100) },
+                    { label: "Client total",      value: moneyFormatter.format(clientTotalCents / 100) },
+                    { label: "Deposit due",       value: moneyFormatter.format(depositCents / 100) },
+                    { label: "Remaining balance", value: moneyFormatter.format(remainingCents / 100) },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded border border-border bg-background px-3 py-2 text-center">
                       <p className="text-[0.6rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
-                      <p className="mt-0.5 text-sm font-bold tabular-nums">{value}</p>
+                      <p className="mt-0.5 text-sm font-bold tabular-nums" data-testid={label === "Client total" ? "estimate-client-total" : undefined}>{value}</p>
                     </div>
                   ))}
                 </div>
@@ -1270,7 +1306,13 @@ export default function EstimatesPage() {
                               {estimate.status}
                             </Badge>
                             {estimate.payment_status === "paid" && (
-                              <Badge variant="success">Paid</Badge>
+                              <Badge variant="success" data-testid="payment-badge-paid">Paid</Badge>
+                            )}
+                            {estimate.payment_status === "deposit_paid" && (
+                              <Badge variant="warning" data-testid="payment-badge-deposit-paid">Deposit paid</Badge>
+                            )}
+                            {estimate.payment_status === "balance_checkout_created" && (
+                              <Badge variant="outline" data-testid="payment-badge-balance-pending">Balance pending</Badge>
                             )}
                             {estimate.payment_status === "checkout_created" && (
                               <Badge variant="outline">Checkout pending</Badge>

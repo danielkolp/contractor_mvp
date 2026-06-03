@@ -14,6 +14,7 @@ import {
   InvoicesSection,
   MoreDetailsCard,
   PortalSkeleton,
+  RatingCard,
   StatusCard,
   Timeline,
   WorkScheduleCard,
@@ -153,6 +154,11 @@ export function PortalPage({ jobId }: { jobId: string }) {
   const visibleEstimates = estimates.filter((e) => e.status !== "Draft")
   const hasEstimate      = visibleEstimates.length > 0
 
+  const paidEstimate = visibleEstimates.find(
+    (e) => e.payment_status === "paid" || e.payment_status === "deposit_paid"
+  )
+  const contractorId = job?.contractor_id ?? null
+
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6 sm:px-6 sm:py-8">
       <div>
@@ -194,6 +200,13 @@ export function PortalPage({ jobId }: { jobId: string }) {
             estimates={visibleEstimates}
             onRespond={(est, r, reason, comment) => void respondToEstimate(est, r, reason, comment)}
           />
+          {paidEstimate && contractorId && (
+            <RatingCard
+              estimate={paidEstimate}
+              jobRequestId={jobId}
+              contractorId={contractorId}
+            />
+          )}
           <InvoicesSection invoices={invoices} />
         </>
       )}

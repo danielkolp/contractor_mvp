@@ -106,8 +106,9 @@ async function handleCheckoutSuccess(
   session: Stripe.Checkout.Session,
   service: ServiceClient
 ) {
-  const estimateId = session.metadata?.estimate_id
-  const sessionId  = session.id
+  const estimateId   = session.metadata?.estimate_id
+  const sessionId    = session.id
+  const isFullPayment = session.metadata?.is_full_payment === "true"
 
   const paymentIntentId =
     typeof session.payment_intent === "string"
@@ -121,22 +122,35 @@ async function handleCheckoutSuccess(
 
   const now = new Date().toISOString()
 
-  // Update estimate
-  await service
-    .from("estimates")
-    .update({
-      payment_status:           "paid",
-      paid_at:                  now,
-      stripe_payment_intent_id: paymentIntentId,
-    })
-    .eq("id", estimateId)
+  if (isFullPayment) {
+    // Full payment — mark estimate paid
+    await service
+      .from("estimates")
+      .update({
+        payment_status:           "paid",
+        paid_at:                  now,
+        stripe_payment_intent_id: paymentIntentId,
+      })
+      .eq("id", estimateId)
+  } else {
+    // Deposit only — mark deposit paid, leave room for remaining balance
+    await service
+      .from("estimates")
+      .update({
+        payment_status:              "deposit_paid",
+        deposit_paid_at:             now,
+        deposit_payment_intent_id:   paymentIntentId,
+        stripe_payment_intent_id:    paymentIntentId,
+      })
+      .eq("id", estimateId)
+  }
 
   // Update payment record
   await service
     .from("payments")
     .update({
-      status:                  "paid",
-      paid_at:                 now,
+      status:                   isFullPayment ? "paid" : "deposit_paid",
+      paid_at:                  now,
       stripe_payment_intent_id: paymentIntentId,
     })
     .eq("stripe_checkout_session_id", sessionId)
@@ -149,12 +163,17 @@ async function handleCheckoutFailed(
   session: Stripe.Checkout.Session,
   service: ServiceClient
 ) {
-  const estimateId = session.metadata?.estimate_id
+  const estimateId  = session.metadata?.estimate_id
+  const paymentType = session.metadata?.payment_type
   if (!estimateId) return
+
+  // Balance payment failed → restore deposit_paid so client can retry
+  // Deposit payment failed → mark as failed
+  const estimateRevertStatus = paymentType === "balance" ? "deposit_paid" : "failed"
 
   await service
     .from("estimates")
-    .update({ payment_status: "failed" })
+    .update({ payment_status: estimateRevertStatus })
     .eq("id", estimateId)
 
   await service
@@ -167,26 +186,40 @@ async function handlePaymentIntentSucceeded(
   intent: Stripe.PaymentIntent,
   service: ServiceClient
 ) {
-  const estimateId = intent.metadata?.estimate_id
+  const estimateId   = intent.metadata?.estimate_id
+  const isFullPayment = intent.metadata?.is_full_payment === "true"
   if (!estimateId) return
 
   const now = new Date().toISOString()
 
-  await service
-    .from("estimates")
-    .update({
-      payment_status:           "paid",
-      paid_at:                  now,
-      stripe_payment_intent_id: intent.id,
-    })
-    .eq("id", estimateId)
-    .neq("payment_status", "paid") // avoid overwriting already-set paid records
+  if (isFullPayment) {
+    await service
+      .from("estimates")
+      .update({
+        payment_status:           "paid",
+        paid_at:                  now,
+        stripe_payment_intent_id: intent.id,
+      })
+      .eq("id", estimateId)
+      .not("payment_status", "in", '("paid")')
+  } else {
+    await service
+      .from("estimates")
+      .update({
+        payment_status:            "deposit_paid",
+        deposit_paid_at:           now,
+        deposit_payment_intent_id: intent.id,
+        stripe_payment_intent_id:  intent.id,
+      })
+      .eq("id", estimateId)
+      .not("payment_status", "in", '("paid","deposit_paid")')
+  }
 
   await service
     .from("payments")
     .update({
-      status:                  "paid",
-      paid_at:                 now,
+      status:                   isFullPayment ? "paid" : "deposit_paid",
+      paid_at:                  now,
       stripe_payment_intent_id: intent.id,
     })
     .eq("stripe_payment_intent_id", intent.id)
@@ -196,14 +229,18 @@ async function handlePaymentIntentFailed(
   intent: Stripe.PaymentIntent,
   service: ServiceClient
 ) {
-  const estimateId = intent.metadata?.estimate_id
+  const estimateId  = intent.metadata?.estimate_id
+  const paymentType = intent.metadata?.payment_type
   if (!estimateId) return
+
+  // Balance payment failed → restore deposit_paid; deposit failed → mark failed
+  const revertStatus = paymentType === "balance" ? "deposit_paid" : "failed"
 
   await service
     .from("estimates")
-    .update({ payment_status: "failed" })
+    .update({ payment_status: revertStatus })
     .eq("id", estimateId)
-    .neq("payment_status", "paid")
+    .not("payment_status", "in", '("paid")')
 
   await service
     .from("payments")

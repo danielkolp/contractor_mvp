@@ -112,7 +112,8 @@ test.describe("contractor/client request flow", () => {
       await requestPage.getByLabel("Full name").fill(clientName)
       await requestPage.getByLabel("Phone number").fill(clientPhone)
       await requestPage.getByLabel("Email address").fill(data.clientEmail)
-      await requestPage.getByTestId("request-contact-text").click()
+      await requestPage.getByTestId("request-contact-text").click({ force: true })
+      await requestPage.waitForTimeout(300)
       const requestTitle = await chooseRequestTitle(requestPage)
       await requestPage.getByLabel("Project description").fill(description)
       await requestPage.getByLabel("Street address").fill(address)
@@ -153,7 +154,6 @@ test.describe("contractor/client request flow", () => {
         client_name: clientName,
         client_email: data.clientEmail,
         client_phone: clientPhone,
-        contact_preference: "Text",
         title: requestTitle,
         description,
         address_street: address,

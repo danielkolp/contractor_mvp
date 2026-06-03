@@ -56,6 +56,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { money } from "@/lib/format-money"
+import { computePricing } from "@/lib/pricing"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -90,6 +91,7 @@ type EstimateDraftForm = {
   taxLines: EstimateTaxLine[]
   billingType: "flat_rate" | "hourly"
   contractorAmount: string
+  depositAmount: string
 }
 
 const emptyEstimateDraftForm: EstimateDraftForm = {
@@ -103,6 +105,7 @@ const emptyEstimateDraftForm: EstimateDraftForm = {
   taxLines: [],
   billingType: "flat_rate",
   contractorAmount: "",
+  depositAmount: "",
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
@@ -668,12 +671,19 @@ export default function ContractorJobRequestsPage() {
     ? estimateSubtotal + estimateTaxTotal
     : parseAmount(estimateForm.flatAmount)
 
-  // ── Stripe payout derivations (same logic as /dashboard/estimates) ──────────
-  const feePercent        = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? 15)
-  const contractorCents   = Math.round((parseFloat(estimateForm.contractorAmount) || 0) * 100)
-  const platformFeeCents  = contractorCents > 0 ? Math.round(contractorCents * (feePercent / 100)) : 0
-  const clientTotalCents  = contractorCents + platformFeeCents
-  const hasStripePayment  = contractorCents > 0
+  // ── Stripe payout derivations via shared pricing helper ──────────────────────
+  const rawContractorCents = Math.round((parseFloat(estimateForm.contractorAmount) || 0) * 100)
+  const rawDepositCents    = Math.round((parseFloat(estimateForm.depositAmount) || 0) * 100)
+  const pricing = rawContractorCents > 0
+    ? computePricing(rawContractorCents, rawDepositCents > 0 ? rawDepositCents : null)
+    : null
+  const contractorCents  = pricing?.contractorSubtotalCents ?? 0
+  const platformFeeCents = pricing?.platformFeeCents ?? 0
+  const gstCents         = pricing?.gstCents ?? 0
+  const clientTotalCents = pricing?.clientTotalCents ?? 0
+  const depositCents     = pricing?.depositCents ?? 0
+  const remainingCents   = pricing?.remainingBalanceCents ?? 0
+  const hasStripePayment = contractorCents > 0
 
   const shareableLink = requestSlug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${requestSlug}`
@@ -839,6 +849,7 @@ export default function ContractorJobRequestsPage() {
       taxLines: [],
       billingType: "flat_rate",
       contractorAmount: "",
+      depositAmount: "",
     })
   }
 
@@ -1079,9 +1090,11 @@ export default function ContractorJobRequestsPage() {
       line_items: serializedItems,
       tax_rate: 0,
       tax_lines: serializedTaxLines,
-      contractor_amount_cents: hasStripePayment ? contractorCents    : null,
-      platform_fee_cents:      hasStripePayment ? platformFeeCents   : null,
-      client_total_cents:      hasStripePayment ? clientTotalCents   : null,
+      contractor_amount_cents: hasStripePayment ? contractorCents  : null,
+      platform_fee_cents:      hasStripePayment ? platformFeeCents : null,
+      gst_cents:               hasStripePayment ? gstCents         : null,
+      client_total_cents:      hasStripePayment ? clientTotalCents : null,
+      deposit_amount_cents:    hasStripePayment && depositCents > 0 ? depositCents : null,
     }
 
     const { data, error } = await supabase
@@ -1522,34 +1535,55 @@ export default function ContractorJobRequestsPage() {
                 ) : null}
 
                 {/* ── Online payment via Euroflo ── */}
-                <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-4">
+                <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4">
                   <div>
                     <p className="text-sm font-semibold">Online payment via Euroflo</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Enter your desired payout. Euroflo adds a {feePercent}% platform fee on top —
-                      the client sees only their total. Leave blank to skip online payment for this estimate.
+                      Enter your desired payout. Euroflo adds a 15% platform fee + 5% GST.
+                      Leave blank to skip online payment for this estimate.
                     </p>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="estimate-contractor-payout">Your payout (CAD)</Label>
-                    <Input
-                      id="estimate-contractor-payout"
-                      data-testid="estimate-contractor-amount-input"
-                      value={estimateForm.contractorAmount}
-                      onChange={(e) => updateEstimateForm("contractorAmount", e.target.value)}
-                      placeholder="0.00"
-                      type="number"
-                      min="0.50"
-                      step="0.01"
-                      disabled={isSaving}
-                    />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="estimate-contractor-payout">Your payout (CAD)</Label>
+                      <Input
+                        id="estimate-contractor-payout"
+                        data-testid="estimate-contractor-amount-input"
+                        value={estimateForm.contractorAmount}
+                        onChange={(e) => updateEstimateForm("contractorAmount", e.target.value)}
+                        placeholder="0.00"
+                        type="number"
+                        min="0.50"
+                        step="0.01"
+                        disabled={isSaving}
+                      />
+                    </div>
+                    {hasStripePayment && (
+                      <div className="grid gap-2">
+                        <Label htmlFor="estimate-deposit-amount">Deposit due from client (CAD)</Label>
+                        <Input
+                          id="estimate-deposit-amount"
+                          data-testid="estimate-deposit-amount-input"
+                          value={estimateForm.depositAmount}
+                          onChange={(e) => updateEstimateForm("depositAmount", e.target.value)}
+                          placeholder={money.format(depositCents / 100).replace("$", "")}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          disabled={isSaving}
+                        />
+                      </div>
+                    )}
                   </div>
                   {hasStripePayment && (
-                    <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-3">
                       {[
-                        { label: "Your payout",          value: money.format(contractorCents / 100) },
-                        { label: `Euroflo ${feePercent}%`, value: money.format(platformFeeCents / 100) },
-                        { label: "Client total",          value: money.format(clientTotalCents / 100) },
+                        { label: "Your payout",       value: money.format(contractorCents / 100) },
+                        { label: "Platform fee 15%",  value: money.format(platformFeeCents / 100) },
+                        { label: "GST 5%",            value: money.format(gstCents / 100) },
+                        { label: "Client total",      value: money.format(clientTotalCents / 100) },
+                        { label: "Deposit due",       value: money.format(depositCents / 100) },
+                        { label: "Remaining balance", value: money.format(remainingCents / 100) },
                       ].map(({ label, value }) => (
                         <div key={label} className="rounded border border-border bg-background px-3 py-2 text-center">
                           <p className="text-[0.6rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>

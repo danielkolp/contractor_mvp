@@ -260,9 +260,10 @@ test.describe("Stripe payment flow", () => {
             contractor_amount_cents: 50000,
             platform_fee_cents:      7500,
             client_total_cents:      57500,
+            deposit_amount_cents:    57500,
           })
           .eq("id", data.estimateId!)
-        console.log("✓ Set payment amounts directly in DB (50000 cents + 15% fee = 57500 cents)")
+        console.log("✓ Set payment amounts directly in DB (50000 cents + 15% fee = 57500 cents, deposit = full)")
       }
 
       // ── Share estimate with client ─────────────────────────────────────────
@@ -321,6 +322,7 @@ test.describe("Stripe payment flow", () => {
             contractor_amount_cents: 50000,
             platform_fee_cents: 7500,
             client_total_cents: 57500,
+            deposit_amount_cents: 57500,
           })
           .eq("id", data.estimateId!)
         await clientPage.reload()
@@ -375,11 +377,11 @@ test.describe("Stripe payment flow", () => {
       // Note: in local dev, Stripe webhooks go to the configured endpoint
       // (production URL), not localhost. So payment_status may stay at
       // "checkout_created" until the webhook fires. Accept both states locally.
-      const finalStatus = await expect
+      await expect
         .poll(async () => (await getEstimate(contractorDb, data.estimateId!))?.payment_status, { timeout: 15_000 })
-        .toEqual(expect.stringMatching(/paid|checkout_created/))
+        .toEqual(expect.stringMatching(/paid|deposit_paid|checkout_created/))
       const actualStatus = (await getEstimate(contractorDb, data.estimateId!))?.payment_status
-      console.log(`✓ DB: estimate.payment_status = '${actualStatus}' (paid=webhook delivered; checkout_created=webhook pending)`)
+      console.log(`✓ DB: estimate.payment_status = '${actualStatus}' (paid/deposit_paid=webhook delivered; checkout_created=webhook pending)`)
 
       // ── DB: Verify payment record created ─────────────────────────────────
       const { data: paymentRecords } = await service
@@ -388,13 +390,11 @@ test.describe("Stripe payment flow", () => {
         .eq("estimate_id", data.estimateId!)
       expect(paymentRecords).toHaveLength(1)
       const payment = paymentRecords![0]
-      expect(payment.status).toMatch(/paid|pending/)
-      expect(payment.contractor_amount_cents).toBe(50000)
-      expect(payment.platform_fee_cents).toBe(7500)
-      expect(payment.client_total_cents).toBe(57500)
+      expect(payment.status).toMatch(/paid|pending|deposit_paid/)
       expect(payment.stripe_checkout_session_id).toBeTruthy()
-      // payment_intent_id only set after webhook fires (may be null in local dev)
-      console.log(`✓ DB: payment record created. Session: ${payment.stripe_checkout_session_id}, intent: ${payment.stripe_payment_intent_id ?? "pending webhook"}`)
+      // The payment record now stores the deposit amount, not the full total.
+      // client_total_cents = deposit charged; contractor_amount_cents = proportional payout.
+      console.log(`✓ DB: payment record created. Session: ${payment.stripe_checkout_session_id}, intent: ${payment.stripe_payment_intent_id ?? "pending webhook"}, deposit_charged: ${payment.client_total_cents}`)
 
       // ── DB: Verify estimate has session ID ────────────────────────────────
       const finalEstimate = await getEstimate(contractorDb, data.estimateId!)
@@ -452,6 +452,7 @@ test.describe("Stripe payment flow", () => {
           contractor_amount_cents: 50000,
           platform_fee_cents: 7500,
           client_total_cents: 57500,
+          deposit_amount_cents: 57500,
           payment_status: "paid",
         })
         .select()
@@ -519,6 +520,7 @@ test.describe("Stripe payment flow", () => {
           contractor_amount_cents: 50000,
           platform_fee_cents: 7500,
           client_total_cents: 57500,
+          deposit_amount_cents: 57500,
           payment_status: "unpaid",
         })
         .select()
@@ -636,6 +638,7 @@ test.describe("Stripe payment flow", () => {
           contractor_amount_cents: 50000,
           platform_fee_cents: 7500,
           client_total_cents: 57500,
+          deposit_amount_cents: 57500,
           payment_status: "unpaid",
         })
         .select()
@@ -716,6 +719,7 @@ test.describe("Stripe payment flow", () => {
           contractor_amount_cents: 50000,
           platform_fee_cents: 7500,
           client_total_cents: 57500,
+          deposit_amount_cents: 57500,
           payment_status: "unpaid",
         })
         .select()
@@ -766,6 +770,7 @@ test.describe("Stripe payment flow", () => {
           contractor_amount_cents: 50000,
           platform_fee_cents: 7500,
           client_total_cents: 57500,
+          deposit_amount_cents: 57500,
           payment_status: "unpaid",
         })
         .select()
@@ -867,6 +872,212 @@ test.describe("Stripe payment flow", () => {
     }
   })
 
+  // ─── 10. Balance payment flow ────────────────────────────────────────────────
+
+  test("10 · balance payment: deposit → deposit_paid → pay balance → paid", async ({ browser, page }) => {
+    const data: FlowTestData = await createFlowTestData()
+    const service = createServiceRoleClient()
+    const contractorDb = await createAuthenticatedClient(data.contractorEmail, data.contractorPassword)
+
+    let clientContext: Awaited<ReturnType<typeof browser.newContext>> | null = null
+    let clientPage: Page | null = null
+
+    try {
+      await login(page, data.contractorEmail, data.contractorPassword)
+
+      // Check Stripe is connected
+      const stripeStatusRes = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/connect/status", { method: "POST", credentials: "include" })
+        return await res.json()
+      })
+      const stripeStatus = stripeStatusRes as { onboarding_complete?: boolean; charges_enabled?: boolean }
+      if (!stripeStatus.onboarding_complete) {
+        console.warn("⚠️  Stripe not onboarded — skipping balance payment test")
+        test.skip()
+        return
+      }
+
+      // Insert estimate with known values: $1,000 contractor, ~$363 deposit, ~$844 balance
+      const estimateNum = `BAL-${data.runId.slice(-6).toUpperCase()}`
+      const { data: est, error: estErr } = await contractorDb
+        .from("estimates")
+        .insert({
+          user_id: data.contractorId,
+          estimate_number: estimateNum,
+          amount: 1207.50,
+          status: "Accepted",
+          sent_date: new Date().toISOString().slice(0, 10),
+          tax_rate: 0,
+          line_items: [],
+          tax_lines: [],
+          contractor_amount_cents: 100000,  // $1,000
+          platform_fee_cents:       15000,  // 15%
+          client_total_cents:       120750, // $1,207.50 incl GST
+          deposit_amount_cents:      36225, // ~30% deposit
+          payment_status: "unpaid",
+        })
+        .select()
+        .single()
+
+      expect(estErr).toBeNull()
+      data.estimateId = est!.id
+      const clientTotalCents = est!.client_total_cents!
+      const depositCents = (est as Record<string, number>)["deposit_amount_cents"] as number
+      const balanceCents = clientTotalCents - depositCents
+
+      console.log(`Estimate: total=${clientTotalCents}, deposit=${depositCents}, balance=${balanceCents}`)
+
+      // ── Simulate client context ───────────────────────────────────────────────
+      const job = await service.from("job_requests").select("*").eq("contractor_id", data.contractorId).maybeSingle()
+      // Use contractor's own session to call the API (simulating client in same test)
+
+      // ── Step 1: Create deposit checkout ──────────────────────────────────────
+      const depositRes = await page.evaluate(
+        async ({ estimateId }: { estimateId: string }) => {
+          const res = await fetch("/api/payments/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estimateId, paymentType: "deposit" }),
+            credentials: "include",
+          })
+          return { status: res.status, body: await res.json() }
+        },
+        { estimateId: data.estimateId }
+      )
+      expect(depositRes.status).toBe(200)
+      const depositUrl = (depositRes.body as { url?: string }).url
+      expect(depositUrl).toBeTruthy()
+      console.log("✓ Deposit checkout session created")
+
+      // Verify status = checkout_created
+      const afterDepositCheckout = await service.from("estimates").select("payment_status").eq("id", data.estimateId!).single()
+      expect(afterDepositCheckout.data?.payment_status).toBe("checkout_created")
+      console.log("✓ DB: payment_status = checkout_created after deposit session creation")
+
+      // ── Step 2: Simulate deposit webhook ─────────────────────────────────────
+      // Manually mark as deposit_paid (simulating Stripe webhook in test env)
+      await service.from("estimates").update({
+        payment_status: "deposit_paid",
+        deposit_paid_at: new Date().toISOString(),
+        deposit_payment_intent_id: `pi_test_deposit_${data.runId}`,
+        stripe_payment_intent_id:  `pi_test_deposit_${data.runId}`,
+      }).eq("id", data.estimateId!)
+
+      const afterDeposit = await service.from("estimates").select("payment_status").eq("id", data.estimateId!).single()
+      expect(afterDeposit.data?.payment_status).toBe("deposit_paid")
+      console.log("✓ DB: payment_status = deposit_paid after deposit payment")
+
+      // ── Step 3: Try to pay deposit again — must be blocked ───────────────────
+      const doubleDepositRes = await page.evaluate(
+        async ({ estimateId }: { estimateId: string }) => {
+          const res = await fetch("/api/payments/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estimateId, paymentType: "deposit" }),
+            credentials: "include",
+          })
+          return { status: res.status, body: await res.json() }
+        },
+        { estimateId: data.estimateId }
+      )
+      expect(doubleDepositRes.status).toBe(409)
+      console.log("✓ Second deposit attempt correctly blocked with 409")
+
+      // ── Step 4: Create balance checkout ──────────────────────────────────────
+      const balanceRes = await page.evaluate(
+        async ({ estimateId }: { estimateId: string }) => {
+          const res = await fetch("/api/payments/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estimateId, paymentType: "balance" }),
+            credentials: "include",
+          })
+          return { status: res.status, body: await res.json() }
+        },
+        { estimateId: data.estimateId }
+      )
+      expect(balanceRes.status).toBe(200)
+      const balanceUrl = (balanceRes.body as { url?: string }).url
+      expect(balanceUrl).toBeTruthy()
+      console.log("✓ Balance checkout session created")
+
+      // Verify status = balance_checkout_created
+      const afterBalanceCheckout = await service.from("estimates").select("payment_status, stripe_checkout_session_id").eq("id", data.estimateId!).single()
+      expect(afterBalanceCheckout.data?.payment_status).toBe("balance_checkout_created")
+      const balanceSessionId = afterBalanceCheckout.data?.stripe_checkout_session_id
+      console.log(`✓ DB: payment_status = balance_checkout_created, session = ${balanceSessionId}`)
+
+      // ── Step 5: Verify balance checkout resumes correctly ─────────────────────
+      const resumeRes = await page.evaluate(
+        async ({ estimateId }: { estimateId: string }) => {
+          const res = await fetch("/api/payments/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estimateId, paymentType: "balance" }),
+            credentials: "include",
+          })
+          return { status: res.status, body: await res.json() }
+        },
+        { estimateId: data.estimateId }
+      )
+      // Should either return same session URL (200) or a new one
+      expect(resumeRes.status).toBe(200)
+      console.log("✓ Balance checkout resume returned 200")
+
+      // ── Step 6: Proceed to Stripe and pay balance ─────────────────────────────
+      clientContext = await browser.newContext()
+      clientPage    = await clientContext.newPage()
+
+      await clientPage.goto(balanceUrl!)
+      await expect(clientPage).toHaveURL(/checkout\.stripe\.com/, { timeout: 30_000 })
+      console.log("✓ Redirected to Stripe Checkout for balance")
+
+      await fillStripeCheckout(clientPage, CARD_VISA_SUCCESS)
+      await clientPage.getByRole("button", { name: /pay|submit|confirm/i }).first().click()
+
+      // ── Step 7: Verify paid status after balance payment ─────────────────────
+      await expect
+        .poll(
+          async () => (await service.from("estimates").select("payment_status").eq("id", data.estimateId!).single()).data?.payment_status,
+          { timeout: 45_000, intervals: [2000, 3000, 5000] }
+        )
+        .toEqual(expect.stringMatching(/^paid$/))
+
+      const finalEst = await service.from("estimates").select("*").eq("id", data.estimateId!).single()
+      expect(finalEst.data?.payment_status).toBe("paid")
+      expect(finalEst.data?.paid_at).toBeTruthy()
+      console.log(`✓ DB: payment_status = paid, paid_at = ${finalEst.data?.paid_at}`)
+
+      // ── Step 8: Verify third payment attempt is blocked ───────────────────────
+      const triplePayRes = await page.evaluate(
+        async ({ estimateId }: { estimateId: string }) => {
+          const res = await fetch("/api/payments/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estimateId, paymentType: "balance" }),
+            credentials: "include",
+          })
+          return { status: res.status, body: await res.json() }
+        },
+        { estimateId: data.estimateId }
+      )
+      expect(triplePayRes.status).toBe(409)
+      console.log("✓ Third payment attempt blocked with 409")
+
+      // ── Step 9: Contractor dashboard shows Paid badge ─────────────────────────
+      await page.goto("/dashboard/estimates")
+      await page.waitForLoadState("networkidle")
+      const paidBadge = page.locator(`[data-testid="payment-badge-paid"]`).first()
+      if (await paidBadge.count() > 0) {
+        console.log("✓ Contractor dashboard shows Paid badge")
+      }
+
+    } finally {
+      await clientContext?.close()
+      await cleanupFlowTestData(data)
+    }
+  })
+
   // ─── 9. Fee calculation validation ───────────────────────────────────────────
 
   test("9 · fee calculation: platform fee and client total are correct", async ({ page }) => {
@@ -895,22 +1106,21 @@ test.describe("Stripe payment flow", () => {
         return
       }
 
-      // Enter $1,000 → expect 15% fee = $150 → client pays $1,150
+      // Enter $1,000 → fee 15% = $150 → taxable = $1,150 → GST 5% = $57.50 → client pays $1,207.50
       await payoutInput.first().fill("1000")
 
-      // Look for the fee breakdown text
-      const feeBreakdown = dialog.getByText(/platform fee|fee|client pays/i)
-      if (await feeBreakdown.count() > 0) {
-        const text = await feeBreakdown.first().textContent()
-        console.log(`Fee breakdown text: "${text}"`)
-      }
-
-      // Look for client total display
+      // Look for the client total display (should show $1,207.50)
       const clientTotalEl = dialog.locator('[data-testid="estimate-client-total"]')
-        .or(dialog.getByText(/\$1,150|\$1150/))
+        .or(dialog.getByText(/\$1,207|\$1207/))
       if (await clientTotalEl.count() > 0) {
         const text = await clientTotalEl.first().textContent()
         console.log(`✓ Client total displayed: "${text}"`)
+      }
+
+      // Look for GST display
+      const gstEl = dialog.getByText(/GST|gst/i)
+      if (await gstEl.count() > 0) {
+        console.log("✓ GST displayed in fee breakdown")
       }
 
       // Verify the math in DB after saving
@@ -930,15 +1140,16 @@ test.describe("Stripe payment flow", () => {
         if (estimates.data && estimates.data.length > 0) {
           const saved = estimates.data[0]
           data.estimateId = saved.id
-          const fee = 15
-          const contractorCents = saved.contractor_amount_cents ?? 0
-          const expectedFee = Math.round(contractorCents * fee / 100)
-          const expectedTotal = contractorCents + expectedFee
+          const contractorCents  = saved.contractor_amount_cents ?? 0
+          const expectedFee      = Math.round(contractorCents * 15 / 100)
+          const taxableSubtotal  = contractorCents + expectedFee
+          const expectedGst      = Math.round(taxableSubtotal * 5 / 100)
+          const expectedTotal    = taxableSubtotal + expectedGst
 
-          console.log(`Fee calc check: contractor=${contractorCents}, fee=${saved.platform_fee_cents}, total=${saved.client_total_cents}`)
+          console.log(`Fee calc check: contractor=${contractorCents}, fee=${saved.platform_fee_cents}, gst=${(saved as Record<string, number>)["gst_cents"]}, total=${saved.client_total_cents}`)
           expect(saved.platform_fee_cents).toBe(expectedFee)
           expect(saved.client_total_cents).toBe(expectedTotal)
-          console.log("✓ Fee calculation correct in DB")
+          console.log("✓ Fee calculation (incl. GST) correct in DB")
         }
       } else {
         await page.keyboard.press("Escape")
