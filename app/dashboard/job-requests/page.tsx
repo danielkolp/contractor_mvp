@@ -89,6 +89,7 @@ type EstimateDraftForm = {
   lineItems: EstimateLineItem[]
   taxLines: EstimateTaxLine[]
   billingType: "flat_rate" | "hourly"
+  contractorAmount: string
 }
 
 const emptyEstimateDraftForm: EstimateDraftForm = {
@@ -101,6 +102,7 @@ const emptyEstimateDraftForm: EstimateDraftForm = {
   lineItems: [],
   taxLines: [],
   billingType: "flat_rate",
+  contractorAmount: "",
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
@@ -666,6 +668,13 @@ export default function ContractorJobRequestsPage() {
     ? estimateSubtotal + estimateTaxTotal
     : parseAmount(estimateForm.flatAmount)
 
+  // ── Stripe payout derivations (same logic as /dashboard/estimates) ──────────
+  const feePercent        = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? 15)
+  const contractorCents   = Math.round((parseFloat(estimateForm.contractorAmount) || 0) * 100)
+  const platformFeeCents  = contractorCents > 0 ? Math.round(contractorCents * (feePercent / 100)) : 0
+  const clientTotalCents  = contractorCents + platformFeeCents
+  const hasStripePayment  = contractorCents > 0
+
   const shareableLink = requestSlug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${requestSlug}`
     : null
@@ -829,6 +838,7 @@ export default function ContractorJobRequestsPage() {
       lineItems: [{ id: Math.random().toString(36).slice(2), description: "The work to be done", quantity: "1", unit_price: "" }],
       taxLines: [],
       billingType: "flat_rate",
+      contractorAmount: "",
     })
   }
 
@@ -1027,7 +1037,15 @@ export default function ContractorJobRequestsPage() {
         ? estimateTotal
         : parseAmount(estimateForm.flatAmount)
 
-    if (sendToClient && finalAmount <= 0) {
+    if (sendToClient && hasStripePayment && contractorCents < 50) {
+      toast.error("Minimum payout for online payment is $0.50.")
+      setIsSaving(false)
+      return
+    }
+
+    const sendAmount = hasStripePayment ? clientTotalCents / 100 : finalAmount
+
+    if (sendToClient && sendAmount <= 0) {
       toast.error("Add an amount before sending this estimate.")
       setIsSaving(false)
       return
@@ -1052,7 +1070,7 @@ export default function ContractorJobRequestsPage() {
       estimate_number:
         estimateForm.estimateNumber.trim() ||
         `EST-${Date.now().toString().slice(-5)}`,
-      amount: finalAmount,
+      amount: sendAmount,
       status: sendToClient ? "Sent" : "Draft",
       sent_date: inputDate(),
       follow_up_date: nullableDate(estimateForm.followUpDate),
@@ -1061,6 +1079,9 @@ export default function ContractorJobRequestsPage() {
       line_items: serializedItems,
       tax_rate: 0,
       tax_lines: serializedTaxLines,
+      contractor_amount_cents: hasStripePayment ? contractorCents    : null,
+      platform_fee_cents:      hasStripePayment ? platformFeeCents   : null,
+      client_total_cents:      hasStripePayment ? clientTotalCents   : null,
     }
 
     const { data, error } = await supabase
@@ -1499,6 +1520,45 @@ export default function ContractorJobRequestsPage() {
                     </span>
                   </div>
                 ) : null}
+
+                {/* ── Online payment via Euroflo ── */}
+                <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">Online payment via Euroflo</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Enter your desired payout. Euroflo adds a {feePercent}% platform fee on top —
+                      the client sees only their total. Leave blank to skip online payment for this estimate.
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="estimate-contractor-payout">Your payout (CAD)</Label>
+                    <Input
+                      id="estimate-contractor-payout"
+                      data-testid="estimate-contractor-amount-input"
+                      value={estimateForm.contractorAmount}
+                      onChange={(e) => updateEstimateForm("contractorAmount", e.target.value)}
+                      placeholder="0.00"
+                      type="number"
+                      min="0.50"
+                      step="0.01"
+                      disabled={isSaving}
+                    />
+                  </div>
+                  {hasStripePayment && (
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      {[
+                        { label: "Your payout",          value: money.format(contractorCents / 100) },
+                        { label: `Euroflo ${feePercent}%`, value: money.format(platformFeeCents / 100) },
+                        { label: "Client total",          value: money.format(clientTotalCents / 100) },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="rounded border border-border bg-background px-3 py-2 text-center">
+                          <p className="text-[0.6rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+                          <p className="mt-0.5 text-sm font-bold tabular-nums">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <DialogFooter>
                   <Button
