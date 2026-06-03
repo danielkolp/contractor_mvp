@@ -364,6 +364,32 @@ function RequestContext({ request }: { request: JobRequest }) {
         </div>
       ) : null}
       <RequestPhotos request={request} />
+      {(request.more_details_message || request.more_details_response) && (
+        <div className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          {request.more_details_message && (
+            <div>
+              <div className="text-xs font-medium uppercase text-amber-700">
+                Your info request
+              </div>
+              <p className="mt-1 whitespace-pre-wrap leading-6 text-amber-900">
+                {request.more_details_message}
+              </p>
+            </div>
+          )}
+          {request.more_details_response ? (
+            <div>
+              <div className="text-xs font-medium uppercase text-amber-700">
+                Client response
+              </div>
+              <p className="mt-1 whitespace-pre-wrap leading-6 text-amber-900">
+                {request.more_details_response}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs italic text-amber-600">Awaiting client response…</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1550,6 +1576,11 @@ export default function ContractorJobRequestsPage() {
                             <Badge variant="outline">
                               {labelFromSlug(request.status)}
                             </Badge>
+                            {request.more_details_response && (
+                              <Badge className="border-amber-200 bg-amber-50 text-amber-700">
+                                Info received
+                              </Badge>
+                            )}
                           </div>
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                             <span className="inline-flex items-center gap-1">
