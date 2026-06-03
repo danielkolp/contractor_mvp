@@ -160,7 +160,7 @@ Run after applying the migration:
 ```bash
 cd revenue-recovery
 E2E_CONTRACTOR_EMAIL="danielkolpakov00@gmail.com" \
-E2E_CONTRACTOR_PASSWORD="REMOVED_E2E_CONTRACTOR_PASSWORD" \
+E2E_CONTRACTOR_PASSWORD="<set-in-local-env>" \
 PLAYWRIGHT_BASE_URL="http://localhost:3000" \
 npx playwright test e2e/stripe-payment-flow.spec.ts
 ```

@@ -11,41 +11,22 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { randomUUID } from "crypto"
-import * as fs from "fs"
-import * as path from "path"
+import { loadQaEnv } from "./qa-env.mjs"
 
 // ── Load .env.local ────────────────────────────────────────────────────────────
 
-function loadEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) return
-  const text = fs.readFileSync(filePath, "utf8")
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith("#")) continue
-    const idx = trimmed.indexOf("=")
-    if (idx === -1) continue
-    const key = trimmed.slice(0, idx).trim()
-    let val = trimmed.slice(idx + 1).trim()
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1)
-    }
-    if (key && process.env[key] === undefined) process.env[key] = val
-  }
-}
-
-loadEnvFile(path.join(process.cwd(), ".env.local"))
-loadEnvFile(path.join(process.cwd(), ".env"))
+loadQaEnv()
 
 const BASE_URL = process.env.QA_BASE_URL || "http://localhost:3000"
-const CONTRACTOR_EMAIL    = process.env.E2E_CONTRACTOR_EMAIL    || process.env.QA_CONTRACTOR_EMAIL    || "danielkolpakov00@gmail.com"
-const CONTRACTOR_PASSWORD = process.env.E2E_CONTRACTOR_PASSWORD || process.env.QA_CONTRACTOR_PASSWORD || "REMOVED_E2E_CONTRACTOR_PASSWORD"
+const CONTRACTOR_EMAIL    = process.env.E2E_CONTRACTOR_EMAIL    || process.env.QA_CONTRACTOR_EMAIL
+const CONTRACTOR_PASSWORD = process.env.E2E_CONTRACTOR_PASSWORD || process.env.QA_CONTRACTOR_PASSWORD
 const SUPABASE_URL        = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY   = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const SERVICE_ROLE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY
 const PLATFORM_FEE        = Number(process.env.PLATFORM_FEE_PERCENT ?? 15)
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SERVICE_ROLE_KEY) {
-  console.error("Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY")
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SERVICE_ROLE_KEY || !CONTRACTOR_EMAIL || !CONTRACTOR_PASSWORD) {
+  console.error("Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, E2E_CONTRACTOR_EMAIL, E2E_CONTRACTOR_PASSWORD")
   process.exit(1)
 }
 

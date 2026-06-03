@@ -24,6 +24,9 @@ next-env.d.ts
 test-results/
 playwright-report/
 blob-report/
+e2e-screenshots/
+e2e-screenshots-2/
+plumber-audit-screenshots/
 
 # misc
 .DS_Store

@@ -1,15 +1,20 @@
 import { createClient } from "@supabase/supabase-js"
+import { loadQaEnv, requiredEnv } from "./qa-env.mjs"
 
-const SUPABASE_URL   = "https://lgjsatykcfkwatczyvla.supabase.co"
-const ANON_KEY       = "REMOVED_SUPABASE_PUBLISHABLE_KEY"
-const SVC_KEY        = "REMOVED_SUPABASE_SERVICE_ROLE_KEY"
+loadQaEnv()
+
+const SUPABASE_URL        = requiredEnv("NEXT_PUBLIC_SUPABASE_URL")
+const ANON_KEY            = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+const SVC_KEY             = requiredEnv("SUPABASE_SERVICE_ROLE_KEY")
+const CONTRACTOR_EMAIL    = requiredEnv("E2E_CONTRACTOR_EMAIL")
+const CONTRACTOR_PASSWORD = requiredEnv("E2E_CONTRACTOR_PASSWORD")
 const CONTRACTOR_ID  = "fe5124bc-0757-470c-85b9-ec64c1ff6ca0"
 const JOB_REQUEST_ID = "1fc71558-53e7-463e-a304-bc2e9f9561d3"
 
 const client = createClient(SUPABASE_URL, ANON_KEY)
 const svc    = createClient(SUPABASE_URL, SVC_KEY, { auth: { persistSession: false } })
 
-await client.auth.signInWithPassword({ email: "danielkolpakov00@gmail.com", password: "REMOVED_E2E_CONTRACTOR_PASSWORD" })
+await client.auth.signInWithPassword({ email: CONTRACTOR_EMAIL, password: CONTRACTOR_PASSWORD })
 
 // Check existing estimates to see estimate_number format
 const { data: existing } = await client

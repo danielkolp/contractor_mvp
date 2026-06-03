@@ -5,12 +5,18 @@
  */
 
 import { createClient } from "@supabase/supabase-js"
+import { loadQaEnv, requiredEnv } from "./qa-env.mjs"
 
-const SUPABASE_URL = "https://lgjsatykcfkwatczyvla.supabase.co"
-const ANON_KEY    = "REMOVED_SUPABASE_PUBLISHABLE_KEY"
-const SVC_KEY     = "REMOVED_SUPABASE_SERVICE_ROLE_KEY"
-const APP_URL     = "http://localhost:3000"
-const CONTRACTOR  = { email: "danielkolpakov00@gmail.com", password: "REMOVED_E2E_CONTRACTOR_PASSWORD" }
+loadQaEnv()
+
+const SUPABASE_URL = requiredEnv("NEXT_PUBLIC_SUPABASE_URL")
+const ANON_KEY     = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+const SVC_KEY      = requiredEnv("SUPABASE_SERVICE_ROLE_KEY")
+const APP_URL      = process.env.QA_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+const CONTRACTOR   = {
+  email:    requiredEnv("E2E_CONTRACTOR_EMAIL"),
+  password: requiredEnv("E2E_CONTRACTOR_PASSWORD"),
+}
 
 const svc = createClient(SUPABASE_URL, SVC_KEY, { auth: { persistSession: false } })
 
@@ -433,10 +439,7 @@ console.log("══════════════════════�
 
 // Create a second anonymous client to simulate another user
 const anonClient = createClient(SUPABASE_URL, ANON_KEY)
-const { data: anonSignIn } = await anonClient.auth.signInWithPassword({
-  email: "danielkolpakov00@gmail.com",
-  password: "REMOVED_E2E_CONTRACTOR_PASSWORD"
-})
+const { data: anonSignIn } = await anonClient.auth.signInWithPassword(CONTRACTOR)
 // Same user, but test RLS on payments
 // Try to read payments table as authenticated user (should only see own)
 const { data: paymentsForUser, error: paymentsRLSErr } = await contractorClient

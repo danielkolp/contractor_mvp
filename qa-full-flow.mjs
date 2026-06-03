@@ -3,11 +3,16 @@
  * Uses a temporarily "activated" contractor profile to test checkout creation
  */
 import { createClient } from "@supabase/supabase-js"
+import { loadQaEnv, requiredEnv } from "./qa-env.mjs"
 
-const SUPABASE_URL   = "https://lgjsatykcfkwatczyvla.supabase.co"
-const ANON_KEY       = "REMOVED_SUPABASE_PUBLISHABLE_KEY"
-const SVC_KEY        = "REMOVED_SUPABASE_SERVICE_ROLE_KEY"
-const APP_URL        = "http://localhost:3000"
+loadQaEnv()
+
+const SUPABASE_URL        = requiredEnv("NEXT_PUBLIC_SUPABASE_URL")
+const ANON_KEY            = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+const SVC_KEY             = requiredEnv("SUPABASE_SERVICE_ROLE_KEY")
+const APP_URL             = process.env.QA_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+const CONTRACTOR_EMAIL    = requiredEnv("E2E_CONTRACTOR_EMAIL")
+const CONTRACTOR_PASSWORD = requiredEnv("E2E_CONTRACTOR_PASSWORD")
 const CONTRACTOR_ID  = "fe5124bc-0757-470c-85b9-ec64c1ff6ca0"
 const ESTIMATE_ID    = "fe72f1de-d3ca-41c7-84bc-67e27025ac58"  // EST-25562, Won, $1150 total
 
@@ -22,7 +27,8 @@ function log(status, name, detail = "") {
 }
 
 const { data: auth } = await client.auth.signInWithPassword({
-  email: "danielkolpakov00@gmail.com", password: "REMOVED_E2E_CONTRACTOR_PASSWORD"
+  email: CONTRACTOR_EMAIL,
+  password: CONTRACTOR_PASSWORD,
 })
 const session = auth.session
 const cookieKey = "sb-lgjsatykcfkwatczyvla-auth-token"
