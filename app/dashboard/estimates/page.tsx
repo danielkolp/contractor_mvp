@@ -59,7 +59,19 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { money as moneyFormatter } from "@/lib/format-money"
-import { computePricing, resolveDepositCents } from "@/lib/pricing"
+import { computePricing } from "@/lib/pricing"
+import {
+  INPUT_LIMITS,
+  InputValidationError,
+  enumField,
+  inputErrorMessage,
+  isoDateField,
+  numberField,
+  optionalIsoDateField,
+  optionalTextField,
+  optionalUuidField,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -91,9 +103,19 @@ function newTaxLine(name = "", rate = ""): TaxLine {
 }
 
 function serializeTaxLines(lines: TaxLine[]) {
+  if (lines.length > 20) {
+    throw new InputValidationError("Tax lines must include 20 rows or fewer.")
+  }
+
   return lines
     .filter((t) => t.name.trim() || parseFloat(t.rate) > 0)
-    .map(({ name, rate }) => ({ name: name.trim(), rate: parseFloat(rate) || 0 }))
+    .map(({ name, rate }) => ({
+      name: textField(name.trim() ? name : "Tax", "Tax name", {
+        required: true,
+        maxLength: INPUT_LIMITS.taxName,
+      }),
+      rate: numberField(rate || 0, "Tax rate", { min: 0, max: 100 }),
+    }))
 }
 
 function deserializeTaxLines(raw: unknown): TaxLine[] {
@@ -132,10 +154,22 @@ function lineItemSubtotal(items: LineItem[]): number {
 }
 
 function serializeLineItems(items: LineItem[]) {
-  return items.map(({ description, quantity, unit_price }) => ({
-    description,
-    quantity: parseFloat(quantity) || 0,
-    unit_price: parseFloat(unit_price) || 0,
+  if (items.length > 100) {
+    throw new InputValidationError("Line items must include 100 rows or fewer.")
+  }
+
+  return items.map(({ description, quantity, unit_price }, index) => ({
+    description: textField(description, `Line item ${index + 1}`, {
+      maxLength: INPUT_LIMITS.lineItemDescription,
+    }),
+    quantity: numberField(quantity || 0, `Line item ${index + 1} quantity`, {
+      min: 0,
+      max: 100_000,
+    }),
+    unit_price: numberField(unit_price || 0, `Line item ${index + 1} unit price`, {
+      min: 0,
+      max: 10_000_000,
+    }),
   }))
 }
 
@@ -212,20 +246,6 @@ function inputDate(offsetDays = 0) {
 function formatDate(value: string | null) {
   if (!value) return "Not set"
   return dateFormatter.format(new Date(`${value}T00:00:00`))
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function nullableDate(value: string) {
-  return value || null
-}
-
-function parseAmount(value: string) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function getClientLabel(client: ClientRow): string {
@@ -542,43 +562,91 @@ export default function EstimatesPage() {
       return
     }
 
-    setIsSaving(true)
     setErrorMessage(null)
 
     const selectedClient = form.clientId
       ? clients.find((client) => client.id === form.clientId) ?? null
       : null
-    const resolvedClientName = selectedClient
-      ? getClientLabel(selectedClient)
-      : nullableText(form.clientName)
 
-    const lineAmount = hasLineItems ? computedTotal : parseAmount(form.amount)
-    // When a Stripe payout amount is set, client_total_cents becomes the canonical
-    // amount so the PDF and client portal show the marked-up total.
-    const finalAmount = hasStripePayment ? clientTotalCents / 100 : lineAmount
-    const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
-    const serializedTaxLines = hasLineItems ? serializeTaxLines(form.taxLines) : []
+    let payload: EstimateInsert
+    try {
+      const safeClientId = optionalUuidField(form.clientId, "Client")
+      const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
+      const serializedTaxLines = hasLineItems ? serializeTaxLines(form.taxLines) : []
+      const sanitizedSubtotal = serializedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unit_price,
+        0
+      )
+      const sanitizedTaxTotal = serializedTaxLines.reduce(
+        (sum, taxLine) => sum + sanitizedSubtotal * (taxLine.rate / 100),
+        0
+      )
+      const lineAmount = hasLineItems
+        ? numberField(sanitizedSubtotal + sanitizedTaxTotal, "Estimate amount", {
+            min: 0,
+            max: 10_000_000,
+          })
+        : numberField(form.amount || 0, "Estimate amount", {
+            min: 0,
+            max: 10_000_000,
+          })
+      const contractorAmount = numberField(form.contractorAmountCents || 0, "Payout amount", {
+        min: 0,
+        max: 10_000_000,
+      })
+      const depositAmount = numberField(form.depositAmountCents || 0, "Deposit amount", {
+        min: 0,
+        max: contractorAmount || 10_000_000,
+      })
+      const safeContractorCents = Math.round(contractorAmount * 100)
+      const safeDepositCents = Math.round(depositAmount * 100)
+      const safePricing =
+        safeContractorCents > 0
+          ? computePricing(safeContractorCents, safeDepositCents > 0 ? safeDepositCents : null)
+          : null
+      const resolvedClientName = selectedClient
+        ? optionalTextField(getClientLabel(selectedClient), "Client name", {
+            maxLength: INPUT_LIMITS.name,
+          })
+        : optionalTextField(form.clientName, "Client name", {
+            maxLength: INPUT_LIMITS.name,
+          })
 
-    const payload: EstimateInsert = {
-      user_id: userId,
-      client_id: form.clientId || null,
-      client_name: resolvedClientName,
-      estimate_number:
-        form.estimateNumber.trim() || `EST-${Date.now().toString().slice(-5)}`,
-      amount: finalAmount,
-      status: form.status,
-      sent_date: form.sentDate || inputDate(),
-      follow_up_date: nullableDate(form.followUpDate),
-      notes: nullableText(form.notes),
-      line_items: serializedItems,
-      tax_rate: 0,
-      tax_lines: serializedTaxLines,
-      contractor_amount_cents: hasStripePayment ? contractorCents  : null,
-      platform_fee_cents:      hasStripePayment ? platformFeeCents : null,
-      gst_cents:               hasStripePayment ? gstCents         : null,
-      client_total_cents:      hasStripePayment ? clientTotalCents : null,
-      deposit_amount_cents:    hasStripePayment && depositCents > 0 ? depositCents : null,
+      payload = {
+        user_id: userId,
+        client_id: safeClientId,
+        client_name: resolvedClientName,
+        estimate_number: textField(
+          form.estimateNumber.trim() || `EST-${Date.now().toString().slice(-5)}`,
+          "Estimate number",
+          { required: true, maxLength: INPUT_LIMITS.estimateNumber }
+        ),
+        amount: safePricing ? safePricing.clientTotalCents / 100 : lineAmount,
+        status: enumField(form.status, "Estimate status", estimateStatuses),
+        sent_date: isoDateField(form.sentDate || inputDate(), "Sent date"),
+        follow_up_date: optionalIsoDateField(form.followUpDate, "Follow-up date"),
+        notes: optionalTextField(form.notes, "Notes", {
+          maxLength: INPUT_LIMITS.notes,
+          multiline: true,
+        }),
+        line_items: serializedItems,
+        tax_rate: 0,
+        tax_lines: serializedTaxLines,
+        contractor_amount_cents: safePricing ? safePricing.contractorSubtotalCents : null,
+        platform_fee_cents: safePricing ? safePricing.platformFeeCents : null,
+        gst_cents: safePricing ? safePricing.gstCents : null,
+        client_total_cents: safePricing ? safePricing.clientTotalCents : null,
+        deposit_amount_cents:
+          safePricing && safePricing.depositCents > 0 ? safePricing.depositCents : null,
+      }
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
     }
+
+    setIsSaving(true)
 
     if (editingEstimate) {
       const updatePayload: EstimateUpdate = {
@@ -645,12 +713,21 @@ export default function EstimatesPage() {
     status: EstimateStatus
   ) {
     if (!userId) return
+
+    let safeStatus: EstimateStatus
+    try {
+      safeStatus = enumField(status, "Estimate status", estimateStatuses)
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
 
     const payload: EstimateUpdate = {
-      status,
+      status: safeStatus,
       follow_up_date:
-        status === "Won" || status === "Lost" || status === "Archived"
+        safeStatus === "Won" || safeStatus === "Lost" || safeStatus === "Archived"
           ? null
           : estimate.follow_up_date,
     }
@@ -669,7 +746,7 @@ export default function EstimatesPage() {
       setEstimates((current) =>
         current.map((item) => (item.id === estimate.id ? data : item))
       )
-      toast.success(`Estimate marked ${status.toLowerCase()}`)
+      toast.success(`Estimate marked ${safeStatus.toLowerCase()}`)
     }
 
     setIsSaving(false)

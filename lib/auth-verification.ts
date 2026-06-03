@@ -1,9 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { emailField } from "@/lib/security/input"
 import type { Database } from "@/lib/supabase/database.types"
 
 export function normalizeAuthEmail(email: string) {
-  return email.trim().toLowerCase()
+  try {
+    return emailField(email)
+  } catch {
+    return ""
+  }
 }
 
 export function emailVerificationRedirectUrl(origin: string) {

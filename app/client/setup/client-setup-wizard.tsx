@@ -17,6 +17,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ServiceAreaSelect } from "@/components/ui/service-area-select"
+import {
+  INPUT_LIMITS,
+  inputErrorMessage,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -96,13 +101,35 @@ export function ClientSetupWizard() {
         .eq("user_id", user.id)
         .maybeSingle()
 
+      let title: string
+      let description: string
+      let serviceArea: string
+      try {
+        title = textField(form.title, "Project title", {
+          required: true,
+          maxLength: INPUT_LIMITS.title,
+        })
+        description = textField(form.description, "Description", {
+          required: true,
+          maxLength: INPUT_LIMITS.description,
+          multiline: true,
+        })
+        serviceArea = textField(form.serviceArea, "Service area", {
+          required: true,
+          maxLength: INPUT_LIMITS.serviceArea,
+        })
+      } catch (error) {
+        toast.error(inputErrorMessage(error))
+        return
+      }
+
       const payload: JobRequestInsert = {
         client_id: user.id,
         client_name: profile?.owner_name || user.email || null,
         client_email: user.email ?? null,
-        title: form.title.trim(),
-        description: form.description.trim(),
-        service_area: form.serviceArea,
+        title,
+        description,
+        service_area: serviceArea,
         urgency: form.urgency,
         status: "new",
       }

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import type Stripe from "stripe"
 
+import { inputErrorMessage, uuidField } from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
 import { stripe } from "@/lib/stripe/server"
 import type { Json } from "@/lib/supabase/database.types"
@@ -11,6 +12,7 @@ import {
 
 // Next.js App Router: must NOT parse the body before signature verification.
 export const dynamic = "force-dynamic"
+const MAX_STRIPE_WEBHOOK_BYTES = 1_000_000
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
@@ -20,9 +22,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 })
   }
 
+  const contentLength = Number(req.headers.get("content-length") ?? 0)
+  if (Number.isFinite(contentLength) && contentLength > MAX_STRIPE_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 })
+  }
+
   // ── 1. Read raw body and verify signature ────────────────────────────────────
   const rawBody   = await req.text()
   const signature = req.headers.get("stripe-signature")
+
+  if (rawBody.length > MAX_STRIPE_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 })
+  }
 
   if (!signature) {
     return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 })
@@ -106,7 +117,7 @@ async function handleCheckoutSuccess(
   session: Stripe.Checkout.Session,
   service: ServiceClient
 ) {
-  const estimateId   = session.metadata?.estimate_id
+  const estimateId   = safeMetadataUuid(session.metadata?.estimate_id, "estimate_id")
   const sessionId    = session.id
   const isFullPayment = session.metadata?.is_full_payment === "true"
 
@@ -163,7 +174,7 @@ async function handleCheckoutFailed(
   session: Stripe.Checkout.Session,
   service: ServiceClient
 ) {
-  const estimateId  = session.metadata?.estimate_id
+  const estimateId  = safeMetadataUuid(session.metadata?.estimate_id, "estimate_id")
   const paymentType = session.metadata?.payment_type
   if (!estimateId) return
 
@@ -186,7 +197,7 @@ async function handlePaymentIntentSucceeded(
   intent: Stripe.PaymentIntent,
   service: ServiceClient
 ) {
-  const estimateId   = intent.metadata?.estimate_id
+  const estimateId   = safeMetadataUuid(intent.metadata?.estimate_id, "estimate_id")
   const isFullPayment = intent.metadata?.is_full_payment === "true"
   if (!estimateId) return
 
@@ -229,7 +240,7 @@ async function handlePaymentIntentFailed(
   intent: Stripe.PaymentIntent,
   service: ServiceClient
 ) {
-  const estimateId  = intent.metadata?.estimate_id
+  const estimateId  = safeMetadataUuid(intent.metadata?.estimate_id, "estimate_id")
   const paymentType = intent.metadata?.payment_type
   if (!estimateId) return
 
@@ -249,7 +260,7 @@ async function handlePaymentIntentFailed(
 }
 
 async function handleRefund(charge: Stripe.Charge, service: ServiceClient) {
-  const estimateId = charge.metadata?.estimate_id
+  const estimateId = safeMetadataUuid(charge.metadata?.estimate_id, "estimate_id")
   if (!estimateId) return
 
   // TODO: implement full refund workflow (notify contractor, update job status)
@@ -281,6 +292,16 @@ async function handleDispute(dispute: Stripe.Dispute, service: ServiceClient) {
 }
 
 // ── Email notifications ───────────────────────────────────────────────────────
+
+function safeMetadataUuid(value: string | undefined, label: string) {
+  if (!value) return null
+  try {
+    return uuidField(value, label)
+  } catch (error) {
+    console.warn(`[stripe/webhook] Invalid ${label}:`, inputErrorMessage(error))
+    return null
+  }
+}
 
 async function sendPaymentEmails(estimateId: string, service: ServiceClient) {
   if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) return

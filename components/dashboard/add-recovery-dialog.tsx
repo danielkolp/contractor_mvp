@@ -20,6 +20,17 @@ import {
   generateRecoveryItemMessage,
   reasonLabel,
 } from "@/lib/recovery-engine"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  numberField,
+  optionalEmailField,
+  optionalIsoDateField,
+  optionalPhoneField,
+  optionalTextField,
+  textField,
+} from "@/lib/security/input"
 import type { Database } from "@/lib/supabase/database.types"
 
 type RecoveryItemInsert = Database["public"]["Tables"]["recovery_items"]["Insert"]
@@ -62,6 +73,7 @@ const REASONS: { value: RecoveryItemReason; label: string; description: string }
     description: "I'll describe it in the notes.",
   },
 ]
+const RECOVERY_REASON_VALUES = REASONS.map((reason) => reason.value)
 
 type Step = 1 | 2 | 3 | 4
 
@@ -197,16 +209,27 @@ export function AddRecoveryDialog({
 
   function buildPayload(
     status: "message_ready" | "sent"
-  ): Omit<RecoveryItemInsert, "user_id"> {
-    return {
-      client_name: form.clientName.trim(),
-      client_email: form.clientEmail.trim() || null,
-      client_phone: form.clientPhone.trim() || null,
-      reason: form.reason,
-      amount: Number(form.amount) || 0,
-      contacted_date: form.contactedDate || null,
-      status,
-      message_body: form.message.trim() || null,
+  ): Omit<RecoveryItemInsert, "user_id"> | null {
+    try {
+      return {
+        client_name: textField(form.clientName, "Client name", {
+          required: true,
+          maxLength: INPUT_LIMITS.name,
+        }),
+        client_email: optionalEmailField(form.clientEmail, "Client email"),
+        client_phone: optionalPhoneField(form.clientPhone, "Client phone"),
+        reason: enumField(form.reason, "Reason", RECOVERY_REASON_VALUES),
+        amount: numberField(form.amount, "Amount", { min: 0.01, max: 10_000_000 }),
+        contacted_date: optionalIsoDateField(form.contactedDate, "Contacted date"),
+        status,
+        message_body: optionalTextField(form.message, "Message", {
+          maxLength: INPUT_LIMITS.message,
+          multiline: true,
+        }),
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return null
     }
   }
 
@@ -219,12 +242,16 @@ export function AddRecoveryDialog({
   }
 
   async function handleSaveForLater() {
-    await onSave(buildPayload("message_ready"))
+    const payload = buildPayload("message_ready")
+    if (!payload) return
+    await onSave(payload)
     handleClose()
   }
 
   async function handleMarkAlreadySent() {
-    await onSaveAndMarkSent(buildPayload("sent"))
+    const payload = buildPayload("sent")
+    if (!payload) return
+    await onSaveAndMarkSent(payload)
     // parent will open check-back dialog; we just close the wizard
     handleClose()
   }

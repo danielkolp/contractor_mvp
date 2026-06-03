@@ -1,7 +1,25 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { validateGuestToken } from "@/lib/guest-access"
+import {
+  INPUT_LIMITS,
+  enumField,
+  guestTokenField,
+  inputErrorMessage,
+  optionalTextField,
+  uuidField,
+} from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
+
+const ESTIMATE_RESPONSES = ["Accepted", "Declined"] as const
+const DECLINE_REASONS = [
+  "price_too_high",
+  "scope_changed",
+  "hired_another",
+  "no_longer_needed",
+  "timeline",
+  "other",
+] as const
 
 export async function POST(req: NextRequest) {
   let body: unknown
@@ -11,22 +29,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { guestToken, estimateId, response, declineReason, declineComment } = body as {
-    guestToken?:     string
-    estimateId?:     string
-    response?:       string
-    declineReason?:  string
-    declineComment?: string
-  }
+  let guestToken: string
+  let estimateId: string
+  let response: (typeof ESTIMATE_RESPONSES)[number]
+  let declineReason: (typeof DECLINE_REASONS)[number] | null = null
+  let declineComment: string | null = null
 
-  if (!guestToken || typeof guestToken !== "string") {
-    return NextResponse.json({ error: "guestToken is required" }, { status: 400 })
-  }
-  if (!estimateId || typeof estimateId !== "string") {
-    return NextResponse.json({ error: "estimateId is required" }, { status: 400 })
-  }
-  if (response !== "Accepted" && response !== "Declined") {
-    return NextResponse.json({ error: "response must be Accepted or Declined" }, { status: 400 })
+  try {
+    const raw = body as {
+      guestToken?: unknown
+      estimateId?: unknown
+      response?: unknown
+      declineReason?: unknown
+      declineComment?: unknown
+    }
+    guestToken = guestTokenField(raw.guestToken)
+    estimateId = uuidField(raw.estimateId, "estimateId")
+    response = enumField(raw.response, "response", ESTIMATE_RESPONSES)
+    declineReason = raw.declineReason
+      ? enumField(raw.declineReason, "declineReason", DECLINE_REASONS)
+      : null
+    declineComment = optionalTextField(raw.declineComment, "Decline comment", {
+      maxLength: INPUT_LIMITS.notes,
+      multiline: true,
+    })
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const supabase = createServiceClient()
@@ -66,7 +94,7 @@ export async function POST(req: NextRequest) {
       .from("estimates")
       .update(
         response === "Declined"
-          ? { status: response, decline_reason: declineReason ?? null, decline_comment: declineComment ?? null }
+          ? { status: response, decline_reason: declineReason, decline_comment: declineComment }
           : { status: response }
       )
       .eq("id", estimateId)

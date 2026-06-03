@@ -17,6 +17,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  optionalNumberField,
+  optionalTextField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { CONTRACTOR_TRADES } from "@/components/ui/trade-multi-select"
@@ -29,11 +38,6 @@ type ContractorProfile = {
   owner_name: string | null
   trade: string | null
   service_area: string | null
-}
-
-function nullableNumber(value: FormDataEntryValue | null) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 export default function NewClientJobPage() {
@@ -53,9 +57,17 @@ export default function NewClientJobPage() {
       setProfileLoading(false)
       return
     }
+    let safeContractorId: string
+    try {
+      safeContractorId = uuidField(contractorId, "contractor")
+    } catch {
+      setContractorNotFound(true)
+      setProfileLoading(false)
+      return
+    }
     void (async () => {
       const { data, error } = await supabase.rpc("contractor_public_profile", {
-        contractor_user_id: contractorId,
+        contractor_user_id: safeContractorId,
       })
       if (error) {
         // Function not yet deployed — fall through with null profile.
@@ -129,7 +141,7 @@ export default function NewClientJobPage() {
       }
 
       // For single-trade contractors the field is hidden; inject the value directly.
-      const trade =
+      const rawTrade =
         contractorTrades.length === 1
           ? contractorTrades[0]
           : String(formData.get("trade") ?? "").trim() || null
@@ -140,15 +152,66 @@ export default function NewClientJobPage() {
         .eq("user_id", user.id)
         .maybeSingle()
 
-      const title = String(formData.get("title") ?? "").trim()
-      const description = String(formData.get("description") ?? "").trim()
-      const serviceArea = String(formData.get("service_area") ?? "").trim()
-      const urgency = String(formData.get("urgency") ?? "flexible") as JobUrgency
-      const contactPreference = String(formData.get("contact_preference") ?? "Email")
+      let safeContractorId: string
+      let title: string
+      let description: string
+      let trade: string | null
+      let serviceArea: string
+      let urgency: JobUrgency
+      let contactPreference: string
+      let photoNotes: string | null
+      let budgetMin: number | null
+      let budgetMax: number | null
+
+      try {
+        safeContractorId = uuidField(contractorId, "contractor")
+        title = textField(formData.get("title"), "Project title", {
+          required: true,
+          maxLength: INPUT_LIMITS.title,
+        })
+        description = textField(formData.get("description"), "Description", {
+          required: true,
+          maxLength: INPUT_LIMITS.description,
+          multiline: true,
+        })
+        const tradeValue = optionalTextField(rawTrade, "Trade", {
+          maxLength: INPUT_LIMITS.mediumText,
+        })
+        trade = tradeValue ? enumField(tradeValue, "Trade", CONTRACTOR_TRADES) : null
+        serviceArea = textField(formData.get("service_area"), "Service area", {
+          required: true,
+          maxLength: INPUT_LIMITS.serviceArea,
+        })
+        urgency = enumField(formData.get("urgency") ?? "flexible", "Urgency", [
+          "flexible",
+          "soon",
+          "urgent",
+        ] as const)
+        contactPreference = enumField(formData.get("contact_preference") ?? "Email", "Contact preference", [
+          "Email",
+          "Phone",
+          "Text",
+        ] as const)
+        photoNotes = optionalTextField(formData.get("photo_notes"), "Photo notes", {
+          maxLength: INPUT_LIMITS.notes,
+          multiline: true,
+        })
+        budgetMin = optionalNumberField(formData.get("budget_min"), "Minimum budget", {
+          min: 0,
+          max: 10_000_000,
+        })
+        budgetMax = optionalNumberField(formData.get("budget_max"), "Maximum budget", {
+          min: 0,
+          max: 10_000_000,
+        })
+      } catch (error) {
+        setErrorMessage(inputErrorMessage(error))
+        return
+      }
 
       const payload: JobRequestInsert = {
         client_id: user.id,
-        contractor_id: contractorId,
+        contractor_id: safeContractorId,
         client_name: clientProfile?.owner_name || user.email || null,
         client_email: user.email ?? null,
         title,
@@ -156,10 +219,10 @@ export default function NewClientJobPage() {
         trade: trade ?? null,
         service_area: serviceArea,
         urgency,
-        budget_min: nullableNumber(formData.get("budget_min")),
-        budget_max: nullableNumber(formData.get("budget_max")),
+        budget_min: budgetMin,
+        budget_max: budgetMax,
         contact_preference: contactPreference,
-        photo_notes: String(formData.get("photo_notes") ?? "").trim() || null,
+        photo_notes: photoNotes,
         status: "new",
       }
 

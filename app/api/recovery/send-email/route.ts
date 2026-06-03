@@ -6,6 +6,13 @@ import {
   renderRecoveryEmailHtml,
   renderRecoveryEmailText,
 } from "@/lib/email/recovery-email-template"
+import {
+  INPUT_LIMITS,
+  inputErrorMessage,
+  isoDateField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 
 // Instantiated once at module scope so the SDK is reused across requests.
 // Will be null when RESEND_API_KEY is absent — callers receive a 503.
@@ -36,29 +43,25 @@ export async function POST(req: NextRequest) {
 
   const body = raw as Record<string, unknown>
 
-  const recovery_item_id = body.recovery_item_id
-  const subject         = body.subject
-  const messageBody     = body.body
-  const check_back_date = body.check_back_date
+  let recovery_item_id: string
+  let subject: string
+  let messageBody: string
+  let check_back_date: string
 
-  if (!recovery_item_id || typeof recovery_item_id !== "string") {
-    return NextResponse.json({ error: "recovery_item_id is required" }, { status: 400 })
-  }
-  if (!subject || typeof subject !== "string" || subject.trim().length === 0) {
-    return NextResponse.json({ error: "subject is required" }, { status: 400 })
-  }
-  if (!messageBody || typeof messageBody !== "string" || messageBody.trim().length === 0) {
-    return NextResponse.json({ error: "message body is required" }, { status: 400 })
-  }
-  if (
-    !check_back_date ||
-    typeof check_back_date !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(check_back_date)
-  ) {
-    return NextResponse.json(
-      { error: "check_back_date must be a date string (YYYY-MM-DD)" },
-      { status: 400 }
-    )
+  try {
+    recovery_item_id = uuidField(body.recovery_item_id, "recovery_item_id")
+    subject = textField(body.subject, "Subject", {
+      required: true,
+      maxLength: INPUT_LIMITS.shortText,
+    })
+    messageBody = textField(body.body, "Message body", {
+      required: true,
+      maxLength: INPUT_LIMITS.message,
+      multiline: true,
+    })
+    check_back_date = isoDateField(body.check_back_date, "check_back_date")
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   // ── 3. Fetch recovery item + contractor profile in parallel ────────────────
@@ -102,8 +105,8 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const trimmedSubject = subject.trim()
-  const trimmedBody    = messageBody.trim()
+  const trimmedSubject = subject
+  const trimmedBody    = messageBody
   const today          = new Date().toISOString().slice(0, 10)
 
   // Contractor identity — fall back gracefully when profile is incomplete

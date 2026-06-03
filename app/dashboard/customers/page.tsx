@@ -48,6 +48,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatPhoneNumberInput } from "@/lib/phone-format"
 import { money } from "@/lib/format-money"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  optionalEmailField,
+  optionalIsoDateField,
+  optionalPhoneField,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -90,11 +99,6 @@ function formatDate(iso: string | null): string {
     day: "numeric",
     year: "numeric",
   })
-}
-
-function nullableText(v: string) {
-  const t = v.trim()
-  return t.length > 0 ? t : null
 }
 
 function getDisplayName(c: Pick<ClientRow, "company" | "name">): string {
@@ -239,18 +243,39 @@ export default function CustomersPage() {
   async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!userId) return
-    setIsSaving(true)
     setErrorMessage(null)
 
-    if (editingClient) {
-      const patch: ClientUpdate = {
-        name: form.name.trim() || "New Contact",
-        company: form.company.trim() || "New Company",
-        email: nullableText(form.email),
-        phone: nullableText(form.phone),
-        last_contacted_date: form.lastContactedDate || null,
-        payment_reliability: form.paymentReliability,
+    let basePayload: Omit<ClientInsert, "user_id">
+    try {
+      basePayload = {
+        name: textField(form.name.trim() ? form.name : "New Contact", "Contact name", {
+          required: true,
+          maxLength: INPUT_LIMITS.name,
+        }),
+        company: textField(form.company.trim() ? form.company : "New Company", "Company", {
+          required: true,
+          maxLength: INPUT_LIMITS.businessName,
+        }),
+        email: optionalEmailField(form.email, "Customer email"),
+        phone: optionalPhoneField(form.phone, "Customer phone"),
+        last_contacted_date: optionalIsoDateField(form.lastContactedDate, "Last contacted date"),
+        payment_reliability: enumField(
+          form.paymentReliability,
+          "Payment reliability",
+          reliabilityLabels
+        ),
       }
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
+    setIsSaving(true)
+
+    if (editingClient) {
+      const patch: ClientUpdate = basePayload
       const { data, error } = await supabase
         .from("clients").update(patch).eq("id", editingClient.id).eq("user_id", userId).select().single()
       if (error) { setErrorMessage(error.message) }
@@ -262,12 +287,7 @@ export default function CustomersPage() {
     } else {
       const payload: ClientInsert = {
         user_id: userId,
-        name: form.name.trim() || "New Contact",
-        company: form.company.trim() || "New Company",
-        email: nullableText(form.email),
-        phone: nullableText(form.phone),
-        last_contacted_date: form.lastContactedDate || null,
-        payment_reliability: form.paymentReliability,
+        ...basePayload,
       }
       const { data, error } = await supabase
         .from("clients").insert(payload).select().single()

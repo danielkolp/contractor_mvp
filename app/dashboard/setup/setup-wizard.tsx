@@ -39,6 +39,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatPhoneNumberInput } from "@/lib/phone-format"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  optionalPhoneField,
+  optionalTextField,
+  optionalUrlField,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import type { Database } from "@/lib/supabase/database.types"
@@ -46,7 +55,10 @@ import type { Database } from "@/lib/supabase/database.types"
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"]
 type SettingsRow = Database["public"]["Tables"]["settings"]["Row"]
+type SettingsInsert = Database["public"]["Tables"]["settings"]["Insert"]
+type SettingsUpdate = Database["public"]["Tables"]["settings"]["Update"]
 
 type ProfileForm = {
   company_name: string
@@ -89,6 +101,16 @@ const disconnectedStripeStatus: StripeStatus = {
   onboarding_complete: false,
 }
 
+const DEFAULT_SETTINGS = {
+  currency: "CAD",
+  defaultPaymentTerms: 30,
+  lateFeePercentage: 0,
+  firstReminderDays: 3,
+  secondReminderDays: 7,
+  finalNoticeDays: 14,
+  defaultTone: "friendly",
+} as const
+
 // ── Validation Helpers ─────────────────────────────────────────────────────────
 
 function parsePositiveInteger(value: string) {
@@ -99,22 +121,6 @@ function parsePositiveInteger(value: string) {
 function parseNonNegativeNumber(value: string) {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-}
-
-function isValidWebsite(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return true
-  try {
-    const url = new URL(trimmed)
-    return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname)
-  } catch {
-    return false
-  }
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 // ── Stage config ────────────────────────────────────────────────────────────────
@@ -550,9 +556,25 @@ export function SetupWizard() {
 
     const errors: Partial<Record<keyof ProfileForm, string>> = {}
     if (!profileForm.company_name.trim()) errors.company_name = "Business name is required."
+    else if (profileForm.company_name.trim().length > INPUT_LIMITS.businessName)
+      errors.company_name = `Business name must be ${INPUT_LIMITS.businessName} characters or fewer.`
     if (!profileForm.owner_name.trim()) errors.owner_name = "Owner name is required."
-    if (!isValidWebsite(profileForm.website))
-      errors.website = "Enter a full URL starting with https://"
+    else if (profileForm.owner_name.trim().length > INPUT_LIMITS.name)
+      errors.owner_name = `Owner name must be ${INPUT_LIMITS.name} characters or fewer.`
+    if (profileForm.phone.trim()) {
+      try {
+        optionalPhoneField(profileForm.phone)
+      } catch (error) {
+        errors.phone = inputErrorMessage(error)
+      }
+    }
+    if (profileForm.website.trim()) {
+      try {
+        optionalUrlField(profileForm.website, "Website")
+      } catch {
+        errors.website = "Enter a full URL starting with https://"
+      }
+    }
 
     setProfileErrors(errors)
     if (Object.keys(errors).length > 0) {
@@ -560,15 +582,27 @@ export function SetupWizard() {
       return
     }
 
+    let payload: ProfileUpdate
+    try {
+      payload = {
+        company_name: textField(profileForm.company_name, "Business name", {
+          required: true,
+          maxLength: INPUT_LIMITS.businessName,
+        }),
+        owner_name: textField(profileForm.owner_name, "Owner name", {
+          required: true,
+          maxLength: INPUT_LIMITS.name,
+        }),
+        phone: optionalPhoneField(profileForm.phone),
+        website: optionalUrlField(profileForm.website, "Website"),
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
     try {
-      const payload = {
-        company_name: profileForm.company_name.trim(),
-        owner_name: profileForm.owner_name.trim(),
-        phone: nullableText(profileForm.phone),
-        website: nullableText(profileForm.website),
-      }
-
       const result = profileRow
         ? await supabase.from("profiles").update(payload).eq("user_id", userId).select().single()
         : await supabase.from("profiles").insert({ user_id: userId, ...payload }).select().single()
@@ -590,13 +624,23 @@ export function SetupWizard() {
   async function handleSaveServices() {
     if (!userId) return
 
+    let payload: ProfileUpdate
+    try {
+      payload = {
+        trade: optionalTextField(servicesForm.trade, "Trades", {
+          maxLength: INPUT_LIMITS.mediumText,
+        }),
+        service_area: optionalTextField(servicesForm.service_area, "Service area", {
+          maxLength: INPUT_LIMITS.serviceArea,
+        }),
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
     try {
-      const payload = {
-        trade: nullableText(servicesForm.trade),
-        service_area: nullableText(servicesForm.service_area),
-      }
-
       const result = profileRow
         ? await supabase.from("profiles").update(payload).eq("user_id", userId).select().single()
         : await supabase.from("profiles").insert({ user_id: userId, ...payload }).select().single()
@@ -624,7 +668,9 @@ export function SetupWizard() {
 
     if (paymentTerms === null)
       errors.default_payment_terms = "Payment terms must be a positive whole number."
+    else if (paymentTerms > 365) errors.default_payment_terms = "Payment terms must be 365 days or fewer."
     if (lateFee === null) errors.late_fee_percentage = "Late fee cannot be negative."
+    else if (lateFee > 100) errors.late_fee_percentage = "Late fee must be 100% or less."
 
     setEstimateErrors(errors)
     if (Object.keys(errors).length > 0) {
@@ -632,26 +678,37 @@ export function SetupWizard() {
       return
     }
 
+    let currency: string
+    try {
+      currency = enumField(estimateForm.currency, "Currency", ["CAD", "USD"] as const)
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
     try {
-      const payload = {
-        currency: estimateForm.currency,
+      const payload: SettingsUpdate = {
+        currency,
         default_payment_terms: paymentTerms as number,
         late_fee_percentage: lateFee as number,
+      }
+      const insertPayload: SettingsInsert = {
+        user_id: userId,
+        default_payment_terms: paymentTerms as number,
+        late_fee_percentage: lateFee as number,
+        currency,
+        first_reminder_days: DEFAULT_SETTINGS.firstReminderDays,
+        second_reminder_days: DEFAULT_SETTINGS.secondReminderDays,
+        final_notice_days: DEFAULT_SETTINGS.finalNoticeDays,
+        default_tone: DEFAULT_SETTINGS.defaultTone,
       }
 
       const result = settingsRow
         ? await supabase.from("settings").update(payload).eq("user_id", userId).select().single()
         : await supabase
             .from("settings")
-            .insert({
-              user_id: userId,
-              ...payload,
-              first_reminder_days: Number(followUpForm.first_reminder_days) || 3,
-              second_reminder_days: Number(followUpForm.second_reminder_days) || 7,
-              final_notice_days: Number(followUpForm.final_notice_days) || 14,
-              default_tone: followUpForm.default_tone || "friendly",
-            })
+            .insert(insertPayload)
             .select()
             .single()
 
@@ -678,8 +735,11 @@ export function SetupWizard() {
     const final_ = parsePositiveInteger(followUpForm.final_notice_days)
 
     if (first === null) errors.first_reminder_days = "Must be a positive whole number."
+    else if (first > 365) errors.first_reminder_days = "Must be 365 days or fewer."
     if (second === null) errors.second_reminder_days = "Must be a positive whole number."
+    else if (second > 365) errors.second_reminder_days = "Must be 365 days or fewer."
     if (final_ === null) errors.final_notice_days = "Must be a positive whole number."
+    else if (final_ > 365) errors.final_notice_days = "Must be 365 days or fewer."
 
     if (first !== null && second !== null && final_ !== null) {
       if (!(first < second && second < final_)) {
@@ -696,26 +756,42 @@ export function SetupWizard() {
       return
     }
 
+    let defaultTone: string
+    try {
+      defaultTone = enumField(followUpForm.default_tone, "Default tone", [
+        "friendly",
+        "professional",
+        "firm",
+      ] as const)
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
     try {
-      const payload = {
+      const payload: SettingsUpdate = {
         first_reminder_days: first as number,
         second_reminder_days: second as number,
         final_notice_days: final_ as number,
-        default_tone: followUpForm.default_tone,
+        default_tone: defaultTone,
+      }
+      const insertPayload: SettingsInsert = {
+        user_id: userId,
+        first_reminder_days: first as number,
+        second_reminder_days: second as number,
+        final_notice_days: final_ as number,
+        default_tone: defaultTone,
+        currency: DEFAULT_SETTINGS.currency,
+        default_payment_terms: DEFAULT_SETTINGS.defaultPaymentTerms,
+        late_fee_percentage: DEFAULT_SETTINGS.lateFeePercentage,
       }
 
       const result = settingsRow
         ? await supabase.from("settings").update(payload).eq("user_id", userId).select().single()
         : await supabase
             .from("settings")
-            .insert({
-              user_id: userId,
-              ...payload,
-              currency: estimateForm.currency || "CAD",
-              default_payment_terms: Number(estimateForm.default_payment_terms) || 30,
-              late_fee_percentage: Number(estimateForm.late_fee_percentage) || 0,
-            })
+            .insert(insertPayload)
             .select()
             .single()
 

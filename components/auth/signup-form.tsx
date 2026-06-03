@@ -16,12 +16,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ServiceAreaSelect } from "@/components/ui/service-area-select"
-import { TradeMultiSelect } from "@/components/ui/trade-multi-select"
+import { CONTRACTOR_TRADES, TradeMultiSelect } from "@/components/ui/trade-multi-select"
 import {
   emailVerificationRedirectUrl,
   normalizeAuthEmail,
   resendSignupVerificationEmail,
 } from "@/lib/auth-verification"
+import {
+  INPUT_LIMITS,
+  InputValidationError,
+  inputErrorMessage,
+  optionalPhoneField,
+  optionalTextField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { cn } from "@/lib/utils"
@@ -214,11 +221,51 @@ export function SignupForm() {
       String(formData.get("role") ?? role) === "client"
         ? "client"
         : "contractor"
-    const ownerName = String(formData.get("owner_name") ?? "").trim()
-    const companyName = String(formData.get("company_name") ?? "").trim()
-    const trade = String(formData.get("trade") ?? "").trim()
-    const serviceArea = String(formData.get("service_area") ?? "").trim()
-    const phone = String(formData.get("phone") ?? "").trim()
+    let ownerName: string | null = null
+    let companyName: string | null = null
+    let trade: string | null = null
+    let serviceArea: string | null = null
+    let phone: string | null = null
+
+    if (!normalizedEmail) {
+      setErrorMessage("Enter a valid email address.")
+      return
+    }
+    if (password.length < 6 || password.length > 256) {
+      setErrorMessage("Password must be 6 to 256 characters.")
+      return
+    }
+    try {
+      ownerName = optionalTextField(formData.get("owner_name"), "Owner name", {
+        maxLength: INPUT_LIMITS.name,
+      })
+      companyName = optionalTextField(formData.get("company_name"), "Company name", {
+        maxLength: INPUT_LIMITS.businessName,
+      })
+      serviceArea = optionalTextField(formData.get("service_area"), "Service area", {
+        maxLength: INPUT_LIMITS.serviceArea,
+      })
+      const rawTrade = optionalTextField(formData.get("trade"), "Trades", {
+        maxLength: INPUT_LIMITS.mediumText,
+      })
+      const selectedTradeValues = rawTrade
+        ? rawTrade.split(",").map((value) => value.trim()).filter(Boolean)
+        : []
+      if (
+        selectedTradeValues.some(
+          (value) => !(CONTRACTOR_TRADES as readonly string[]).includes(value)
+        )
+      ) {
+        throw new InputValidationError("Trades contains an invalid option.")
+      }
+      trade = selectedRole === "contractor" && selectedTradeValues.length > 0
+        ? selectedTradeValues.join(",")
+        : null
+      phone = optionalPhoneField(String(formData.get("phone") ?? ""))
+    } catch (error) {
+      setErrorMessage(inputErrorMessage(error, error instanceof Error ? error.message : "Invalid profile details."))
+      return
+    }
 
     startTransition(async () => {
       setErrorMessage(null)
@@ -236,11 +283,11 @@ export function SignupForm() {
         options: {
           data: {
             role: selectedRole,
-            owner_name: ownerName || null,
-            company_name: selectedRole === "contractor" ? companyName || null : null,
-            trade: selectedRole === "contractor" ? trade || null : null,
-            service_area: serviceArea || null,
-            phone: phone || null,
+            owner_name: ownerName,
+            company_name: selectedRole === "contractor" ? companyName : null,
+            trade,
+            service_area: serviceArea,
+            phone,
           },
           emailRedirectTo: emailVerificationRedirectUrl(window.location.origin),
         },

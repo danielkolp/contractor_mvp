@@ -43,6 +43,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatPhoneNumberInput } from "@/lib/phone-format"
 import { money as moneyFormatter } from "@/lib/format-money"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  numberField,
+  optionalEmailField,
+  optionalIsoDateField,
+  optionalPhoneField,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -108,22 +118,6 @@ function formatDate(value: string | null) {
   }
 
   return dateFormatter.format(new Date(`${value}T00:00:00`))
-}
-
-function parseNumber(value: string) {
-  const parsed = Number(value)
-
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim()
-
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function nullableDate(value: string) {
-  return value || null
 }
 
 function getClientLabel(client: Pick<ClientRow, "company" | "name">) {
@@ -462,25 +456,51 @@ export default function ClientsPage() {
       return
     }
 
-    setIsSaving(true)
     setErrorMessage(null)
 
-    if (editingClient) {
-      const payload: ClientUpdate = {
-        name: form.name.trim() || "New Contact",
-        company: form.company.trim() || "New Client Company",
-        email: nullableText(form.email),
-        phone: nullableText(form.phone),
-        trade: form.trade,
-        total_billed: parseNumber(form.totalBilled),
-        unpaid_balance: parseNumber(form.unpaidBalance),
-        overdue_invoice_count: Math.max(
-          0,
-          Math.floor(parseNumber(form.overdueInvoiceCount))
+    let basePayload: Omit<ClientInsert, "user_id">
+    try {
+      basePayload = {
+        name: textField(form.name.trim() ? form.name : "New Contact", "Contact name", {
+          required: true,
+          maxLength: INPUT_LIMITS.name,
+        }),
+        company: textField(form.company.trim() ? form.company : "New Client Company", "Company", {
+          required: true,
+          maxLength: INPUT_LIMITS.businessName,
+        }),
+        email: optionalEmailField(form.email, "Client email"),
+        phone: optionalPhoneField(form.phone, "Client phone"),
+        trade: enumField(form.trade, "Trade", trades),
+        total_billed: numberField(form.totalBilled || 0, "Total billed", {
+          min: 0,
+          max: 10_000_000,
+        }),
+        unpaid_balance: numberField(form.unpaidBalance || 0, "Unpaid balance", {
+          min: 0,
+          max: 10_000_000,
+        }),
+        overdue_invoice_count: numberField(form.overdueInvoiceCount || 0, "Overdue invoices", {
+          min: 0,
+          max: 10_000,
+          integer: true,
+        }),
+        last_contacted_date: optionalIsoDateField(form.lastContactedDate, "Last contacted date"),
+        payment_reliability: enumField(
+          form.paymentReliability,
+          "Payment reliability",
+          reliabilityLabels
         ),
-        last_contacted_date: nullableDate(form.lastContactedDate),
-        payment_reliability: form.paymentReliability,
       }
+    } catch (error) {
+      setErrorMessage(inputErrorMessage(error))
+      return
+    }
+
+    setIsSaving(true)
+
+    if (editingClient) {
+      const payload: ClientUpdate = basePayload
 
       const { data, error } = await supabase
         .from("clients")
@@ -508,19 +528,7 @@ export default function ClientsPage() {
     } else {
       const payload: ClientInsert = {
         user_id: userId,
-        name: form.name.trim() || "New Contact",
-        company: form.company.trim() || "New Client Company",
-        email: nullableText(form.email),
-        phone: nullableText(form.phone),
-        trade: form.trade,
-        total_billed: parseNumber(form.totalBilled),
-        unpaid_balance: parseNumber(form.unpaidBalance),
-        overdue_invoice_count: Math.max(
-          0,
-          Math.floor(parseNumber(form.overdueInvoiceCount))
-        ),
-        last_contacted_date: nullableDate(form.lastContactedDate),
-        payment_reliability: form.paymentReliability,
+        ...basePayload,
       }
 
       const { data, error } = await supabase

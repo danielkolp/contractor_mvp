@@ -39,3 +39,7 @@ yarn-error.log*
 .vercel
 
 .claude
+
+# local artifacts
+*_QA_REPORT.md
+*.png

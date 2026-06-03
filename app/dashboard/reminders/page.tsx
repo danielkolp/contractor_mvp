@@ -31,6 +31,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  INPUT_LIMITS,
+  inputErrorMessage,
+  isoDateField,
+  optionalTextField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -43,11 +51,6 @@ type FilterTab = "today" | "upcoming" | "completed"
 
 function toReminderTimestamp(date: string) {
   return new Date(`${date}T09:00:00`).toISOString()
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function getReminderStatus(reminder: ReminderRow): "overdue" | "today" | "upcoming" | "completed" {
@@ -193,21 +196,37 @@ export default function RemindersPage() {
     event.preventDefault()
     if (!userId) return
 
-    setIsSaving(true)
     setErrorMessage(null)
 
-    const payload: ReminderInsert = {
-      user_id: userId,
-      invoice_id: form.invoiceId,
-      reminder_date: form.reminderDate,
-      scheduled_for: toReminderTimestamp(form.reminderDate),
-      reminder_type: form.reminderType.trim() || "Payment follow-up",
-      contact_method: "Email",
-      status: form.completed ? "Sent" : "Scheduled",
-      sent_at: form.completed ? new Date().toISOString() : null,
-      completed: form.completed,
-      notes: nullableText(form.notes),
+    let payload: ReminderInsert
+    try {
+      const reminderDate = isoDateField(form.reminderDate, "Reminder date")
+      payload = {
+        user_id: userId,
+        invoice_id: uuidField(form.invoiceId, "Invoice"),
+        reminder_date: reminderDate,
+        scheduled_for: toReminderTimestamp(reminderDate),
+        reminder_type: textField(form.reminderType.trim() || "Payment follow-up", "Reminder type", {
+          required: true,
+          maxLength: INPUT_LIMITS.shortText,
+        }),
+        contact_method: "Email",
+        status: form.completed ? "Sent" : "Scheduled",
+        sent_at: form.completed ? new Date().toISOString() : null,
+        completed: form.completed,
+        notes: optionalTextField(form.notes, "Reminder notes", {
+          maxLength: INPUT_LIMITS.notes,
+          multiline: true,
+        }),
+      }
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
     }
+
+    setIsSaving(true)
 
     const { data, error } = await supabase
       .from("reminders")
@@ -229,6 +248,14 @@ export default function RemindersPage() {
 
   async function markComplete(reminder: ReminderRow) {
     if (!userId) return
+    let reminderId: string
+    try {
+      reminderId = uuidField(reminder.id, "Reminder")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
 
     const payload: ReminderUpdate = {
@@ -240,7 +267,7 @@ export default function RemindersPage() {
     const { data, error } = await supabase
       .from("reminders")
       .update(payload)
-      .eq("id", reminder.id)
+      .eq("id", reminderId)
       .eq("user_id", userId)
       .select()
       .single()
@@ -249,7 +276,7 @@ export default function RemindersPage() {
       toast.error("Failed to update reminder")
     } else {
       setReminders((curr) =>
-        curr.map((r) => (r.id === reminder.id ? data : r))
+        curr.map((r) => (r.id === reminderId ? data : r))
       )
       toast.success("Reminder marked complete")
     }
@@ -259,18 +286,26 @@ export default function RemindersPage() {
 
   async function deleteReminder(reminder: ReminderRow) {
     if (!userId) return
+    let reminderId: string
+    try {
+      reminderId = uuidField(reminder.id, "Reminder")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
 
     const { error } = await supabase
       .from("reminders")
       .delete()
-      .eq("id", reminder.id)
+      .eq("id", reminderId)
       .eq("user_id", userId)
 
     if (error) {
       toast.error("Failed to delete reminder")
     } else {
-      setReminders((curr) => curr.filter((r) => r.id !== reminder.id))
+      setReminders((curr) => curr.filter((r) => r.id !== reminderId))
       toast.success("Reminder deleted")
     }
 

@@ -12,6 +12,15 @@ function formatCad(cents: number): string {
 const HEADER_COLOR = "#0369a1"
 const FONT = "Arial, sans-serif"
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 function emailShell(content: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -50,12 +59,14 @@ export function renderPaymentReceivedContractorHtml(args: ContractorPaymentArgs)
   } = args
 
   const platformFee = clientTotalCents - contractorAmountCents
+  const safeContractorName = escapeHtml(contractorName)
+  const safeEstimateNumber = escapeHtml(estimateNumber)
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Payment received</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Hi ${contractorName},</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Hi ${safeContractorName},</p>
     <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#111827;">
-      Your client paid for <strong>Estimate ${estimateNumber}</strong> through Euroflo.
+      Your client paid for <strong>Estimate ${safeEstimateNumber}</strong> through Euroflo.
     </p>
     <table cellpadding="0" cellspacing="0" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;margin:0 0 24px;">
       <tr style="background:#f9fafb;">
@@ -89,12 +100,14 @@ export interface ClientPaymentArgs {
 
 export function renderPaymentReceivedClientHtml(args: ClientPaymentArgs): string {
   const { clientName, estimateNumber, clientTotalCents } = args
+  const safeClientName = escapeHtml(clientName)
+  const safeEstimateNumber = escapeHtml(estimateNumber)
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Payment confirmed</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Hi ${clientName},</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Hi ${safeClientName},</p>
     <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#111827;">
-      We received your payment for <strong>Estimate ${estimateNumber}</strong>.
+      We received your payment for <strong>Estimate ${safeEstimateNumber}</strong>.
       Your contractor has been notified and will be in touch.
     </p>
     <table cellpadding="0" cellspacing="0" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;margin:0 0 24px;">

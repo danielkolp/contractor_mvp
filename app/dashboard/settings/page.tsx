@@ -21,6 +21,15 @@ import { Label } from "@/components/ui/label"
 import { formatPhoneNumberInput } from "@/lib/phone-format"
 import { ServiceAreaSelect } from "@/components/ui/service-area-select"
 import { CONTRACTOR_TRADES, TradeMultiSelect } from "@/components/ui/trade-multi-select"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  optionalPhoneField,
+  optionalTextField,
+  optionalUrlField,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -85,11 +94,6 @@ function toSettingsForm(settings: SettingsRow | null): SettingsForm {
     final_notice_days: String(settings?.final_notice_days ?? 14),
     default_tone: settings?.default_tone ?? "friendly",
   }
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 // ── Stripe Connect card ───────────────────────────────────────────────────────
@@ -365,10 +369,30 @@ function validateProfileForm(form: ProfileForm): ProfileErrors {
 
   if (!form.company_name.trim()) {
     errors.company_name = "Business name is required."
+  } else if (form.company_name.trim().length > INPUT_LIMITS.businessName) {
+    errors.company_name = `Business name must be ${INPUT_LIMITS.businessName} characters or fewer.`
   }
 
   if (!form.owner_name.trim()) {
     errors.owner_name = "Owner name is required."
+  } else if (form.owner_name.trim().length > INPUT_LIMITS.name) {
+    errors.owner_name = `Owner name must be ${INPUT_LIMITS.name} characters or fewer.`
+  }
+
+  if (form.trade.length > INPUT_LIMITS.mediumText) {
+    errors.trade = `Trades must be ${INPUT_LIMITS.mediumText} characters or fewer.`
+  }
+
+  if (form.phone.trim()) {
+    try {
+      optionalPhoneField(form.phone)
+    } catch (error) {
+      errors.phone = inputErrorMessage(error)
+    }
+  }
+
+  if (form.service_area.length > INPUT_LIMITS.serviceArea) {
+    errors.service_area = `Service area must be ${INPUT_LIMITS.serviceArea} characters or fewer.`
   }
 
   if (!isValidWebsite(form.website)) {
@@ -391,22 +415,32 @@ function validateSettingsForm(form: SettingsForm): {
 
   if (paymentTerms === null) {
     errors.default_payment_terms = "Payment terms must be a positive whole number."
+  } else if (paymentTerms > 365) {
+    errors.default_payment_terms = "Payment terms must be 365 days or fewer."
   }
 
   if (lateFeePercentage === null) {
     errors.late_fee_percentage = "Late fee cannot be negative."
+  } else if (lateFeePercentage > 100) {
+    errors.late_fee_percentage = "Late fee must be 100% or less."
   }
 
   if (firstReminderDays === null) {
     errors.first_reminder_days = "First reminder must be a positive whole number."
+  } else if (firstReminderDays > 365) {
+    errors.first_reminder_days = "First reminder must be 365 days or fewer."
   }
 
   if (secondReminderDays === null) {
     errors.second_reminder_days = "Second reminder must be a positive whole number."
+  } else if (secondReminderDays > 365) {
+    errors.second_reminder_days = "Second reminder must be 365 days or fewer."
   }
 
   if (finalNoticeDays === null) {
     errors.final_notice_days = "Final notice must be a positive whole number."
+  } else if (finalNoticeDays > 365) {
+    errors.final_notice_days = "Final notice must be 365 days or fewer."
   }
 
   if (
@@ -519,13 +553,30 @@ export default function SettingsPage() {
 
     setIsSavingProfile(true)
 
-    const payload: ProfileUpdate = {
-      company_name: profileForm.company_name.trim(),
-      owner_name: profileForm.owner_name.trim(),
-      trade: nullableText(profileForm.trade),
-      phone: nullableText(profileForm.phone),
-      website: nullableText(profileForm.website),
-      service_area: nullableText(profileForm.service_area),
+    let payload: ProfileUpdate
+    try {
+      payload = {
+        company_name: textField(profileForm.company_name, "Business name", {
+          required: true,
+          maxLength: INPUT_LIMITS.businessName,
+        }),
+        owner_name: textField(profileForm.owner_name, "Owner name", {
+          required: true,
+          maxLength: INPUT_LIMITS.name,
+        }),
+        trade: optionalTextField(profileForm.trade, "Trades", {
+          maxLength: INPUT_LIMITS.mediumText,
+        }),
+        phone: optionalPhoneField(profileForm.phone),
+        website: optionalUrlField(profileForm.website, "Website"),
+        service_area: optionalTextField(profileForm.service_area, "Service area", {
+          maxLength: INPUT_LIMITS.serviceArea,
+        }),
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      setIsSavingProfile(false)
+      return
     }
 
     let error: Error | null = null
@@ -572,14 +623,29 @@ export default function SettingsPage() {
 
     setIsSavingSettings(true)
 
+    let currency: string
+    let defaultTone: string
+    try {
+      currency = enumField(settingsForm.currency, "Currency", ["CAD", "USD"] as const)
+      defaultTone = enumField(settingsForm.default_tone, "Default tone", [
+        "friendly",
+        "professional",
+        "firm",
+      ] as const)
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      setIsSavingSettings(false)
+      return
+    }
+
     const payload: SettingsUpdate = {
       default_payment_terms: validation.values.paymentTerms,
       late_fee_percentage: validation.values.lateFeePercentage,
-      currency: settingsForm.currency,
+      currency,
       first_reminder_days: validation.values.firstReminderDays,
       second_reminder_days: validation.values.secondReminderDays,
       final_notice_days: validation.values.finalNoticeDays,
-      default_tone: settingsForm.default_tone,
+      default_tone: defaultTone,
     }
 
     let error: Error | null = null

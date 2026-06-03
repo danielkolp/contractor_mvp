@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { validateGuestToken } from "@/lib/guest-access"
+import { guestTokenField, inputErrorMessage } from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
 
 export async function POST(req: NextRequest) {
@@ -11,10 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { guestToken } = body as { guestToken?: string }
-
-  if (!guestToken || typeof guestToken !== "string") {
-    return NextResponse.json({ error: "guestToken is required" }, { status: 400 })
+  let guestToken: string
+  try {
+    guestToken = guestTokenField((body as { guestToken?: unknown }).guestToken)
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const supabase = createServiceClient()

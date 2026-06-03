@@ -40,6 +40,15 @@ export function LoginForm({ message, next }: { message?: string; next?: string }
     event.preventDefault()
     const normalizedEmail = normalizeAuthEmail(email)
 
+    if (!normalizedEmail) {
+      setErrorMessage("Enter a valid email address.")
+      return
+    }
+    if (password.length === 0 || password.length > 256) {
+      setErrorMessage("Password is required and must be 256 characters or fewer.")
+      return
+    }
+
     startTransition(async () => {
       setErrorMessage(null)
 

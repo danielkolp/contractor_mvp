@@ -12,8 +12,10 @@ import {
   resolveBalanceCents,
   resolveDepositCents,
 } from "@/lib/pricing"
+import { enumField, inputErrorMessage, uuidField } from "@/lib/security/input"
 
 type PaymentType = "deposit" | "balance" | "full"
+const PAYMENT_TYPES = ["deposit", "balance", "full"] as const
 
 export async function POST(req: NextRequest) {
   // ── 1. Auth ───────────────────────────────────────────────────────────────────
@@ -28,14 +30,16 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() }
   catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
 
-  const { estimateId, paymentType = "deposit" } =
-    body as { estimateId?: string; paymentType?: PaymentType }
-
-  if (!estimateId || typeof estimateId !== "string") {
-    return NextResponse.json({ error: "estimateId is required" }, { status: 400 })
-  }
-  if (!["deposit", "balance", "full"].includes(paymentType)) {
-    return NextResponse.json({ error: "Invalid paymentType" }, { status: 400 })
+  let estimateId: string
+  let paymentType: PaymentType
+  try {
+    const raw = body as { estimateId?: unknown; paymentType?: unknown }
+    estimateId = uuidField(raw.estimateId, "estimateId")
+    paymentType = raw.paymentType === undefined || raw.paymentType === null
+      ? "deposit"
+      : enumField(raw.paymentType, "paymentType", PAYMENT_TYPES)
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   // ── 3. Load estimate (RLS-gated) ──────────────────────────────────────────────

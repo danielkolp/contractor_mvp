@@ -1,5 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+import {
+  INPUT_LIMITS,
+  emailField,
+  inputErrorMessage,
+  optionalTextField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
 
 // ── Resend inbound email webhook ───────────────────────────────────────────────
@@ -19,6 +27,8 @@ import { createServiceClient } from "@/lib/supabase/service"
 // Idempotency: duplicate deliveries for the same provider_email_id are silently
 // ignored (unique index on recovery_email_replies.provider_email_id).
 
+const MAX_INBOUND_WEBHOOK_BYTES = 1_000_000
+
 export async function POST(req: NextRequest) {
   // ── 1. Authenticate the webhook ─────────────────────────────────────────────
   const expectedSecret = process.env.RESEND_WEBHOOK_SECRET?.trim()
@@ -35,6 +45,11 @@ export async function POST(req: NextRequest) {
   // If RESEND_WEBHOOK_SECRET is not set we still process the request so the
   // webhook works during initial setup, but operators should always set the secret.
 
+  const contentLength = Number(req.headers.get("content-length") ?? 0)
+  if (Number.isFinite(contentLength) && contentLength > MAX_INBOUND_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 })
+  }
+
   // ── 2. Parse the JSON body ───────────────────────────────────────────────────
   let raw: unknown
   try {
@@ -43,8 +58,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
+  const rawPayloadSize = JSON.stringify(raw).length
+  if (rawPayloadSize > MAX_INBOUND_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 })
+  }
+
   // ── 3. Normalise the Resend inbound payload ──────────────────────────────────
-  console.log("[inbound] raw payload:", JSON.stringify(raw, null, 2))
   // Resend inbound webhook payload:
   // {
   //   "type": "email.received",
@@ -62,37 +81,73 @@ export async function POST(req: NextRequest) {
   const payload = raw as Record<string, unknown>
 
   // Accept both wrapped {"type":"email.received","data":{...}} and flat form.
-  const eventType = payload.type as string | undefined
-  const data      = (payload.data ?? payload) as Record<string, unknown>
+  let eventType: string | undefined
+  let data: Record<string, unknown>
+  let fromRaw: string
+  let toRaw: unknown
+  let subjectRaw: string | null
+  let textBodyRaw: string | null
+  let htmlBodyRaw: string | null
+  let providerEmailId: string | null
+
+  try {
+    eventType = typeof payload.type === "string"
+      ? textField(payload.type, "event type", { maxLength: 64 })
+      : undefined
+    data = (payload.data ?? payload) as Record<string, unknown>
+    fromRaw = textField(data.from ?? data.sender ?? "", "from", {
+      required: true,
+      maxLength: INPUT_LIMITS.mediumText,
+    })
+    toRaw = data.to ?? data.recipient
+    subjectRaw = optionalTextField(data.subject ?? "", "Subject", {
+      maxLength: INPUT_LIMITS.shortText,
+    })
+    textBodyRaw = optionalTextField(data.text ?? data.plain ?? "", "Text body", {
+      maxLength: INPUT_LIMITS.message,
+      multiline: true,
+    })
+    htmlBodyRaw = optionalTextField(data.html ?? "", "HTML body", {
+      maxLength: 10_000,
+      multiline: true,
+    })
+    providerEmailId = optionalTextField(
+      data.email_id ?? data.messageId ?? data.message_id ?? null,
+      "provider email id",
+      { maxLength: INPUT_LIMITS.mediumText }
+    )
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
+  }
 
   if (eventType && eventType !== "email.received" && eventType !== "inbound.email") {
     // Not an inbound email event — acknowledge and ignore.
     return NextResponse.json({ received: true })
   }
 
-  // Extract fields from the Resend inbound payload.
-  const fromRaw       = (data.from  ?? data.sender ?? "") as string
-  const toRaw         = data.to ?? data.recipient
-  const subjectRaw    = (data.subject ?? "") as string
-  const textBodyRaw   = (data.text ?? data.plain ?? "") as string
-  const htmlBodyRaw   = (data.html ?? "") as string
-  // Resend uses email_id or messageId depending on the SDK version.
-  const providerEmailId = (data.email_id ?? data.messageId ?? data.message_id ?? null) as string | null
+  let fromName: string | null
+  let fromEmail: string
+  let toAddresses: string[]
+  try {
+    // Normalise "from" — could be "Name <addr>" or just "addr"
+    const parsedFrom = parseEmailAddress(fromRaw)
+    fromName = parsedFrom.name
+    fromEmail = parsedFrom.email
 
-  // Normalise "from" — could be "Name <addr>" or just "addr"
-  const { name: fromName, email: fromEmail } = parseEmailAddress(fromRaw)
-
-  // Normalise "to" — could be a string or an array
-  const toAddresses: string[] = Array.isArray(toRaw)
-    ? (toRaw as unknown[]).map((a) => String(a))
-    : typeof toRaw === "string"
-    ? [toRaw]
-    : []
+    // Normalise "to" — could be a string or an array
+    toAddresses = Array.isArray(toRaw)
+      ? (toRaw as unknown[])
+          .slice(0, 20)
+          .map((a) => parseEmailAddress(String(a)).email)
+      : typeof toRaw === "string"
+      ? [parseEmailAddress(toRaw).email]
+      : []
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
+  }
 
   if (toAddresses.length === 0 || !fromEmail) {
-    // Malformed payload — acknowledge without error to prevent retries.
-    console.warn("[inbound] malformed payload: missing to/from", { fromRaw, toRaw })
-    return NextResponse.json({ received: true })
+    return NextResponse.json({ error: "Malformed payload: missing to/from" }, { status: 400 })
   }
 
   // ── 4. Match to a recovery email event ──────────────────────────────────────
@@ -206,15 +261,23 @@ function parseEmailAddress(raw: string): { name: string | null; email: string } 
   const match = raw.match(/^(.*?)\s*<([^>]+)>\s*$/)
   if (match) {
     return {
-      name:  match[1].trim() || null,
-      email: match[2].trim().toLowerCase(),
+      name: optionalTextField(match[1], "sender name", {
+        maxLength: INPUT_LIMITS.name,
+      }),
+      email: emailField(match[2]),
     }
   }
-  return { name: null, email: raw.trim().toLowerCase() }
+  return { name: null, email: emailField(raw) }
 }
 
 function parseThreadKey(toAddress: string): string | null {
   // Extracts the UUID from r_<uuid>@domain
   const match = toAddress.match(/^r_([0-9a-f-]{36})@/)
-  return match ? match[1] : null
+  if (!match) return null
+  try {
+    return uuidField(match[1], "thread key")
+  } catch (error) {
+    console.warn("[inbound] invalid thread key:", inputErrorMessage(error))
+    return null
+  }
 }

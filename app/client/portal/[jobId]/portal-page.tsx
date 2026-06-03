@@ -20,6 +20,15 @@ import {
   WorkScheduleCard,
 } from "@/components/client/portal-sections"
 import { Button } from "@/components/ui/button"
+import {
+  INPUT_LIMITS,
+  enumField,
+  inputErrorMessage,
+  isoDateTimeField,
+  optionalTextField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -27,6 +36,14 @@ type JobRequest    = Database["public"]["Tables"]["job_requests"]["Row"]
 type Estimate      = Database["public"]["Tables"]["estimates"]["Row"]
 type Invoice       = Database["public"]["Tables"]["invoices"]["Row"]
 type TimelineEvent = Database["public"]["Tables"]["project_timeline_events"]["Row"]
+const DECLINE_REASONS = [
+  "price_too_high",
+  "scope_changed",
+  "hired_another",
+  "no_longer_needed",
+  "timeline",
+  "other",
+] as const
 
 export function PortalPage({
   jobId,
@@ -46,6 +63,15 @@ export function PortalPage({
   const load = useCallback(async () => {
     setLoading(true)
 
+    let safeJobId: string
+    try {
+      safeJobId = uuidField(jobId, "jobId")
+    } catch {
+      setJob(null)
+      setLoading(false)
+      return
+    }
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setLoading(false)
@@ -54,13 +80,13 @@ export function PortalPage({
 
     const [jobResult, estsResult, invsResult, eventsResult] =
       await Promise.all([
-        supabase.from("job_requests").select("*").eq("id", jobId).maybeSingle(),
-        supabase.from("estimates").select("*").eq("job_request_id", jobId).neq("status", "Draft"),
-        supabase.from("invoices").select("*").eq("job_request_id", jobId),
+        supabase.from("job_requests").select("*").eq("id", safeJobId).maybeSingle(),
+        supabase.from("estimates").select("*").eq("job_request_id", safeJobId).neq("status", "Draft"),
+        supabase.from("invoices").select("*").eq("job_request_id", safeJobId),
         supabase
           .from("project_timeline_events")
           .select("*")
-          .eq("job_request_id", jobId)
+          .eq("job_request_id", safeJobId)
           .order("event_date", { ascending: true }),
       ])
 
@@ -78,10 +104,23 @@ export function PortalPage({
 
   async function respondToDetails(response: string) {
     if (!job) return
+    let safeJobId: string
+    let safeResponse: string
+    try {
+      safeJobId = uuidField(jobId, "jobId")
+      safeResponse = textField(response, "Response", {
+        required: true,
+        maxLength: INPUT_LIMITS.description,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
     const { data, error } = await supabase
       .from("job_requests")
-      .update({ more_details_response: response })
-      .eq("id", jobId)
+      .update({ more_details_response: safeResponse })
+      .eq("id", safeJobId)
       .select()
       .single()
     if (error) { toast.error("Could not send your response. Please try again."); return }
@@ -91,10 +130,17 @@ export function PortalPage({
 
   async function confirmInspection() {
     if (!job) return
+    let safeJobId: string
+    try {
+      safeJobId = uuidField(jobId, "jobId")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
     const { data, error } = await supabase
       .from("job_requests")
       .update({ status: "inspection_confirmed" })
-      .eq("id", jobId)
+      .eq("id", safeJobId)
       .select()
       .single()
     if (error) { toast.error("Could not confirm inspection. Please try again."); return }
@@ -104,10 +150,24 @@ export function PortalPage({
 
   async function suggestVisitTime(proposedAt: string, notes: string) {
     if (!job) return
+    let safeJobId: string
+    let safeProposedAt: string
+    let safeNotes: string | null
+    try {
+      safeJobId = uuidField(jobId, "jobId")
+      safeProposedAt = isoDateTimeField(proposedAt, "Proposed time")
+      safeNotes = optionalTextField(notes, "Notes", {
+        maxLength: INPUT_LIMITS.notes,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
     const { data, error } = await supabase
       .from("job_requests")
-      .update({ visit_client_proposed_at: proposedAt, visit_client_notes: notes || null })
-      .eq("id", jobId)
+      .update({ visit_client_proposed_at: safeProposedAt, visit_client_notes: safeNotes })
+      .eq("id", safeJobId)
       .select()
       .single()
     if (error) { toast.error("Could not send your suggestion. Please try again."); return }
@@ -122,22 +182,41 @@ export function PortalPage({
     declineComment?: string,
   ) {
     if (!job) return
+    let safeJobId: string
+    let safeEstimateId: string
+    let safeDeclineReason: (typeof DECLINE_REASONS)[number] | null = null
+    let safeDeclineComment: string | null = null
+
+    try {
+      safeJobId = uuidField(jobId, "jobId")
+      safeEstimateId = uuidField(est.id, "estimateId")
+      if (response === "Declined" && declineReason) {
+        safeDeclineReason = enumField(declineReason, "Decline reason", DECLINE_REASONS)
+      }
+      safeDeclineComment = optionalTextField(declineComment, "Decline comment", {
+        maxLength: INPUT_LIMITS.notes,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
 
     const [estResult, jobResult] = await Promise.all([
       supabase
         .from("estimates")
         .update(
           response === "Declined"
-            ? { status: response, decline_reason: declineReason ?? null, decline_comment: declineComment ?? null }
+            ? { status: response, decline_reason: safeDeclineReason, decline_comment: safeDeclineComment }
             : { status: response }
         )
-        .eq("id", est.id)
+        .eq("id", safeEstimateId)
         .select()
         .single(),
       supabase
         .from("job_requests")
         .update({ status: response === "Accepted" ? "accepted" : "declined" })
-        .eq("id", jobId)
+        .eq("id", safeJobId)
         .select()
         .single(),
     ])

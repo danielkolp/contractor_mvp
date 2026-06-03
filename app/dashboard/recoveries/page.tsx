@@ -42,6 +42,13 @@ import {
 import { Input } from "@/components/ui/input"
 import { generateRecoveryItemMessage, reasonLabel } from "@/lib/recovery-engine"
 import { money } from "@/lib/format-money"
+import {
+  INPUT_LIMITS,
+  inputErrorMessage,
+  isoDateField,
+  optionalTextField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -301,15 +308,23 @@ export default function RecoveriesPage() {
 
   async function updateItem(id: string, patch: RecoveryItemUpdate): Promise<boolean> {
     if (!userId) return false
+    let safeId: string
+    try {
+      safeId = uuidField(id, "Recovery item")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return false
+    }
+
     const { data, error } = await supabase
       .from("recovery_items")
       .update(patch)
-      .eq("id", id)
+      .eq("id", safeId)
       .eq("user_id", userId)
       .select()
       .single()
     if (error) { toast.error(error.message); return false }
-    setItems((prev) => prev.map((i) => (i.id === id ? data : i)))
+    setItems((prev) => prev.map((i) => (i.id === safeId ? data : i)))
     return true
   }
 
@@ -328,12 +343,20 @@ export default function RecoveriesPage() {
 
   async function handleCheckBackConfirm(date: string) {
     if (!checkBackItem) return
+    let checkBackDate: string
+    try {
+      checkBackDate = isoDateField(date, "Check-back date")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
-    const ok = await updateItem(checkBackItem.id, { status: "sent", check_back_date: date })
+    const ok = await updateItem(checkBackItem.id, { status: "sent", check_back_date: checkBackDate })
     if (ok) {
       toast.success(
         `Marked as sent. Check-in scheduled for ${new Date(
-          `${date}T00:00:00`
+          `${checkBackDate}T00:00:00`
         ).toLocaleDateString("en-CA", { month: "short", day: "numeric" })}.`
       )
     }
@@ -349,10 +372,21 @@ export default function RecoveriesPage() {
       amount: item.amount,
       followUpCount: item.follow_up_count + 1,
     })
+    let messageBody: string | null
+    try {
+      messageBody = optionalTextField(newMessage, "Message", {
+        maxLength: INPUT_LIMITS.message,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      setIsSaving(false)
+      return
+    }
     await updateItem(item.id, {
       status: "needs_follow_up",
       check_back_date: null,
-      message_body: newMessage,
+      message_body: messageBody,
       follow_up_count: item.follow_up_count + 1,
     })
     toast.success("New follow-up message generated.")

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { claimGuestAccess } from "@/lib/guest-access"
+import { guestTokenField, inputErrorMessage } from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 
@@ -20,10 +21,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { claimToken } = body as { claimToken?: string }
-
-  if (!claimToken || typeof claimToken !== "string") {
-    return NextResponse.json({ error: "claimToken is required" }, { status: 400 })
+  let claimToken: string
+  try {
+    claimToken = guestTokenField((body as { claimToken?: unknown }).claimToken, "claimToken")
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const supabase = createServiceClient()

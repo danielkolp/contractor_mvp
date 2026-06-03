@@ -70,6 +70,20 @@ import {
   isRecoverableInvoice,
 } from "@/lib/recovery-engine"
 import { money as moneyFormatter } from "@/lib/format-money"
+import {
+  INPUT_LIMITS,
+  InputValidationError,
+  enumField,
+  inputErrorMessage,
+  isoDateField,
+  numberField,
+  optionalEmailField,
+  optionalIsoDateField,
+  optionalTextField,
+  optionalUuidField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
@@ -112,10 +126,22 @@ function lineItemSubtotal(items: LineItem[]): number {
 }
 
 function serializeLineItems(items: LineItem[]) {
-  return items.map(({ description, quantity, unit_price }) => ({
-    description,
-    quantity: parseFloat(quantity) || 0,
-    unit_price: parseFloat(unit_price) || 0,
+  if (items.length > 100) {
+    throw new InputValidationError("Line items must include 100 rows or fewer.")
+  }
+
+  return items.map(({ description, quantity, unit_price }, index) => ({
+    description: textField(description, `Line item ${index + 1}`, {
+      maxLength: INPUT_LIMITS.lineItemDescription,
+    }),
+    quantity: numberField(quantity || 0, `Line item ${index + 1} quantity`, {
+      min: 0,
+      max: 100_000,
+    }),
+    unit_price: numberField(unit_price || 0, `Line item ${index + 1} unit price`, {
+      min: 0,
+      max: 10_000_000,
+    }),
   }))
 }
 
@@ -318,22 +344,6 @@ function inferTrade(clientName: string) {
   }
 
   return "Renovation"
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim()
-
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function nullableDate(value: string) {
-  return value || null
-}
-
-function parseAmount(value: string) {
-  const parsed = Number(value)
-
-  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function toReminderTimestamp(date: string) {
@@ -874,41 +884,80 @@ export default function InvoicesPage() {
       return
     }
 
-    setIsSaving(true)
     setErrorMessage(null)
 
-    const invoiceNumber =
-      form.invoiceNumber.trim() || `INV-${Date.now().toString().slice(-6)}`
-    const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
-    const finalAmount = hasLineItems ? liTotal : parseAmount(form.amount)
-    const paidAt =
-      form.status === "Paid"
-        ? editingInvoice?.paid_at || new Date().toISOString()
-        : null
     const linkedClient = form.clientId
       ? clients.find((c) => c.id === form.clientId) ?? null
       : null
-    const resolvedClientName = linkedClient
-      ? getClientLabel(linkedClient)
-      : nullableText(form.clientName)
-    const resolvedTrade =
-      linkedClient?.trade || inferTrade(form.clientName)
 
-    if (editingInvoice) {
-      const payload: InvoiceUpdate = {
-        invoice_number: invoiceNumber,
-        client_id: form.clientId ?? null,
+    let basePayload: Omit<InvoiceInsert, "user_id">
+    try {
+      const serializedItems = hasLineItems ? serializeLineItems(form.lineItems) : []
+      const taxRate = hasLineItems
+        ? numberField(form.taxRate || 0, "Tax rate", { min: 0, max: 100 })
+        : 0
+      const sanitizedSubtotal = serializedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unit_price,
+        0
+      )
+      const finalAmount = hasLineItems
+        ? numberField(sanitizedSubtotal + sanitizedSubtotal * (taxRate / 100), "Invoice amount", {
+            min: 0,
+            max: 10_000_000,
+          })
+        : numberField(form.amount || 0, "Invoice amount", {
+            min: 0,
+            max: 10_000_000,
+          })
+      const safeStatus = enumField(form.status, "Invoice status", invoiceStatuses)
+      const resolvedClientName = linkedClient
+        ? optionalTextField(getClientLabel(linkedClient), "Client name", {
+            maxLength: INPUT_LIMITS.name,
+          })
+        : optionalTextField(form.clientName, "Client name", {
+            maxLength: INPUT_LIMITS.name,
+          })
+      const resolvedTrade = optionalTextField(
+        linkedClient?.trade || inferTrade(form.clientName),
+        "Trade",
+        { maxLength: INPUT_LIMITS.mediumText }
+      )
+
+      basePayload = {
+        invoice_number: textField(
+          form.invoiceNumber.trim() || `INV-${Date.now().toString().slice(-6)}`,
+          "Invoice number",
+          { required: true, maxLength: INPUT_LIMITS.invoiceNumber }
+        ),
+        client_id: optionalUuidField(form.clientId, "Client"),
         client_name: resolvedClientName,
         trade: resolvedTrade,
         amount: finalAmount,
-        issue_date: nullableDate(form.issueDate),
-        due_date: nullableDate(form.dueDate),
-        status: form.status,
-        notes: nullableText(form.notes),
-        paid_at: paidAt,
+        issue_date: optionalIsoDateField(form.issueDate, "Issue date"),
+        due_date: optionalIsoDateField(form.dueDate, "Due date"),
+        status: safeStatus,
+        notes: optionalTextField(form.notes, "Notes", {
+          maxLength: INPUT_LIMITS.notes,
+          multiline: true,
+        }),
+        paid_at:
+          safeStatus === "Paid"
+            ? editingInvoice?.paid_at || new Date().toISOString()
+            : null,
         line_items: serializedItems,
-        tax_rate: hasLineItems ? liTaxRate : 0,
+        tax_rate: taxRate,
       }
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
+    setIsSaving(true)
+
+    if (editingInvoice) {
+      const payload: InvoiceUpdate = basePayload
 
       const { data, error } = await supabase
         .from("invoices")
@@ -932,18 +981,7 @@ export default function InvoicesPage() {
     } else {
       const payload: InvoiceInsert = {
         user_id: userId,
-        invoice_number: invoiceNumber,
-        client_id: form.clientId ?? null,
-        client_name: resolvedClientName,
-        trade: resolvedTrade,
-        amount: finalAmount,
-        issue_date: nullableDate(form.issueDate),
-        due_date: nullableDate(form.dueDate),
-        status: form.status,
-        notes: nullableText(form.notes),
-        paid_at: paidAt,
-        line_items: serializedItems,
-        tax_rate: hasLineItems ? liTaxRate : 0,
+        ...basePayload,
       }
 
       const { data, error } = await supabase
@@ -973,18 +1011,30 @@ export default function InvoicesPage() {
       return
     }
 
+    let safeInvoiceId: string
+    let safeStatus: InvoiceStatus
+    try {
+      safeInvoiceId = uuidField(invoiceId, "Invoice")
+      safeStatus = enumField(status, "Invoice status", invoiceStatuses)
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
     setIsSaving(true)
     setErrorMessage(null)
 
     const payload: InvoiceUpdate = {
-      status,
-      paid_at: status === "Paid" ? new Date().toISOString() : null,
+      status: safeStatus,
+      paid_at: safeStatus === "Paid" ? new Date().toISOString() : null,
     }
 
     const { data, error } = await supabase
       .from("invoices")
       .update(payload)
-      .eq("id", invoiceId)
+      .eq("id", safeInvoiceId)
       .eq("user_id", userId)
       .select()
       .single()
@@ -993,9 +1043,9 @@ export default function InvoicesPage() {
       setErrorMessage(error.message)
     } else {
       setInvoices((current) =>
-        current.map((invoice) => (invoice.id === invoiceId ? data : invoice))
+        current.map((invoice) => (invoice.id === safeInvoiceId ? data : invoice))
       )
-      toast.success(`Invoice marked ${getStatusDisplayLabel(status).toLowerCase()}`)
+      toast.success(`Invoice marked ${getStatusDisplayLabel(safeStatus).toLowerCase()}`)
     }
 
     setIsSaving(false)
@@ -1098,23 +1148,38 @@ export default function InvoicesPage() {
       return
     }
 
-    setIsSaving(true)
     setErrorMessage(null)
 
-    const completedAt = reminderForm.completed ? new Date().toISOString() : null
-    const payload: ReminderInsert = {
-      user_id: userId,
-      invoice_id: reminderForm.invoiceId,
-      reminder_date: reminderForm.reminderDate,
-      scheduled_for: toReminderTimestamp(reminderForm.reminderDate),
-      reminder_type:
-        reminderForm.reminderType.trim() || "Payment follow-up",
-      contact_method: "Email",
-      status: reminderForm.completed ? "Sent" : "Scheduled",
-      sent_at: completedAt,
-      completed: reminderForm.completed,
-      notes: nullableText(reminderForm.notes),
+    let payload: ReminderInsert
+    try {
+      const reminderDate = isoDateField(reminderForm.reminderDate, "Reminder date")
+      payload = {
+        user_id: userId,
+        invoice_id: uuidField(reminderForm.invoiceId, "Invoice"),
+        reminder_date: reminderDate,
+        scheduled_for: toReminderTimestamp(reminderDate),
+        reminder_type: textField(
+          reminderForm.reminderType.trim() || "Payment follow-up",
+          "Reminder type",
+          { required: true, maxLength: INPUT_LIMITS.shortText }
+        ),
+        contact_method: "Email",
+        status: reminderForm.completed ? "Sent" : "Scheduled",
+        sent_at: reminderForm.completed ? new Date().toISOString() : null,
+        completed: reminderForm.completed,
+        notes: optionalTextField(reminderForm.notes, "Reminder notes", {
+          maxLength: INPUT_LIMITS.notes,
+          multiline: true,
+        }),
+      }
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
     }
+
+    setIsSaving(true)
 
     const { data, error } = await supabase
       .from("reminders")
@@ -1198,23 +1263,33 @@ export default function InvoicesPage() {
       return
     }
 
+    let safeInvoiceId: string
+    try {
+      safeInvoiceId = uuidField(invoiceId, "Invoice")
+    } catch (error) {
+      const message = inputErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
     setIsSaving(true)
     setErrorMessage(null)
 
     const { error } = await supabase
       .from("invoices")
       .delete()
-      .eq("id", invoiceId)
+      .eq("id", safeInvoiceId)
       .eq("user_id", userId)
 
     if (error) {
       setErrorMessage(error.message)
     } else {
       setInvoices((current) =>
-        current.filter((invoice) => invoice.id !== invoiceId)
+        current.filter((invoice) => invoice.id !== safeInvoiceId)
       )
       setReminders((current) =>
-        current.filter((reminder) => reminder.invoice_id !== invoiceId)
+        current.filter((reminder) => reminder.invoice_id !== safeInvoiceId)
       )
 
     }
@@ -1229,15 +1304,30 @@ export default function InvoicesPage() {
   ): Promise<ClientRow | null> {
     if (!userId) return null
 
+    let payload: Database["public"]["Tables"]["clients"]["Insert"]
+    try {
+      const safeCompany = textField(company, "Company", {
+        required: true,
+        maxLength: INPUT_LIMITS.businessName,
+      })
+      payload = {
+        user_id: userId,
+        name: textField(name || safeCompany, "Contact name", {
+          required: true,
+          maxLength: INPUT_LIMITS.name,
+        }),
+        company: safeCompany,
+        email: optionalEmailField(email, "Client email"),
+        payment_reliability: "New client",
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return null
+    }
+
     const { data, error } = await supabase
       .from("clients")
-      .insert({
-        user_id: userId,
-        name: name || company,
-        company,
-        email: email || null,
-        payment_reliability: "New client" as const,
-      })
+      .insert(payload)
       .select()
       .single()
 

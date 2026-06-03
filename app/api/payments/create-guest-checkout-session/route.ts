@@ -12,25 +12,33 @@ import {
   resolveBalanceCents,
   resolveDepositCents,
 } from "@/lib/pricing"
+import {
+  enumField,
+  guestTokenField,
+  inputErrorMessage,
+  uuidField,
+} from "@/lib/security/input"
 
 type PaymentType = "deposit" | "balance" | "full"
+const PAYMENT_TYPES = ["deposit", "balance", "full"] as const
 
 export async function POST(req: NextRequest) {
   let body: unknown
   try { body = await req.json() }
   catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
 
-  const { estimateId, guestToken, paymentType = "deposit" } =
-    body as { estimateId?: string; guestToken?: string; paymentType?: PaymentType }
-
-  if (!estimateId || typeof estimateId !== "string") {
-    return NextResponse.json({ error: "estimateId is required" }, { status: 400 })
-  }
-  if (!guestToken || typeof guestToken !== "string") {
-    return NextResponse.json({ error: "guestToken is required" }, { status: 400 })
-  }
-  if (!["deposit", "balance", "full"].includes(paymentType)) {
-    return NextResponse.json({ error: "Invalid paymentType" }, { status: 400 })
+  let estimateId: string
+  let guestToken: string
+  let paymentType: PaymentType
+  try {
+    const raw = body as { estimateId?: unknown; guestToken?: unknown; paymentType?: unknown }
+    estimateId = uuidField(raw.estimateId, "estimateId")
+    guestToken = guestTokenField(raw.guestToken)
+    paymentType = raw.paymentType === undefined || raw.paymentType === null
+      ? "deposit"
+      : enumField(raw.paymentType, "paymentType", PAYMENT_TYPES)
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const supabase = createServiceClient()

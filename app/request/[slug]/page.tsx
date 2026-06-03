@@ -18,6 +18,15 @@ import {
 } from "lucide-react"
 
 import { CONTRACTOR_TRADES } from "@/components/ui/trade-multi-select"
+import {
+  INPUT_LIMITS,
+  emailField,
+  inputErrorMessage,
+  optionalPhoneField,
+  optionalTextField,
+  requestSlugField,
+  textField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -461,9 +470,18 @@ export default function RequestPage({
   const [photoFiles,   setPhotoFiles]   = useState<File[]>([])
 
   useEffect(() => {
+    let safeSlug: string
+    try {
+      safeSlug = requestSlugField(slug)
+    } catch {
+      setNotFound(true)
+      setLoading(false)
+      return
+    }
+
     const supabase = createClient()
     void (async () => {
-      const { data, error: rpcError } = await supabase.rpc("contractor_profile_by_slug", { slug })
+      const { data, error: rpcError } = await supabase.rpc("contractor_profile_by_slug", { slug: safeSlug })
 
       if (rpcError) {
         setLoading(false)
@@ -535,19 +553,62 @@ export default function RequestPage({
         ? trades[0]
         : String(fd.get("trade") ?? "").trim()
 
+    let safeSlug: string
+    let name: string
+    let email: string
+    let phone: string | null
+    let title: string
+    let description: string
+    let addressStreet: string | null
+    let location: string
+    let photoNotes: string | null
+
+    try {
+      safeSlug = requestSlugField(slug)
+      name = textField(fd.get("name"), "Full name", {
+        required: true,
+        maxLength: INPUT_LIMITS.name,
+      })
+      email = emailField(fd.get("email"))
+      phone = optionalPhoneField(fd.get("phone"))
+      title = textField(trade || fd.get("title"), "Project type", {
+        required: true,
+        maxLength: INPUT_LIMITS.title,
+      })
+      description = textField(fd.get("description"), "Description", {
+        required: true,
+        maxLength: INPUT_LIMITS.description,
+        multiline: true,
+      })
+      addressStreet = optionalTextField(fd.get("address_street"), "Street address", {
+        maxLength: INPUT_LIMITS.mediumText,
+      })
+      location = textField(fd.get("city") ?? "", "City", {
+        required: false,
+        maxLength: INPUT_LIMITS.serviceArea,
+      })
+      photoNotes = optionalTextField(fd.get("photo_notes"), "Additional notes", {
+        maxLength: INPUT_LIMITS.notes,
+        multiline: true,
+      })
+    } catch (validationError) {
+      setError(inputErrorMessage(validationError))
+      return
+    }
+
     startTransition(async () => {
       try {
         const payload = new FormData()
-        payload.append("request_slug",     slug)
-        payload.append("name",             String(fd.get("name") ?? "").trim())
-        payload.append("email",            String(fd.get("email") ?? "").trim())
-        payload.append("phone",            String(fd.get("phone") ?? "").trim())
-        payload.append("title",            trade || String(fd.get("title") ?? "").trim())
-        payload.append("description",      String(fd.get("description") ?? "").trim())
-        payload.append("address_street",   String(fd.get("address_street") ?? "").trim())
-        payload.append("location",         String(fd.get("city") ?? "").trim())
+        payload.append("request_slug",     safeSlug)
+        payload.append("name",             name)
+        payload.append("email",            email)
+        payload.append("phone",            phone ?? "")
+        payload.append("title",            title)
+        payload.append("description",      description)
+        payload.append("address_street",   addressStreet ?? "")
+        payload.append("location",         location)
         payload.append("contact_preference", contactPref)
-        payload.append("photo_notes",      String(fd.get("photo_notes") ?? "").trim())
+        payload.append("photo_notes",      photoNotes ?? "")
         photoFiles.forEach((file) => payload.append("photos", file))
 
         const res = await fetch("/api/client-request", {
@@ -570,13 +631,13 @@ export default function RequestPage({
           emailSent:            json.emailSent,
           clientAccountCreated: json.clientAccountCreated,
           fallbackGuestToken:   json.fallbackGuestToken,
-          projectTitle:         trade || String(fd.get("title") ?? "").trim(),
+          projectTitle:         title,
           submittedAt:          new Date().toLocaleDateString("en-CA", {
             month: "long",
             day:   "numeric",
             year:  "numeric",
           }),
-          email: String(fd.get("email") ?? "").trim().toLowerCase(),
+          email,
         })
       } catch {
         setError("Could not reach the server. Please check your connection and try again.")

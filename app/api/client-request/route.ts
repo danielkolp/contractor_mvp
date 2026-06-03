@@ -7,6 +7,17 @@ import {
   renderClientIntakeEmailText,
 } from "@/lib/email/client-intake-template"
 import { createGuestAccess } from "@/lib/guest-access"
+import {
+  INPUT_LIMITS,
+  emailField,
+  enumField,
+  inputErrorMessage,
+  optionalPhoneField,
+  optionalTextField,
+  optionalUrlField,
+  requestSlugField,
+  textField,
+} from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
 
 // Reuse across requests when env is present.
@@ -23,7 +34,7 @@ function getAppUrl(req: NextRequest): string {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const CONTACT_OPTIONS = new Set(["Text", "Call", "Email"])
+const CONTACT_OPTIONS = ["Text", "Call", "Email"] as const
 const PHOTO_BUCKET = "job-request-photos"
 const MAX_PHOTOS = 6
 const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024
@@ -46,14 +57,10 @@ type ParsedClientRequest = {
   photos: File[]
 }
 
-function optionalText(value: string) {
-  const trimmed = value.trim()
-  return trimmed ? trimmed : null
-}
-
 function contactPreferenceFrom(value: unknown) {
-  const raw = typeof value === "string" ? value.trim() : ""
-  return CONTACT_OPTIONS.has(raw) ? raw : "Email"
+  return value === undefined || value === null || value === ""
+    ? "Email"
+    : enumField(value, "Contact preference", CONTACT_OPTIONS)
 }
 
 function getStringField(formData: FormData, key: string) {
@@ -66,29 +73,44 @@ function isUploadFile(value: FormDataEntryValue): value is File {
 }
 
 function parseJsonBody(body: Record<string, unknown>): ParsedClientRequest {
-  const requestSlug =
-    typeof body.request_slug === "string"
-      ? body.request_slug.trim()
-      : typeof body.contractor_id === "string"
-        ? body.contractor_id.trim()
-        : ""
+  const requestSlug = requestSlugField(body.request_slug ?? body.contractor_id)
 
   return {
-    name: typeof body.name === "string" ? body.name.trim() : "",
-    email: typeof body.email === "string" ? body.email.trim().toLowerCase() : "",
-    phone: typeof body.phone === "string" ? optionalText(body.phone) : null,
-    title: typeof body.title === "string" ? body.title.trim() : "",
-    description: typeof body.description === "string" ? body.description.trim() : "",
-    location: typeof body.location === "string" ? body.location.trim() : "",
+    name: textField(body.name, "Full name", {
+      required: true,
+      maxLength: INPUT_LIMITS.name,
+    }),
+    email: emailField(body.email),
+    phone: optionalPhoneField(body.phone),
+    title: textField(body.title, "Project type", {
+      required: true,
+      maxLength: INPUT_LIMITS.title,
+    }),
+    description: textField(body.description, "Description", {
+      required: true,
+      maxLength: INPUT_LIMITS.description,
+      multiline: true,
+    }),
+    location: textField(body.location ?? "Not specified", "Location", {
+      required: false,
+      maxLength: INPUT_LIMITS.serviceArea,
+    }),
     requestSlug,
     addressStreet:
-      typeof body.address_street === "string" ? optionalText(body.address_street) : null,
-    photoNotes: typeof body.photo_notes === "string" ? optionalText(body.photo_notes) : null,
+      optionalTextField(body.address_street, "Street address", {
+        maxLength: INPUT_LIMITS.mediumText,
+      }),
+    photoNotes: optionalTextField(body.photo_notes, "Photo notes", {
+      maxLength: INPUT_LIMITS.notes,
+      multiline: true,
+    }),
     contactPreference: contactPreferenceFrom(body.contact_preference),
     photoUrls: Array.isArray(body.photo_urls)
       ? body.photo_urls
           .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
-          .map((url) => url.trim())
+          .slice(0, MAX_PHOTOS)
+          .map((url) => optionalUrlField(url, "Photo URL"))
+          .filter((url): url is string => Boolean(url))
       : [],
     photos: [],
   }
@@ -100,15 +122,33 @@ function parseFormBody(formData: FormData): ParsedClientRequest {
     getStringField(formData, "request_slug") || getStringField(formData, "contractor_id")
 
   return {
-    name: getStringField(formData, "name"),
-    email: getStringField(formData, "email").toLowerCase(),
-    phone: optionalText(getStringField(formData, "phone")),
-    title: getStringField(formData, "title"),
-    description: getStringField(formData, "description"),
-    location,
-    requestSlug,
-    addressStreet: optionalText(getStringField(formData, "address_street")),
-    photoNotes: optionalText(getStringField(formData, "photo_notes")),
+    name: textField(getStringField(formData, "name"), "Full name", {
+      required: true,
+      maxLength: INPUT_LIMITS.name,
+    }),
+    email: emailField(getStringField(formData, "email")),
+    phone: optionalPhoneField(getStringField(formData, "phone")),
+    title: textField(getStringField(formData, "title"), "Project type", {
+      required: true,
+      maxLength: INPUT_LIMITS.title,
+    }),
+    description: textField(getStringField(formData, "description"), "Description", {
+      required: true,
+      maxLength: INPUT_LIMITS.description,
+      multiline: true,
+    }),
+    location: textField(location || "Not specified", "Location", {
+      required: false,
+      maxLength: INPUT_LIMITS.serviceArea,
+    }),
+    requestSlug: requestSlugField(requestSlug),
+    addressStreet: optionalTextField(getStringField(formData, "address_street"), "Street address", {
+      maxLength: INPUT_LIMITS.mediumText,
+    }),
+    photoNotes: optionalTextField(getStringField(formData, "photo_notes"), "Photo notes", {
+      maxLength: INPUT_LIMITS.notes,
+      multiline: true,
+    }),
     contactPreference: contactPreferenceFrom(getStringField(formData, "contact_preference")),
     photoUrls: [],
     photos: formData.getAll("photos").filter(isUploadFile),
@@ -189,12 +229,12 @@ export async function POST(req: NextRequest) {
     } else {
       parsed = parseJsonBody((await req.json()) as Record<string, unknown>)
     }
-  } catch {
+  } catch (error) {
     return NextResponse.json(
       {
-        error: contentType.includes("multipart/form-data")
+        error: inputErrorMessage(error, contentType.includes("multipart/form-data")
           ? "Invalid form body"
-          : "Invalid JSON body",
+          : "Invalid JSON body"),
       },
       { status: 400 }
     )
@@ -213,13 +253,6 @@ export async function POST(req: NextRequest) {
     contactPreference,
     photos,
   } = parsed
-
-  if (!name)         return NextResponse.json({ error: "Full name is required" },      { status: 400 })
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
-                     return NextResponse.json({ error: "Valid email is required" },     { status: 400 })
-  if (!title)        return NextResponse.json({ error: "Project type is required" },    { status: 400 })
-  if (!description)  return NextResponse.json({ error: "Description is required" },    { status: 400 })
-  if (!requestSlug)  return NextResponse.json({ error: "Contractor link is invalid" }, { status: 400 })
 
   const photoValidationError = validatePhotos(photos)
   if (photoValidationError) {

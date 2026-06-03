@@ -1,6 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { validateGuestToken } from "@/lib/guest-access"
+import {
+  INPUT_LIMITS,
+  guestTokenField,
+  inputErrorMessage,
+  textField,
+} from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
 
 export async function POST(req: NextRequest) {
@@ -11,13 +17,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { guestToken, response } = body as { guestToken?: string; response?: string }
-
-  if (!guestToken || typeof guestToken !== "string") {
-    return NextResponse.json({ error: "guestToken is required" }, { status: 400 })
-  }
-  if (!response || typeof response !== "string" || !response.trim()) {
-    return NextResponse.json({ error: "response is required" }, { status: 400 })
+  let guestToken: string
+  let response: string
+  try {
+    const raw = body as { guestToken?: unknown; response?: unknown }
+    guestToken = guestTokenField(raw.guestToken)
+    response = textField(raw.response, "Response", {
+      required: true,
+      maxLength: INPUT_LIMITS.description,
+      multiline: true,
+    })
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const supabase = createServiceClient()
@@ -29,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("job_requests")
-    .update({ more_details_response: response.trim() })
+    .update({ more_details_response: response })
     .eq("id", access.jobRequestId)
     .select()
     .single()

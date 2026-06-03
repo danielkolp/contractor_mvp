@@ -58,6 +58,21 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { money } from "@/lib/format-money"
 import { computePricing } from "@/lib/pricing"
+import {
+  INPUT_LIMITS,
+  InputValidationError,
+  enumField,
+  inputErrorMessage,
+  isoDateField,
+  isoDateTimeField,
+  numberField,
+  optionalEmailField,
+  optionalIsoDateField,
+  optionalPhoneField,
+  optionalTextField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 
@@ -108,6 +123,21 @@ const emptyEstimateDraftForm: EstimateDraftForm = {
   contractorAmount: "",
   depositAmount: "",
 }
+
+const estimateStatuses: EstimateStatus[] = [
+  "Draft",
+  "Sent",
+  "Follow-up Needed",
+  "Follow-up Sent",
+  "Interested",
+  "Accepted",
+  "Won",
+  "Declined",
+  "Lost",
+  "Archived",
+]
+
+const billingTypes = ["flat_rate", "hourly"] as const
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
@@ -179,15 +209,6 @@ function requestSortTime(request: JobRequest) {
   return new Date(request.updated_at ?? request.created_at).getTime() || 0
 }
 
-function nullableText(value: string) {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function nullableDate(value: string) {
-  return value || null
-}
-
 function parseAmount(value: string) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -211,27 +232,46 @@ function newTaxLine(name = "", rate = ""): EstimateTaxLine {
 }
 
 function serializeLineItems(items: EstimateLineItem[]) {
+  if (items.length > 100) {
+    throw new InputValidationError("Line items must include 100 rows or fewer.")
+  }
+
   return items
     .filter((item) => item.description.trim() || parseAmount(item.unit_price) > 0)
-    .map(({ description, quantity, unit_price }) => ({
-      description: description.trim(),
-      quantity: parseAmount(quantity),
-      unit_price: parseAmount(unit_price),
+    .map(({ description, quantity, unit_price }, index) => ({
+      description: textField(description, `Line item ${index + 1}`, {
+        maxLength: INPUT_LIMITS.lineItemDescription,
+      }),
+      quantity: numberField(quantity || 0, `Line item ${index + 1} quantity`, {
+        min: 0,
+        max: 100_000,
+      }),
+      unit_price: numberField(unit_price || 0, `Line item ${index + 1} unit price`, {
+        min: 0,
+        max: 10_000_000,
+      }),
     }))
 }
 
 function serializeTaxLines(lines: EstimateTaxLine[]) {
+  if (lines.length > 20) {
+    throw new InputValidationError("Tax lines must include 20 rows or fewer.")
+  }
+
   return lines
     .filter((line) => line.name.trim() || parseAmount(line.rate) > 0)
     .map(({ name, rate }) => ({
-      name: name.trim() || "Tax",
-      rate: parseAmount(rate),
+      name: textField(name.trim() ? name : "Tax", "Tax name", {
+        required: true,
+        maxLength: INPUT_LIMITS.taxName,
+      }),
+      rate: numberField(rate || 0, "Tax rate", { min: 0, max: 100 }),
     }))
 }
 
 function lineItemSubtotal(items: EstimateLineItem[]) {
-  return serializeLineItems(items).reduce(
-    (sum, item) => sum + item.quantity * item.unit_price,
+  return items.reduce(
+    (sum, item) => sum + parseAmount(item.quantity) * parseAmount(item.unit_price),
     0
   )
 }
@@ -801,10 +841,18 @@ export default function ContractorJobRequestsPage() {
     request: JobRequest,
     patch: JobRequestUpdate
   ) {
+    let requestId: string
+    try {
+      requestId = uuidField(request.id, "Job request")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return null
+    }
+
     const { data, error } = await supabase
       .from("job_requests")
       .update(patch)
-      .eq("id", request.id)
+      .eq("id", requestId)
       .select()
       .single()
 
@@ -814,9 +862,9 @@ export default function ContractorJobRequestsPage() {
     }
 
     setRequests((current) =>
-      current.map((item) => (item.id === request.id ? data : item))
+      current.map((item) => (item.id === requestId ? data : item))
     )
-    if (selectedRequest?.id === request.id) setSelectedRequest(data)
+    if (selectedRequest?.id === requestId) setSelectedRequest(data)
     return data
   }
 
@@ -837,19 +885,31 @@ export default function ContractorJobRequestsPage() {
       if (data) return data
     }
 
-    const clientName =
-      nullableText(clientNameOverride ?? "") ||
-      request.client_name ||
-      request.client_email ||
-      "Client from job request"
-    const payload: ClientInsert = {
-      user_id: userId,
-      name: clientName,
-      company: clientName,
-      email: request.client_email,
-      phone: request.client_phone,
-      notes: `Created from job request: ${request.title}`,
-      payment_reliability: "New client",
+    let payload: ClientInsert
+    try {
+      const clientName = textField(
+        clientNameOverride?.trim() ||
+          request.client_name ||
+          request.client_email ||
+          "Client from job request",
+        "Client name",
+        { required: true, maxLength: INPUT_LIMITS.name }
+      )
+      payload = {
+        user_id: userId,
+        name: clientName,
+        company: clientName,
+        email: optionalEmailField(request.client_email, "Client email"),
+        phone: optionalPhoneField(request.client_phone, "Client phone"),
+        notes: optionalTextField(`Created from job request: ${request.title}`, "Client notes", {
+          maxLength: INPUT_LIMITS.notes,
+          multiline: true,
+        }),
+        payment_reliability: "New client",
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return null
     }
 
     const { data, error } = await supabase
@@ -954,10 +1014,21 @@ export default function ContractorJobRequestsPage() {
 
   async function submitDeclineRequest() {
     if (!declineRequestTarget || isSubmittingDecline) return
+    let declineReason: string | null
+    try {
+      declineReason = optionalTextField(declineRequestReason, "Decline reason", {
+        maxLength: INPUT_LIMITS.notes,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSubmittingDecline(true)
     const updated = await updateRequestStatus(declineRequestTarget, {
       status: "declined_by_contractor",
-      contractor_decline_reason: declineRequestReason.trim() || null,
+      contractor_decline_reason: declineReason,
     })
     setIsSubmittingDecline(false)
     if (!updated) return
@@ -990,10 +1061,22 @@ export default function ContractorJobRequestsPage() {
 
   async function submitDetailsRequest() {
     if (!detailsRequest || !detailsMessage.trim() || isSubmittingDetails) return
+    let message: string
+    try {
+      message = textField(detailsMessage, "Details request", {
+        required: true,
+        maxLength: INPUT_LIMITS.description,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSubmittingDetails(true)
     const updated = await updateRequestStatus(detailsRequest, {
       status: "needs_info",
-      more_details_message: detailsMessage.trim(),
+      more_details_message: message,
     })
     setIsSubmittingDetails(false)
     if (!updated) return
@@ -1004,14 +1087,33 @@ export default function ContractorJobRequestsPage() {
 
   async function submitInspectionSchedule() {
     if (!inspectionRequest || !inspectionDate || isSubmittingInspection) return
+    let startsAt: string
+    let notes: string | null
+    try {
+      const date = isoDateField(inspectionDate, "Inspection date")
+      const timeStr = textField(inspectionStartTime || "09:00", "Inspection time", {
+        required: true,
+        maxLength: 5,
+      })
+      if (!/^\d{2}:\d{2}$/.test(timeStr)) {
+        throw new InputValidationError("Inspection time is malformed.")
+      }
+      startsAt = isoDateTimeField(`${date}T${timeStr}`, "Inspection date/time")
+      notes = optionalTextField(inspectionNotes, "Inspection notes", {
+        maxLength: INPUT_LIMITS.notes,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSubmittingInspection(true)
-    const timeStr = inspectionStartTime || "09:00"
-    const startsAt = new Date(`${inspectionDate}T${timeStr}`).toISOString()
     const updated = await updateRequestStatus(inspectionRequest, {
       status: "inspection_scheduled",
       scheduled_visit_type: "inspection",
       scheduled_visit_starts_at: startsAt,
-      scheduled_visit_notes: inspectionNotes.trim() || null,
+      scheduled_visit_notes: notes,
     })
     setIsSubmittingInspection(false)
     if (!updated) return
@@ -1024,12 +1126,40 @@ export default function ContractorJobRequestsPage() {
 
   async function submitWorkSchedule() {
     if (!workEstimate || !workDate || isSubmittingWork) return
+    let estimateId: string
+    let startsAt: string
+    let endsAt: string | null
+    let notes: string | null
+    try {
+      estimateId = uuidField(workEstimate.id, "Estimate")
+      const date = isoDateField(workDate, "Work date")
+      const startTime = textField(workStartTime || "08:00", "Start time", {
+        required: true,
+        maxLength: 5,
+      })
+      if (!/^\d{2}:\d{2}$/.test(startTime)) {
+        throw new InputValidationError("Start time is malformed.")
+      }
+      startsAt = isoDateTimeField(`${date}T${startTime}`, "Work start")
+      if (workEndTime) {
+        const endTime = textField(workEndTime, "End time", { required: true, maxLength: 5 })
+        if (!/^\d{2}:\d{2}$/.test(endTime)) {
+          throw new InputValidationError("End time is malformed.")
+        }
+        endsAt = isoDateTimeField(`${date}T${endTime}`, "Work end")
+      } else {
+        endsAt = null
+      }
+      notes = optionalTextField(workNotes, "Work notes", {
+        maxLength: INPUT_LIMITS.notes,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSubmittingWork(true)
-    const timeStr = workStartTime || "08:00"
-    const startsAt = new Date(`${workDate}T${timeStr}`).toISOString()
-    const endsAt = workEndTime
-      ? new Date(`${workDate}T${workEndTime}`).toISOString()
-      : null
 
     const { error } = await supabase
       .from("estimates")
@@ -1037,9 +1167,9 @@ export default function ContractorJobRequestsPage() {
         scheduled_visit_type:      "job_start",
         scheduled_visit_starts_at: startsAt,
         scheduled_visit_ends_at:   endsAt,
-        scheduled_visit_notes:     workNotes.trim() || null,
+        scheduled_visit_notes:     notes,
       })
-      .eq("id", workEstimate.id)
+      .eq("id", estimateId)
 
     setIsSubmittingWork(false)
     if (error) { toast.error(error.message); return }
@@ -1054,7 +1184,7 @@ export default function ContractorJobRequestsPage() {
           scheduled_visit_type:      "job_start",
           scheduled_visit_starts_at: startsAt,
           scheduled_visit_ends_at:   endsAt,
-          scheduled_visit_notes:     workNotes.trim() || null,
+          scheduled_visit_notes:     notes,
         },
       }
     })
@@ -1069,63 +1199,126 @@ export default function ContractorJobRequestsPage() {
 
   async function saveEstimateFromRequest(sendToClient: boolean) {
     if (!userId || !estimateRequest || isSaving) return
-    setIsSaving(true)
 
-    const serializedItems = serializeLineItems(estimateForm.lineItems)
-    const serializedTaxLines =
-      estimateForm.lineItems.length > 0 ? serializeTaxLines(estimateForm.taxLines) : []
-    const finalAmount =
-      estimateForm.lineItems.length > 0
-        ? estimateTotal
-        : parseAmount(estimateForm.flatAmount)
-
-    if (sendToClient && hasStripePayment && contractorCents < 50) {
-      toast.error("Minimum payout for online payment is $0.50.")
-      setIsSaving(false)
+    let requestId: string
+    let serializedItems: ReturnType<typeof serializeLineItems>
+    let serializedTaxLines: ReturnType<typeof serializeTaxLines>
+    let sendAmount: number
+    let pricingForSave: ReturnType<typeof computePricing> | null
+    let billingType: (typeof billingTypes)[number]
+    let followUpDate: string | null
+    let notes: string | null
+    let estimateNumber: string
+    try {
+      requestId = uuidField(estimateRequest.id, "Job request")
+      serializedItems = serializeLineItems(estimateForm.lineItems)
+      serializedTaxLines =
+        estimateForm.lineItems.length > 0 ? serializeTaxLines(estimateForm.taxLines) : []
+      const sanitizedSubtotal = serializedItems.reduce(
+        (sum, item) => sum + item.quantity * item.unit_price,
+        0
+      )
+      const sanitizedTaxTotal = serializedTaxLines.reduce(
+        (sum, taxLine) => sum + sanitizedSubtotal * (taxLine.rate / 100),
+        0
+      )
+      const finalAmount =
+        estimateForm.lineItems.length > 0
+          ? numberField(sanitizedSubtotal + sanitizedTaxTotal, "Estimate amount", {
+              min: 0,
+              max: 10_000_000,
+            })
+          : numberField(estimateForm.flatAmount || 0, "Estimate amount", {
+              min: 0,
+              max: 10_000_000,
+            })
+      const contractorAmount = numberField(estimateForm.contractorAmount || 0, "Payout amount", {
+        min: 0,
+        max: 10_000_000,
+      })
+      const depositAmount = numberField(estimateForm.depositAmount || 0, "Deposit amount", {
+        min: 0,
+        max: contractorAmount || 10_000_000,
+      })
+      const contractorAmountCents = Math.round(contractorAmount * 100)
+      const depositAmountCents = Math.round(depositAmount * 100)
+      pricingForSave =
+        contractorAmountCents > 0
+          ? computePricing(
+              contractorAmountCents,
+              depositAmountCents > 0 ? depositAmountCents : null
+            )
+          : null
+      sendAmount = pricingForSave ? pricingForSave.clientTotalCents / 100 : finalAmount
+      billingType = enumField(estimateForm.billingType, "Billing type", billingTypes)
+      followUpDate = optionalIsoDateField(estimateForm.followUpDate, "Follow-up date")
+      notes = optionalTextField(estimateForm.notes, "Estimate notes", {
+        maxLength: INPUT_LIMITS.description,
+        multiline: true,
+      })
+      estimateNumber = textField(
+        estimateForm.estimateNumber.trim() || `EST-${Date.now().toString().slice(-5)}`,
+        "Estimate number",
+        { required: true, maxLength: INPUT_LIMITS.estimateNumber }
+      )
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
       return
     }
 
-    const sendAmount = hasStripePayment ? clientTotalCents / 100 : finalAmount
+    if (sendToClient && pricingForSave && pricingForSave.contractorSubtotalCents < 50) {
+      toast.error("Minimum payout for online payment is $0.50.")
+      return
+    }
 
     if (sendToClient && sendAmount <= 0) {
       toast.error("Add an amount before sending this estimate.")
-      setIsSaving(false)
       return
     }
+
+    setIsSaving(true)
 
     const client = await ensureClientForRequest(
       estimateRequest,
       estimateForm.clientName
     )
 
-    const payload: EstimateInsert = {
-      user_id: userId,
-      client_id: client?.id ?? null,
-      job_request_id: estimateRequest.id,
-      client_name:
-        client?.company ||
-        client?.name ||
-        nullableText(estimateForm.clientName) ||
-        estimateRequest.client_name ||
-        estimateRequest.client_email ||
-        null,
-      estimate_number:
-        estimateForm.estimateNumber.trim() ||
-        `EST-${Date.now().toString().slice(-5)}`,
-      amount: sendAmount,
-      status: sendToClient ? "Sent" : "Draft",
-      sent_date: inputDate(),
-      follow_up_date: nullableDate(estimateForm.followUpDate),
-      notes: nullableText(estimateForm.notes),
-      billing_type: estimateForm.billingType,
-      line_items: serializedItems,
-      tax_rate: 0,
-      tax_lines: serializedTaxLines,
-      contractor_amount_cents: hasStripePayment ? contractorCents  : null,
-      platform_fee_cents:      hasStripePayment ? platformFeeCents : null,
-      gst_cents:               hasStripePayment ? gstCents         : null,
-      client_total_cents:      hasStripePayment ? clientTotalCents : null,
-      deposit_amount_cents:    hasStripePayment && depositCents > 0 ? depositCents : null,
+    let payload: EstimateInsert
+    try {
+      payload = {
+        user_id: userId,
+        client_id: client ? uuidField(client.id, "Client") : null,
+        job_request_id: requestId,
+        client_name: optionalTextField(
+          client?.company ||
+            client?.name ||
+            estimateForm.clientName ||
+            estimateRequest.client_name ||
+            estimateRequest.client_email,
+          "Client name",
+          { maxLength: INPUT_LIMITS.name }
+        ),
+        estimate_number: estimateNumber,
+        amount: sendAmount,
+        status: sendToClient ? "Sent" : "Draft",
+        sent_date: isoDateField(inputDate(), "Sent date"),
+        follow_up_date: followUpDate,
+        notes,
+        billing_type: billingType,
+        line_items: serializedItems,
+        tax_rate: 0,
+        tax_lines: serializedTaxLines,
+        contractor_amount_cents: pricingForSave ? pricingForSave.contractorSubtotalCents : null,
+        platform_fee_cents: pricingForSave ? pricingForSave.platformFeeCents : null,
+        gst_cents: pricingForSave ? pricingForSave.gstCents : null,
+        client_total_cents: pricingForSave ? pricingForSave.clientTotalCents : null,
+        deposit_amount_cents:
+          pricingForSave && pricingForSave.depositCents > 0 ? pricingForSave.depositCents : null,
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      setIsSaving(false)
+      return
     }
 
     const { data, error } = await supabase

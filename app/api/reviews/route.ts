@@ -1,5 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+import {
+  INPUT_LIMITS,
+  inputErrorMessage,
+  numberField,
+  optionalTextField,
+  optionalUuidField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 
@@ -20,23 +28,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { estimateId, jobRequestId, contractorId, rating, comment } =
-    body as {
-      estimateId?:   string
-      jobRequestId?: string
-      contractorId?: string
-      rating?:       number
-      comment?:      string | null
-    }
+  let estimateId: string | null
+  let jobRequestId: string
+  let contractorId: string
+  let rating: number
+  let comment: string | null
 
-  if (!jobRequestId || typeof jobRequestId !== "string") {
-    return NextResponse.json({ error: "jobRequestId is required" }, { status: 400 })
-  }
-  if (!contractorId || typeof contractorId !== "string") {
-    return NextResponse.json({ error: "contractorId is required" }, { status: 400 })
-  }
-  if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
-    return NextResponse.json({ error: "rating must be an integer 1–5" }, { status: 400 })
+  try {
+    const raw = body as {
+      estimateId?: unknown
+      jobRequestId?: unknown
+      contractorId?: unknown
+      rating?: unknown
+      comment?: unknown
+    }
+    estimateId = optionalUuidField(raw.estimateId, "estimateId")
+    jobRequestId = uuidField(raw.jobRequestId, "jobRequestId")
+    contractorId = uuidField(raw.contractorId, "contractorId")
+    rating = numberField(raw.rating, "rating", { min: 1, max: 5, integer: true })
+    comment = optionalTextField(raw.comment, "Comment", {
+      maxLength: INPUT_LIMITS.notes,
+      multiline: true,
+    })
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const service = createServiceClient()
@@ -86,7 +101,7 @@ export async function POST(req: NextRequest) {
       job_request_id: jobRequestId,
       estimate_id:    estimateId ?? estimate.id,
       rating:         Math.round(rating),
-      comment:        comment ?? null,
+      comment,
     })
 
   if (insertError) {
@@ -106,9 +121,11 @@ export async function POST(req: NextRequest) {
 // ── GET: fetch average rating for a contractor ────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  const contractorId = req.nextUrl.searchParams.get("contractorId")
-  if (!contractorId) {
-    return NextResponse.json({ error: "contractorId query param required" }, { status: 400 })
+  let contractorId: string
+  try {
+    contractorId = uuidField(req.nextUrl.searchParams.get("contractorId"), "contractorId")
+  } catch (error) {
+    return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
   const service = createServiceClient()

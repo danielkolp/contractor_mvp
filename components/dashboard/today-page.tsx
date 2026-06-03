@@ -37,6 +37,16 @@ import { Button } from "@/components/ui/button"
 import { StatusPulse } from "@/components/ui/status-pulse"
 import { generateRecoveryItemMessage } from "@/lib/recovery-engine"
 import { money } from "@/lib/format-money"
+import {
+  INPUT_LIMITS,
+  inputErrorMessage,
+  isoDateField,
+  numberField,
+  optionalIsoDateField,
+  optionalTextField,
+  textField,
+  uuidField,
+} from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import { seedDemoRecoveryItems } from "@/lib/demo-data"
 import type { Database as DB } from "@/lib/supabase/database.types"
@@ -249,15 +259,23 @@ export function TodayPage() {
 
   async function updateItem(id: string, patch: RecoveryItemUpdate): Promise<boolean> {
     if (!userId) return false
+    let safeId: string
+    try {
+      safeId = uuidField(id, "Recovery item")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return false
+    }
+
     const { data, error } = await supabase
       .from("recovery_items")
       .update(patch)
-      .eq("id", id)
+      .eq("id", safeId)
       .eq("user_id", userId)
       .select()
       .single()
     if (error) { toast.error(error.message); return false }
-    setItems((prev) => prev.map((i) => (i.id === id ? data : i)))
+    setItems((prev) => prev.map((i) => (i.id === safeId ? data : i)))
     return true
   }
 
@@ -267,12 +285,20 @@ export function TodayPage() {
 
   async function handleCheckBackConfirm(date: string) {
     if (!checkBackItem) return
+    let checkBackDate: string
+    try {
+      checkBackDate = isoDateField(date, "Check-back date")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
-    const ok = await updateItem(checkBackItem.id, { status: "sent", check_back_date: date })
+    const ok = await updateItem(checkBackItem.id, { status: "sent", check_back_date: checkBackDate })
     if (ok) {
       toast.success(
         `Marked as sent. Check-in scheduled for ${new Date(
-          `${date}T00:00:00`
+          `${checkBackDate}T00:00:00`
         ).toLocaleDateString("en-CA", { month: "short", day: "numeric" })}.`
       )
     }
@@ -340,10 +366,21 @@ export function TodayPage() {
       amount: item.amount,
       followUpCount: item.follow_up_count + 1,
     })
+    let messageBody: string | null
+    try {
+      messageBody = optionalTextField(newMessage, "Message", {
+        maxLength: INPUT_LIMITS.message,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      setIsSaving(false)
+      return
+    }
     const ok = await updateItem(item.id, {
       status: "needs_follow_up",
       check_back_date: null,
-      message_body: newMessage,
+      message_body: messageBody,
       follow_up_count: item.follow_up_count + 1,
     })
     if (ok) toast.success("New follow-up message generated.")
@@ -358,10 +395,21 @@ export function TodayPage() {
       amount: item.amount,
       followUpCount: item.follow_up_count + 1,
     })
+    let messageBody: string | null
+    try {
+      messageBody = optionalTextField(newMessage, "Message", {
+        maxLength: INPUT_LIMITS.message,
+        multiline: true,
+      })
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      setIsSaving(false)
+      return
+    }
     const ok = await updateItem(item.id, {
       status: "needs_follow_up",
       check_back_date: null,
-      message_body: newMessage,
+      message_body: messageBody,
       follow_up_count: item.follow_up_count + 1,
     })
     if (ok) toast.success("Follow-up refreshed. Try again in a few days.")
@@ -372,16 +420,24 @@ export function TodayPage() {
 
   async function handleInvoiceMarkPaid(invoice: InvoiceRow) {
     if (!userId) return
+    let invoiceId: string
+    try {
+      invoiceId = uuidField(invoice.id, "Invoice")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
     const { error } = await supabase
       .from("invoices")
       .update({ status: "Paid", paid_at: new Date().toISOString() })
-      .eq("id", invoice.id)
+      .eq("id", invoiceId)
       .eq("user_id", userId)
     if (error) {
       toast.error(error.message)
     } else {
-      setOverdueInvoices((prev) => prev.filter((i) => i.id !== invoice.id))
+      setOverdueInvoices((prev) => prev.filter((i) => i.id !== invoiceId))
       toast.success(`${invoice.client_name || invoice.invoice_number} marked as paid.`)
     }
     setIsSaving(false)
@@ -389,24 +445,42 @@ export function TodayPage() {
 
   async function handleInvoiceAddToQueue(invoice: InvoiceRow) {
     if (!userId) return
+    let invoiceId: string
+    let payload: RecoveryItemInsert
+    try {
+      invoiceId = uuidField(invoice.id, "Invoice")
+      const amount = numberField(invoice.amount ?? 0, "Amount", { min: 0, max: 10_000_000 })
+      const message = generateRecoveryItemMessage({
+        clientName: invoice.client_name || "there",
+        reason: "invoice_overdue",
+        amount,
+        followUpCount: 0,
+      })
+      payload = {
+        user_id: userId,
+        client_name: textField(
+          invoice.client_name || invoice.invoice_number || "Invoice client",
+          "Client name",
+          { required: true, maxLength: INPUT_LIMITS.name }
+        ),
+        reason: "invoice_overdue",
+        amount,
+        contacted_date: isoDateField(todayIso(), "Contacted date"),
+        status: "message_ready",
+        message_body: optionalTextField(message, "Message", {
+          maxLength: INPUT_LIMITS.message,
+          multiline: true,
+        }),
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
-    const message = generateRecoveryItemMessage({
-      clientName: invoice.client_name || "there",
-      reason: "invoice_overdue",
-      amount: invoice.amount ?? 0,
-      followUpCount: 0,
-    })
     const { data, error } = await supabase
       .from("recovery_items")
-      .insert({
-        user_id: userId,
-        client_name: invoice.client_name || "",
-        reason: "invoice_overdue",
-        amount: invoice.amount ?? 0,
-        contacted_date: todayIso(),
-        status: "message_ready",
-        message_body: message,
-      })
+      .insert(payload)
       .select()
       .single()
     if (error) {
@@ -417,10 +491,10 @@ export function TodayPage() {
     await supabase
       .from("invoices")
       .update({ status: "Follow-up Sent" })
-      .eq("id", invoice.id)
+      .eq("id", invoiceId)
       .eq("user_id", userId)
 
-    setOverdueInvoices((prev) => prev.filter((i) => i.id !== invoice.id))
+    setOverdueInvoices((prev) => prev.filter((i) => i.id !== invoiceId))
     setItems((prev) => [...prev, data])
     toast.success(`${invoice.client_name || invoice.invoice_number} added to your follow-ups.`)
     setIsSaving(false)
@@ -433,16 +507,32 @@ export function TodayPage() {
     patch: { status?: DB["public"]["Tables"]["estimates"]["Update"]["status"]; follow_up_date?: string | null }
   ) {
     if (!userId) return
+    let estimateId: string
+    let safePatch = patch
+    try {
+      estimateId = uuidField(estimate.id, "Estimate")
+      safePatch = {
+        ...patch,
+        follow_up_date:
+          patch.follow_up_date === undefined
+            ? undefined
+            : optionalIsoDateField(patch.follow_up_date, "Follow-up date"),
+      }
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
     setIsSaving(true)
     const { error } = await supabase
       .from("estimates")
-      .update(patch)
-      .eq("id", estimate.id)
+      .update(safePatch)
+      .eq("id", estimateId)
       .eq("user_id", userId)
     if (error) {
       toast.error(error.message)
     } else {
-      setPendingEstimates((prev) => prev.filter((e) => e.id !== estimate.id))
+      setPendingEstimates((prev) => prev.filter((e) => e.id !== estimateId))
     }
     setIsSaving(false)
   }
