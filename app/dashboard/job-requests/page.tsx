@@ -761,13 +761,14 @@ export default function ContractorJobRequestsPage() {
   async function submitDetailsRequest() {
     if (!detailsRequest || !detailsMessage.trim() || isSubmittingDetails) return
     setIsSubmittingDetails(true)
-    await updateRequestStatus(detailsRequest, {
+    const updated = await updateRequestStatus(detailsRequest, {
       status: "needs_info",
       more_details_message: detailsMessage.trim(),
     })
+    setIsSubmittingDetails(false)
+    if (!updated) return
     setDetailsRequest(null)
     setDetailsMessage("")
-    setIsSubmittingDetails(false)
     toast.success("More details requested from client")
   }
 
@@ -776,17 +777,18 @@ export default function ContractorJobRequestsPage() {
     setIsSubmittingInspection(true)
     const timeStr = inspectionStartTime || "09:00"
     const startsAt = new Date(`${inspectionDate}T${timeStr}`).toISOString()
-    await updateRequestStatus(inspectionRequest, {
+    const updated = await updateRequestStatus(inspectionRequest, {
       status: "inspection_scheduled",
       scheduled_visit_type: "inspection",
       scheduled_visit_starts_at: startsAt,
       scheduled_visit_notes: inspectionNotes.trim() || null,
     })
+    setIsSubmittingInspection(false)
+    if (!updated) return
     setInspectionRequest(null)
     setInspectionDate("")
     setInspectionStartTime("")
     setInspectionNotes("")
-    setIsSubmittingInspection(false)
     toast.success("Inspection scheduled — client will be asked to confirm")
   }
 

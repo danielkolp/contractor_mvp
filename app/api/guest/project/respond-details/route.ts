@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("job_requests")
-    .update({ more_details_response: response.trim() } as never)
+    .update({ more_details_response: response.trim() })
     .eq("id", access.jobRequestId)
     .select()
     .single()

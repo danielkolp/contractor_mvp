@@ -71,12 +71,12 @@ export function PortalPage({ jobId }: { jobId: string }) {
     if (!job) return
     const { data, error } = await supabase
       .from("job_requests")
-      .update({ more_details_response: response } as never)
+      .update({ more_details_response: response })
       .eq("id", jobId)
       .select()
       .single()
     if (error) { toast.error("Could not send your response. Please try again."); return }
-    if (data) setJob(data as typeof job)
+    if (data) setJob(data)
     toast.success("Response sent to your contractor")
   }
 
