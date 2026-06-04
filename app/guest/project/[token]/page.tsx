@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 
 import { validateGuestToken } from "@/lib/guest-access"
+import type { WorkDay } from "@/lib/scheduling"
 import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { createServiceClient } from "@/lib/supabase/service"
 import { GuestPortalPage } from "./guest-portal-page"
@@ -20,6 +21,7 @@ export default async function GuestPortalRoute({
         estimates={[]}
         invoices={[]}
         events={[]}
+        workDays={[]}
         contractorName="Your Contractor"
       />
     )
@@ -79,6 +81,18 @@ export default async function GuestPortalRoute({
       contractor?.company_name ?? contractor?.owner_name ?? "Your Contractor"
   }
 
+  // Work schedule for this job's estimates.
+  const estimateIds = (estsResult.data ?? []).map((e) => e.id)
+  let workDays: WorkDay[] = []
+  if (estimateIds.length > 0) {
+    const { data } = await supabase
+      .from("scheduled_work_days")
+      .select("*")
+      .in("estimate_id", estimateIds)
+      .order("starts_at", { ascending: true })
+    workDays = data ?? []
+  }
+
   return (
     <GuestPortalPage
       token={token}
@@ -86,6 +100,7 @@ export default async function GuestPortalRoute({
       estimates={estsResult.data ?? []}
       invoices={invsResult.data ?? []}
       events={eventsResult.data ?? []}
+      workDays={workDays}
       contractorName={contractorName}
     />
   )

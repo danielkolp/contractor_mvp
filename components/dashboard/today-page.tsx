@@ -15,6 +15,7 @@ const OceanScene = dynamic(
   { ssr: false }
 )
 import {
+  AlertTriangle,
   ArrowRight,
   ArrowUpRight,
   CalendarClock,
@@ -26,6 +27,7 @@ import {
   ClipboardList,
   Clock,
   Copy,
+  CreditCard,
   Database,
   ExternalLink,
   FileText,
@@ -75,6 +77,31 @@ type ClientRow = DB["public"]["Tables"]["clients"]["Row"]
 type InvoiceRow = DB["public"]["Tables"]["invoices"]["Row"]
 type EstimateRow = DB["public"]["Tables"]["estimates"]["Row"]
 type JobRequestRow = DB["public"]["Tables"]["job_requests"]["Row"]
+
+// A scheduled work day joined to the estimate it belongs to (the "job").
+type WorkDayRow = {
+  id: string
+  starts_at: string
+  ends_at: string | null
+  status: string
+  estimate_id: string
+  estimates: {
+    id: string
+    client_name: string | null
+    job_request_id: string | null
+    job_completed_at: string | null
+    status: string
+  } | null
+}
+
+// A job (estimate) whose scheduled work days have all passed without being
+// marked complete — the contractor is asked to confirm or add more days.
+type JobAwaitingCompletion = {
+  estimateId: string
+  jobRequestId: string | null
+  clientName: string
+  lastDayIso: string
+}
 
 // Job-request statuses that still need the contractor to do something.
 // (Excludes terminal / handed-off states: estimate_created, accepted,
@@ -172,9 +199,11 @@ export function TodayPage() {
   const [pendingEstimates, setPendingEstimates] = useState<EstimateRow[]>([])
   const [acceptedEstimates, setAcceptedEstimates] = useState<EstimateRow[]>([])
   const [activeEstimates, setActiveEstimates] = useState<EstimateRow[]>([])
-  const [scheduledWork, setScheduledWork] = useState<EstimateRow[]>([])
+  const [workDays, setWorkDays] = useState<WorkDayRow[]>([])
   const [jobRequests, setJobRequests] = useState<JobRequestRow[]>([])
   const [requestSlug, setRequestSlug] = useState<string | null>(null)
+  // null = unknown (still loading); false = cannot receive payments yet.
+  const [stripeReady, setStripeReady] = useState<boolean | null>(null)
   const [replyInfoMap, setReplyInfoMap] = useState<Record<string, ReplyInfo>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -200,11 +229,6 @@ export function TodayPage() {
     }
 
     setUserId(user.id)
-
-    // Local midnight as an ISO instant — used to fetch only today-or-later visits.
-    const startOfToday = new Date()
-    startOfToday.setHours(0, 0, 0, 0)
-    const startOfTodayIso = startOfToday.toISOString()
 
     const [
       itemsResult,
@@ -263,19 +287,19 @@ export function TodayPage() {
           .select("*")
           .eq("contractor_id", user.id)
           .order("created_at", { ascending: false }),
-        // Scheduled work days / site visits booked on estimates (today onward).
+        // Scheduled work days, joined to their estimate (the "job"). Includes
+        // past days so the completion prompt can ask "did you finish?".
         supabase
-          .from("estimates")
-          .select("*")
+          .from("scheduled_work_days")
+          .select(
+            "id, starts_at, ends_at, status, estimate_id, estimates(id, client_name, job_request_id, job_completed_at, status)"
+          )
           .eq("user_id", user.id)
-          .in("scheduled_visit_type", ["job_start", "site_visit"])
-          .not("scheduled_visit_starts_at", "is", null)
-          .gte("scheduled_visit_starts_at", startOfTodayIso)
-          .order("scheduled_visit_starts_at", { ascending: true })
-          .limit(20),
+          .eq("status", "scheduled")
+          .order("starts_at", { ascending: true }),
         supabase
           .from("profiles")
-          .select("request_slug")
+          .select("request_slug, stripe_charges_enabled")
           .eq("user_id", user.id)
           .maybeSingle(),
       ])
@@ -287,9 +311,10 @@ export function TodayPage() {
     setPendingEstimates(estimatesResult.data ?? [])
     setAcceptedEstimates(acceptedEstimatesResult.data ?? [])
     setActiveEstimates(activeEstimatesResult.data ?? [])
-    setScheduledWork(scheduledWorkResult.data ?? [])
+    setWorkDays((scheduledWorkResult.data ?? []) as unknown as WorkDayRow[])
     setJobRequests(jobRequestsResult.data ?? [])
     setRequestSlug(profileResult.data?.request_slug ?? null)
+    setStripeReady(profileResult.data?.stripe_charges_enabled ?? false)
 
     if (loadedItems.length > 0) {
       const itemIds = loadedItems.map((i) => i.id)
@@ -398,21 +423,19 @@ export function TodayPage() {
         href: `/dashboard/job-requests?request=${r.id}`,
       }))
 
-    const work: VisitItem[] = scheduledWork
-      .filter((e) => e.scheduled_visit_starts_at)
-      .map((e) => ({
-        kind: "work" as const,
-        id: e.id,
-        startsAt: e.scheduled_visit_starts_at!,
-        confirmed: true,
-        clientName: e.client_name || "a client",
-        href: `/dashboard/estimates?highlight=${e.id}`,
-      }))
+    const work: VisitItem[] = workDays.map((d) => ({
+      kind: "work" as const,
+      id: d.id,
+      startsAt: d.starts_at,
+      confirmed: true,
+      clientName: d.estimates?.client_name || "a client",
+      href: `/dashboard/estimates?highlight=${d.estimate_id}`,
+    }))
 
     return [...inspections, ...work]
       .filter((v) => new Date(v.startsAt).getTime() >= startOfTodayMs)
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-  }, [jobRequests, scheduledWork])
+  }, [jobRequests, workDays])
 
   const todaysVisits = useMemo(
     () => upcomingVisits.filter((v) => isSameLocalDay(v.startsAt, new Date())),
@@ -433,6 +456,41 @@ export function TodayPage() {
     [todaysVisits, upcomingVisits]
   )
 
+  // Jobs whose every scheduled work day has passed but that aren't marked
+  // complete — surface a "did you finish?" prompt so multi-day jobs don't just
+  // vanish from the agenda. Grouped by estimate.
+  const jobsAwaitingCompletion = useMemo<JobAwaitingCompletion[]>(() => {
+    const now = Date.now()
+    const byEstimate = new Map<string, WorkDayRow[]>()
+    for (const d of workDays) {
+      const list = byEstimate.get(d.estimate_id)
+      if (list) list.push(d)
+      else byEstimate.set(d.estimate_id, [d])
+    }
+
+    const result: JobAwaitingCompletion[] = []
+    for (const [estimateId, days] of byEstimate) {
+      const est = days[0].estimates
+      if (!est) continue
+      if (est.job_completed_at) continue
+      if (["Lost", "Declined", "Archived"].includes(est.status)) continue
+      // The latest day's end (or start) must be in the past.
+      const latestMs = Math.max(
+        ...days.map((d) => new Date(d.ends_at ?? d.starts_at).getTime())
+      )
+      if (latestMs >= now) continue
+      result.push({
+        estimateId,
+        jobRequestId: est.job_request_id,
+        clientName: est.client_name || "this job",
+        lastDayIso: new Date(latestMs).toISOString(),
+      })
+    }
+    return result.sort(
+      (a, b) => new Date(a.lastDayIso).getTime() - new Date(b.lastDayIso).getTime()
+    )
+  }, [workDays])
+
   const atRisk = useMemo(() => {
     const recoveryTotal = items.reduce((sum, i) => sum + i.amount, 0)
     const invoiceTotal = overdueInvoices.reduce((sum, i) => sum + (i.amount ?? 0), 0)
@@ -446,14 +504,16 @@ export function TodayPage() {
     needsFollowUpItems.length +
     overdueInvoices.length +
     pendingEstimates.length +
-    acceptedEstimates.length
+    acceptedEstimates.length +
+    jobsAwaitingCompletion.length
 
   const followUpActionCount =
     checkInDueItems.length +
     needsFollowUpItems.length +
     overdueInvoices.length +
     pendingEstimates.length +
-    acceptedEstimates.length
+    acceptedEstimates.length +
+    jobsAwaitingCompletion.length
 
   const hasAnyItems =
     items.length > 0 ||
@@ -461,7 +521,8 @@ export function TodayPage() {
     pendingEstimates.length > 0 ||
     acceptedEstimates.length > 0 ||
     activeEstimates.length > 0 ||
-    jobRequests.length > 0
+    jobRequests.length > 0 ||
+    jobsAwaitingCompletion.length > 0
 
   // ─── Recovery item handlers ───────────────────────────────────
 
@@ -760,6 +821,42 @@ export function TodayPage() {
     toast.success("Follow-up snoozed 7 days.")
   }
 
+  // ─── Job completion ───────────────────────────────────────────
+
+  async function handleMarkJobComplete(job: JobAwaitingCompletion) {
+    if (!userId) return
+    let estimateId: string
+    try {
+      estimateId = uuidField(job.estimateId, "Estimate")
+    } catch (error) {
+      toast.error(inputErrorMessage(error))
+      return
+    }
+
+    setIsSaving(true)
+    const completedAt = new Date().toISOString()
+    const { error } = await supabase
+      .from("estimates")
+      .update({ job_completed_at: completedAt })
+      .eq("id", estimateId)
+      .eq("user_id", userId)
+    if (error) {
+      toast.error(error.message)
+      setIsSaving(false)
+      return
+    }
+    // Mark the job's scheduled work days as completed and drop them from view.
+    await supabase
+      .from("scheduled_work_days")
+      .update({ status: "completed" })
+      .eq("estimate_id", estimateId)
+      .eq("user_id", userId)
+      .eq("status", "scheduled")
+    setWorkDays((prev) => prev.filter((d) => d.estimate_id !== estimateId))
+    toast.success(`${job.clientName} marked as completed.`)
+    setIsSaving(false)
+  }
+
   // ─── Add recovery ─────────────────────────────────────────────
 
   async function handleSaveItem(payload: Omit<RecoveryItemInsert, "user_id">) {
@@ -854,6 +951,12 @@ export function TodayPage() {
 
       <div className="grid gap-4 p-4 sm:p-6 lg:p-8">
         <ContentReveal isLoading={isLoading} skeleton={<LoadingSkeleton />}>
+          {/* Stripe not connected — block on getting paid, surfaced up top. */}
+          {stripeReady === false && (
+            <div className="ef-reveal ef-d0 mb-6">
+              <StripeNotConnectedBanner />
+            </div>
+          )}
           {!hasAnyItems ? (
             <div className="grid gap-6">
               <div className="ef-reveal ef-d0">
@@ -950,6 +1053,14 @@ export function TodayPage() {
                           isCheckIn={false}
                           replyInfo={replyInfoMap[item.id]}
                           {...sharedCardProps}
+                        />
+                      ))}
+                      {jobsAwaitingCompletion.map((job) => (
+                        <JobCompletionPrompt
+                          key={job.estimateId}
+                          job={job}
+                          isSaving={isSaving}
+                          onMarkComplete={handleMarkJobComplete}
                         />
                       ))}
                       {acceptedEstimates.map((est) => (
@@ -1436,6 +1547,38 @@ function RequestLinkCard({ link }: { link: string }) {
           </a>
         </Button>
       </div>
+    </div>
+  )
+}
+
+// ─── Stripe not connected banner ──────────────────────────────
+
+function StripeNotConnectedBanner() {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40">
+          <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            You haven&apos;t connected Stripe
+          </p>
+          <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-300/80">
+            Connect your Stripe account to receive payments from clients.
+          </p>
+        </div>
+      </div>
+      <Button
+        size="sm"
+        asChild
+        className="shrink-0 gap-1.5 bg-amber-600 text-white hover:bg-amber-700"
+      >
+        <Link href="/dashboard/settings">
+          <CreditCard className="size-3.5" />
+          Connect Stripe
+        </Link>
+      </Button>
     </div>
   )
 }
@@ -1949,6 +2092,62 @@ function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
         >
           <Link href="/dashboard/estimates">Open estimate</Link>
         </Button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Job completion prompt ─────────────────────────────────────
+// A multi-day job whose scheduled days have all passed. Ask the contractor to
+// confirm it's done, or send them to schedule more days.
+
+function JobCompletionPrompt({
+  job,
+  isSaving,
+  onMarkComplete,
+}: {
+  job: JobAwaitingCompletion
+  isSaving: boolean
+  onMarkComplete: (job: JobAwaitingCompletion) => void
+}) {
+  const scheduleHref = job.jobRequestId
+    ? `/dashboard/job-requests?request=${job.jobRequestId}`
+    : `/dashboard/estimates?highlight=${job.estimateId}`
+
+  return (
+    <div className="euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan">
+      <div className="flex flex-col gap-2.5 py-3.5 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
+            <CalendarClock className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">
+              Did you finish {job.clientName}?
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Last work day was {visitDay(job.lastDayIso)}. Mark it complete or schedule more days.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2 pl-11 sm:pl-0">
+          <Button size="sm" variant="outline" asChild>
+            <Link href={scheduleHref}>
+              <Plus className="size-3.5" />
+              Schedule more days
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            className="bg-ef-ocean text-white hover:bg-ef-ocean"
+            disabled={isSaving}
+            onClick={() => onMarkComplete(job)}
+            data-testid="mark-job-complete"
+          >
+            <Check className="size-3.5" />
+            Mark complete
+          </Button>
+        </div>
       </div>
     </div>
   )

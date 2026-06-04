@@ -25,6 +25,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { money } from "@/lib/format-money"
 import { resolveBalanceCents, resolveDepositCents } from "@/lib/pricing"
+import type { WorkDay } from "@/lib/scheduling"
 import type { Database } from "@/lib/supabase/database.types"
 
 export type JobRequest    = Database["public"]["Tables"]["job_requests"]["Row"]
@@ -787,18 +788,17 @@ const dtFmt = new Intl.DateTimeFormat("en-CA", {
   minute:  "2-digit",
 })
 
-export function WorkScheduleCard({ estimates }: { estimates: Estimate[] }) {
-  const work = estimates.find(
-    (e) =>
-      (e.scheduled_visit_type === "job_start" || e.scheduled_visit_type === "site_visit") &&
-      e.scheduled_visit_starts_at
-  )
-  if (!work) return null
+const timeOnlyFmt = new Intl.DateTimeFormat("en-CA", {
+  hour:   "numeric",
+  minute: "2-digit",
+})
 
-  const start = dtFmt.format(new Date(work.scheduled_visit_starts_at!))
-  const end   = work.scheduled_visit_ends_at
-    ? dtFmt.format(new Date(work.scheduled_visit_ends_at))
-    : null
+export function WorkScheduleCard({ workDays }: { workDays: WorkDay[] }) {
+  if (workDays.length === 0) return null
+
+  const sorted = [...workDays].sort(
+    (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
+  )
 
   return (
     <div className="rounded-2xl border border-ef-200 bg-ef-mist p-5" data-testid="work-schedule-card">
@@ -807,14 +807,30 @@ export function WorkScheduleCard({ estimates }: { estimates: Estimate[] }) {
           <CalendarDays className="h-4 w-4 text-ef-ocean" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-900">Work day scheduled</p>
-          <p className="mt-1 text-sm text-gray-700">{start}</p>
-          {end && <p className="mt-0.5 text-xs text-gray-500">Through {end}</p>}
-          {work.scheduled_visit_notes && (
-            <p className="mt-2 text-xs leading-relaxed text-gray-500 whitespace-pre-wrap">
-              {work.scheduled_visit_notes}
-            </p>
-          )}
+          <p className="text-sm font-semibold text-gray-900">
+            {sorted.length === 1 ? "Work day scheduled" : "Work schedule"}
+          </p>
+          <ul className="mt-2 grid gap-2.5">
+            {sorted.map((day) => {
+              const start = dtFmt.format(new Date(day.starts_at))
+              const end = day.ends_at ? timeOnlyFmt.format(new Date(day.ends_at)) : null
+              const done = day.status === "completed"
+              return (
+                <li key={day.id} className="border-l-2 border-ef-300 pl-3">
+                  <p className="flex items-center gap-1.5 text-sm text-gray-800">
+                    {done && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />}
+                    <span className={done ? "text-gray-500 line-through" : ""}>{start}</span>
+                    {end && <span className="text-gray-500">– {end}</span>}
+                  </p>
+                  {day.notes && (
+                    <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-gray-500">
+                      {day.notes}
+                    </p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </div>
       </div>
     </div>

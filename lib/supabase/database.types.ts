@@ -180,6 +180,7 @@ export type Database = {
           deposit_percentage: number | null
           deposit_paid_at: string | null
           deposit_payment_intent_id: string | null
+          job_completed_at: string | null
           created_at: string
           updated_at: string
         }
@@ -214,6 +215,7 @@ export type Database = {
           deposit_percentage?: number | null
           deposit_paid_at?: string | null
           deposit_payment_intent_id?: string | null
+          job_completed_at?: string | null
           payment_status?: string
           paid_at?: string | null
           stripe_checkout_session_id?: string | null
@@ -252,10 +254,47 @@ export type Database = {
           deposit_percentage?: number | null
           deposit_paid_at?: string | null
           deposit_payment_intent_id?: string | null
+          job_completed_at?: string | null
           payment_status?: string
           paid_at?: string | null
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      scheduled_work_days: {
+        Row: {
+          id: string
+          user_id: string
+          estimate_id: string
+          starts_at: string
+          ends_at: string | null
+          notes: string | null
+          status: "scheduled" | "completed" | "cancelled"
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          estimate_id: string
+          starts_at: string
+          ends_at?: string | null
+          notes?: string | null
+          status?: "scheduled" | "completed" | "cancelled"
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          estimate_id?: string
+          starts_at?: string
+          ends_at?: string | null
+          notes?: string | null
+          status?: "scheduled" | "completed" | "cancelled"
           created_at?: string
           updated_at?: string
         }

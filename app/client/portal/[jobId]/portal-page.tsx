@@ -30,6 +30,7 @@ import {
   uuidField,
 } from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
+import type { WorkDay } from "@/lib/scheduling"
 import type { Database } from "@/lib/supabase/database.types"
 
 type JobRequest    = Database["public"]["Tables"]["job_requests"]["Row"]
@@ -58,6 +59,7 @@ export function PortalPage({
   const [estimates, setEsts]    = useState<Estimate[]>([])
   const [invoices,  setInvs]    = useState<Invoice[]>([])
   const [events,    setEvents]  = useState<TimelineEvent[]>([])
+  const [workDays,  setWorkDays] = useState<WorkDay[]>([])
   const [loading,   setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -91,9 +93,24 @@ export function PortalPage({
       ])
 
     if (jobResult.data) setJob(jobResult.data)
-    setEsts(estsResult.data ?? [])
+    const ests = estsResult.data ?? []
+    setEsts(ests)
     setInvs(invsResult.data ?? [])
     setEvents(eventsResult.data ?? [])
+
+    // Work schedule for this job's estimates (RLS lets the client read them).
+    const estimateIds = ests.map((e) => e.id)
+    if (estimateIds.length > 0) {
+      const { data: days } = await supabase
+        .from("scheduled_work_days")
+        .select("*")
+        .in("estimate_id", estimateIds)
+        .order("starts_at", { ascending: true })
+      setWorkDays(days ?? [])
+    } else {
+      setWorkDays([])
+    }
+
     setLoading(false)
   }, [supabase, jobId])
 
@@ -291,7 +308,7 @@ export function PortalPage({
               onSuggestTime={(at, notes) => void suggestVisitTime(at, notes)}
             />
           )}
-          <WorkScheduleCard estimates={visibleEstimates} />
+          <WorkScheduleCard workDays={workDays} />
           <EstimatesSection
             estimates={visibleEstimates}
             onRespond={(est, r, reason, comment) => void respondToEstimate(est, r, reason, comment)}

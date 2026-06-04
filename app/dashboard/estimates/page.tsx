@@ -371,8 +371,6 @@ export default function EstimatesPage() {
     ? computePricing(rawContractorCents, rawDepositCents > 0 ? rawDepositCents : null)
     : null
   const contractorCents   = pricing?.contractorSubtotalCents ?? 0
-  const platformFeeCents  = pricing?.platformFeeCents ?? 0
-  const gstCents          = pricing?.gstCents ?? 0
   const clientTotalCents  = pricing?.clientTotalCents ?? 0
   const depositCents      = pricing?.depositCents ?? 0
   const remainingCents    = pricing?.remainingBalanceCents ?? 0
@@ -1209,8 +1207,7 @@ export default function EstimatesPage() {
                 <p className="text-sm font-semibold">Collect deposit online</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Enter what you want to receive. Euroflo adds the service fee and GST on top
-                  so the customer sees the full card price. Leave blank if you will collect by
-                  cash, cheque, or e-transfer.
+                  so the customer sees the full card price.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1245,11 +1242,9 @@ export default function EstimatesPage() {
                 )}
               </div>
               {hasStripePayment && (
-                <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
                   {[
                     { label: "You receive",   value: moneyFormatter.format(contractorCents / 100) },
-                    { label: "Euroflo fee",   value: moneyFormatter.format(platformFeeCents / 100) },
-                    { label: "GST on fee",    value: moneyFormatter.format(gstCents / 100) },
                     { label: "Customer pays", value: moneyFormatter.format(clientTotalCents / 100) },
                     { label: "Deposit today", value: moneyFormatter.format(depositCents / 100) },
                     { label: "Balance later", value: moneyFormatter.format(remainingCents / 100) },

@@ -75,6 +75,12 @@ import {
   uuidField,
 } from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
+import {
+  findScheduleConflicts,
+  formatWorkDayRange,
+  type ScheduleConflict,
+  type WorkDay,
+} from "@/lib/scheduling"
 import type { Database } from "@/lib/supabase/database.types"
 
 type JobRequest     = Database["public"]["Tables"]["job_requests"]["Row"]
@@ -721,13 +727,43 @@ export default function ContractorJobRequestsPage() {
   const [inspectionNotes, setInspectionNotes] = useState("")
   const [isSubmittingInspection, setIsSubmittingInspection] = useState(false)
 
-  // Schedule work dialog
+  // Schedule work dialog (manage multiple work days for an estimate)
   const [workEstimate, setWorkEstimate] = useState<EstimateRow | null>(null)
+  const [workDays, setWorkDays] = useState<WorkDay[]>([])
+  const [isLoadingWorkDays, setIsLoadingWorkDays] = useState(false)
   const [workDate, setWorkDate] = useState("")
   const [workStartTime, setWorkStartTime] = useState("")
   const [workEndTime, setWorkEndTime] = useState("")
   const [workNotes, setWorkNotes] = useState("")
+  const [workConflicts, setWorkConflicts] = useState<ScheduleConflict[]>([])
   const [isSubmittingWork, setIsSubmittingWork] = useState(false)
+
+  // Warn (never block) when the proposed work day collides with another work
+  // day or inspection. Recomputes as the contractor picks a date/time.
+  useEffect(() => {
+    if (!workEstimate || !workDate || !userId) {
+      setWorkConflicts([])
+      return
+    }
+    const time = workStartTime || "08:00"
+    if (!/^\d{2}:\d{2}$/.test(time)) return
+    const startsAt = `${workDate}T${time}:00`
+    const endsAt =
+      workEndTime && /^\d{2}:\d{2}$/.test(workEndTime)
+        ? `${workDate}T${workEndTime}:00`
+        : null
+    if (Number.isNaN(new Date(startsAt).getTime())) return
+
+    let cancelled = false
+    void findScheduleConflicts({ supabase, userId, startsAt, endsAt }).then(
+      (found) => {
+        if (!cancelled) setWorkConflicts(found)
+      }
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [workEstimate, workDate, workStartTime, workEndTime, userId, supabase])
 
   const estimateSubtotal = useMemo(
     () => lineItemSubtotal(estimateForm.lineItems),
@@ -1142,14 +1178,32 @@ export default function ContractorJobRequestsPage() {
     toast.success("Inspection scheduled — client will be asked to confirm")
   }
 
-  async function submitWorkSchedule() {
-    if (!workEstimate || !workDate || isSubmittingWork) return
-    let estimateId: string
-    let startsAt: string
-    let endsAt: string | null
-    let notes: string | null
+  // Open the work-day manager for an estimate and load its existing days.
+  async function openWorkScheduler(estimate: EstimateRow) {
+    setWorkEstimate(estimate)
+    setWorkDays([])
+    setWorkDate("")
+    setWorkStartTime("")
+    setWorkEndTime("")
+    setWorkNotes("")
+    setWorkConflicts([])
+    await loadWorkDays(estimate.id)
+  }
+
+  async function loadWorkDays(estimateId: string) {
+    setIsLoadingWorkDays(true)
+    const { data } = await supabase
+      .from("scheduled_work_days")
+      .select("*")
+      .eq("estimate_id", estimateId)
+      .order("starts_at", { ascending: true })
+    setWorkDays(data ?? [])
+    setIsLoadingWorkDays(false)
+  }
+
+  // Validate the add-a-day sub-form into a {startsAt, endsAt, notes} payload.
+  function parseWorkDayForm(): { startsAt: string; endsAt: string | null; notes: string | null } | null {
     try {
-      estimateId = uuidField(workEstimate.id, "Estimate")
       const date = isoDateField(workDate, "Work date")
       const startTime = textField(workStartTime || "08:00", "Start time", {
         required: true,
@@ -1158,61 +1212,96 @@ export default function ContractorJobRequestsPage() {
       if (!/^\d{2}:\d{2}$/.test(startTime)) {
         throw new InputValidationError("Start time is malformed.")
       }
-      startsAt = isoDateTimeField(`${date}T${startTime}`, "Work start")
+      const startsAt = isoDateTimeField(`${date}T${startTime}`, "Work start")
+      let endsAt: string | null = null
       if (workEndTime) {
         const endTime = textField(workEndTime, "End time", { required: true, maxLength: 5 })
         if (!/^\d{2}:\d{2}$/.test(endTime)) {
           throw new InputValidationError("End time is malformed.")
         }
         endsAt = isoDateTimeField(`${date}T${endTime}`, "Work end")
-      } else {
-        endsAt = null
       }
-      notes = optionalTextField(workNotes, "Work notes", {
+      const notes = optionalTextField(workNotes, "Work notes", {
         maxLength: INPUT_LIMITS.notes,
         multiline: true,
       })
+      return { startsAt, endsAt, notes }
     } catch (error) {
       toast.error(inputErrorMessage(error))
-      return
+      return null
     }
+  }
+
+  async function addWorkDay() {
+    if (!workEstimate || !workDate || isSubmittingWork || !userId) return
+    const parsed = parseWorkDayForm()
+    if (!parsed) return
 
     setIsSubmittingWork(true)
-
-    const { error } = await supabase
-      .from("estimates")
-      .update({
-        scheduled_visit_type:      "job_start",
-        scheduled_visit_starts_at: startsAt,
-        scheduled_visit_ends_at:   endsAt,
-        scheduled_visit_notes:     notes,
-      })
-      .eq("id", estimateId)
-
-    setIsSubmittingWork(false)
-    if (error) { toast.error(error.message); return }
-
-    // Update local estimate cache
-    setEstimateByRequestId((prev) => {
-      if (!workEstimate.job_request_id) return prev
-      return {
-        ...prev,
-        [workEstimate.job_request_id]: {
-          ...workEstimate,
-          scheduled_visit_type:      "job_start",
-          scheduled_visit_starts_at: startsAt,
-          scheduled_visit_ends_at:   endsAt,
-          scheduled_visit_notes:     notes,
-        },
-      }
+    const { error } = await supabase.from("scheduled_work_days").insert({
+      user_id:     userId,
+      estimate_id: workEstimate.id,
+      starts_at:   parsed.startsAt,
+      ends_at:     parsed.endsAt,
+      notes:       parsed.notes,
     })
 
-    setWorkEstimate(null)
+    if (error) { setIsSubmittingWork(false); toast.error(error.message); return }
+
+    // Keep the legacy estimate column populated (used by print/older views) with
+    // the earliest scheduled day so existing reads still resolve.
+    await syncEstimateLegacyVisit(workEstimate)
+
+    await loadWorkDays(workEstimate.id)
+    setIsSubmittingWork(false)
     setWorkDate("")
     setWorkStartTime("")
     setWorkEndTime("")
     setWorkNotes("")
-    toast.success("Work day scheduled — client will see it in their portal")
+    setWorkConflicts([])
+    toast.success("Work day added — the client will see it in their portal")
+  }
+
+  async function removeWorkDay(id: string) {
+    if (!workEstimate) return
+    const { error } = await supabase.from("scheduled_work_days").delete().eq("id", id)
+    if (error) { toast.error(error.message); return }
+    await syncEstimateLegacyVisit(workEstimate)
+    await loadWorkDays(workEstimate.id)
+    toast.success("Work day removed")
+  }
+
+  // Mirror the earliest remaining work day onto the estimate's legacy
+  // scheduled_visit_* columns (kept for print/back-compat). Clears them when no
+  // work days remain.
+  async function syncEstimateLegacyVisit(estimate: EstimateRow) {
+    const { data } = await supabase
+      .from("scheduled_work_days")
+      .select("starts_at, ends_at, notes")
+      .eq("estimate_id", estimate.id)
+      .order("starts_at", { ascending: true })
+      .limit(1)
+    const first = data?.[0]
+    const patch = first
+      ? {
+          scheduled_visit_type:      "job_start" as const,
+          scheduled_visit_starts_at: first.starts_at,
+          scheduled_visit_ends_at:   first.ends_at,
+          scheduled_visit_notes:     first.notes,
+        }
+      : {
+          scheduled_visit_type:      null,
+          scheduled_visit_starts_at: null,
+          scheduled_visit_ends_at:   null,
+          scheduled_visit_notes:     null,
+        }
+    await supabase.from("estimates").update(patch).eq("id", estimate.id)
+    if (estimate.job_request_id) {
+      setEstimateByRequestId((prev) => ({
+        ...prev,
+        [estimate.job_request_id!]: { ...prev[estimate.job_request_id!], ...patch },
+      }))
+    }
   }
 
   async function saveEstimateFromRequest(sendToClient: boolean) {
@@ -1940,7 +2029,7 @@ export default function ContractorJobRequestsPage() {
                     }
                     onRequestDetails={(r) => { setSelectedRequest(null); setDetailsRequest(r); setDetailsMessage("") }}
                     onScheduleInspection={(r) => { setSelectedRequest(null); setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
-                    onScheduleWork={(e) => { setSelectedRequest(null); setWorkEstimate(e); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") }}
+                    onScheduleWork={(e) => { setSelectedRequest(null); void openWorkScheduler(e) }}
                     onDeclineRequest={(r) => { setSelectedRequest(null); setDeclineRequestTarget(r); setDeclineRequestReason("") }}
                     onMarkVisitCompleted={(r) => { setSelectedRequest(null); void markVisitCompleted(r) }}
                     onAcceptClientProposal={(r) => { setSelectedRequest(null); void acceptClientVisitProposal(r) }}
@@ -2073,58 +2162,131 @@ export default function ContractorJobRequestsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Schedule work dialog */}
-      <Dialog open={workEstimate !== null} onOpenChange={(open) => { if (!open) { setWorkEstimate(null); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") } }}>
+      {/* Schedule work days dialog (multi-day) */}
+      <Dialog open={workEstimate !== null} onOpenChange={(open) => { if (!open) setWorkEstimate(null) }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Schedule work day</DialogTitle>
+            <DialogTitle>Work schedule</DialogTitle>
             <DialogDescription>
-              Set the date and time when work will begin. The client will see this in their portal.
+              Add every day this job will take. The client sees the full schedule in their portal.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="work-date">
-                  <Calendar className="mr-1 inline-block size-3.5" />
-                  Date
-                </Label>
-                <Input id="work-date" type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} disabled={isSubmittingWork} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="work-start-time">
-                  <Clock className="mr-1 inline-block size-3.5" />
-                  Start time
-                </Label>
-                <Input id="work-start-time" type="time" value={workStartTime} onChange={(e) => setWorkStartTime(e.target.value)} disabled={isSubmittingWork} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="work-end-time">End time</Label>
-                <Input id="work-end-time" type="time" value={workEndTime} onChange={(e) => setWorkEndTime(e.target.value)} disabled={isSubmittingWork} placeholder="optional" />
-              </div>
-            </div>
+            {/* Existing scheduled days */}
             <div className="grid gap-2">
-              <Label htmlFor="work-notes">Notes (optional)</Label>
-              <Textarea
-                id="work-notes"
-                value={workNotes}
-                onChange={(e) => setWorkNotes(e.target.value)}
-                placeholder="e.g. Please ensure access to the back yard. Materials will be delivered the day before."
-                className="min-h-20"
-                disabled={isSubmittingWork}
-              />
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Scheduled days
+              </Label>
+              {isLoadingWorkDays ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : workDays.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                  No work days yet. Add the first one below.
+                </p>
+              ) : (
+                <ul className="grid gap-2" data-testid="work-day-list">
+                  {workDays.map((day) => (
+                    <li
+                      key={day.id}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {formatWorkDayRange(day)}
+                          {day.status === "completed" && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                              <Check className="size-3" />
+                              Completed
+                            </span>
+                          )}
+                        </p>
+                        {day.notes && (
+                          <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
+                            {day.notes}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0 text-muted-foreground hover:text-red-600"
+                        onClick={() => void removeWorkDay(day.id)}
+                        aria-label="Remove work day"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Conflict warning (warn, never block) */}
+            {workConflicts.length > 0 && (
+              <div
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+                data-testid="work-day-conflict-warning"
+              >
+                <p className="font-medium">Heads up — possible scheduling conflict</p>
+                <ul className="mt-1 list-disc pl-4 text-xs text-amber-800/90 dark:text-amber-300/90">
+                  {workConflicts.map((c, i) => (
+                    <li key={i}>
+                      You already have {c.label} then. You can&apos;t be in two places at once unless a crew covers it.
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Add a work day */}
+            <div className="grid gap-3 rounded-lg border border-border p-3">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Add a work day
+              </Label>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="work-date">
+                    <Calendar className="mr-1 inline-block size-3.5" />
+                    Date
+                  </Label>
+                  <Input id="work-date" type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} disabled={isSubmittingWork} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="work-start-time">
+                    <Clock className="mr-1 inline-block size-3.5" />
+                    Start time
+                  </Label>
+                  <Input id="work-start-time" type="time" value={workStartTime} onChange={(e) => setWorkStartTime(e.target.value)} disabled={isSubmittingWork} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="work-end-time">End time</Label>
+                  <Input id="work-end-time" type="time" value={workEndTime} onChange={(e) => setWorkEndTime(e.target.value)} disabled={isSubmittingWork} placeholder="optional" />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="work-notes">Notes (optional)</Label>
+                <Textarea
+                  id="work-notes"
+                  value={workNotes}
+                  onChange={(e) => setWorkNotes(e.target.value)}
+                  placeholder="e.g. Please ensure access to the back yard. Materials will be delivered the day before."
+                  className="min-h-20"
+                  disabled={isSubmittingWork}
+                />
+              </div>
+              <Button
+                className="w-fit bg-ef-ocean text-white hover:bg-ef-ocean"
+                disabled={!workDate || isSubmittingWork}
+                onClick={() => void addWorkDay()}
+                data-testid="add-work-day"
+              >
+                {isSubmittingWork ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Add work day
+              </Button>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setWorkEstimate(null)} disabled={isSubmittingWork}>Cancel</Button>
-            <Button
-              className="bg-ef-ocean text-white hover:bg-ef-ocean"
-              disabled={!workDate || isSubmittingWork}
-              onClick={() => void submitWorkSchedule()}
-            >
-              {isSubmittingWork ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
-              Save work day
-            </Button>
+            <Button variant="outline" onClick={() => setWorkEstimate(null)} disabled={isSubmittingWork}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2277,7 +2439,7 @@ export default function ContractorJobRequestsPage() {
                             }
                             onRequestDetails={(r) => { setDetailsRequest(r); setDetailsMessage("") }}
                             onScheduleInspection={(r) => { setInspectionRequest(r); setInspectionDate(""); setInspectionStartTime(""); setInspectionNotes("") }}
-                            onScheduleWork={(e) => { setWorkEstimate(e); setWorkDate(""); setWorkStartTime(""); setWorkEndTime(""); setWorkNotes("") }}
+                            onScheduleWork={(e) => { void openWorkScheduler(e) }}
                             onDeclineRequest={(r) => { setDeclineRequestTarget(r); setDeclineRequestReason("") }}
                             onMarkVisitCompleted={(r) => void markVisitCompleted(r)}
                             onAcceptClientProposal={(r) => void acceptClientVisitProposal(r)}

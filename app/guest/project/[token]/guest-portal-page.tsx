@@ -20,6 +20,7 @@ import {
   WorkScheduleCard,
 } from "@/components/client/portal-sections"
 import { Button } from "@/components/ui/button"
+import type { WorkDay } from "@/lib/scheduling"
 import type { Database } from "@/lib/supabase/database.types"
 
 type JobRequest    = Database["public"]["Tables"]["job_requests"]["Row"]
@@ -65,6 +66,7 @@ export function GuestPortalPage({
   estimates:     initialEstimates,
   invoices:      initialInvoices,
   events:        initialEvents,
+  workDays,
   contractorName,
 }: {
   token:          string
@@ -72,6 +74,7 @@ export function GuestPortalPage({
   estimates:      Estimate[]
   invoices:       Invoice[]
   events:         TimelineEvent[]
+  workDays:       WorkDay[]
   contractorName: string
 }) {
   const [job,       setJob]  = useState<JobRequest | null>(initialJob)
@@ -203,7 +206,7 @@ export function GuestPortalPage({
         />
       )}
 
-      <WorkScheduleCard estimates={visibleEstimates} />
+      <WorkScheduleCard workDays={workDays} />
 
       {/* Estimates — accept/decline + pay (via guest routes) */}
       <EstimatesSection

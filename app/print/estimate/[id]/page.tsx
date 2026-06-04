@@ -159,6 +159,14 @@ export default async function EstimatePrintPage({
     jobRequest = data
   }
 
+  // Full work schedule for this estimate (source of truth for multi-day jobs).
+  const { data: workDaysData } = await supabase
+    .from("scheduled_work_days")
+    .select("*")
+    .eq("estimate_id", id)
+    .order("starts_at", { ascending: true })
+  const workDays = workDaysData ?? []
+
   const lineItems    = parseLineItems(estimate.line_items)
   const taxLines     = parseTaxLines((estimate as Record<string, unknown>).tax_lines, Number(estimate.tax_rate ?? 0))
   const hasLineItems = lineItems.length > 0
@@ -308,10 +316,10 @@ export default async function EstimatePrintPage({
             </div>
           </div>
 
-          {/* ── Scope of work ── */}
-          {(workAddress || scheduledVisit) && (
+          {/* ── Work address & schedule ── */}
+          {(workAddress || workDays.length > 0 || scheduledVisit) && (
             <div className={`print-avoid-break grid gap-px bg-zinc-200 border-b border-zinc-200 text-xs ${
-              workAddress && scheduledVisit ? "grid-cols-2" : "grid-cols-1"
+              workAddress && (workDays.length > 0 || scheduledVisit) ? "grid-cols-2" : "grid-cols-1"
             }`}>
               {workAddress && (
                 <div className="bg-white px-8 py-3">
@@ -319,13 +327,33 @@ export default async function EstimatePrintPage({
                   <p className="font-semibold text-zinc-800">{workAddress}</p>
                 </div>
               )}
-              {scheduledVisit && (
+              {workDays.length > 0 ? (
+                <div className="bg-zinc-50 px-8 py-3">
+                  <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">
+                    {workDays.length === 1 ? "Work Day" : "Work Schedule"}
+                  </p>
+                  <div className="grid gap-1.5">
+                    {workDays.map((day) => {
+                      const startsAt = formatDateTime(day.starts_at)
+                      const endsAt = formatDateTime(day.ends_at)
+                      return (
+                        <div key={day.id}>
+                          <p className="font-semibold text-zinc-800">
+                            {endsAt ? `${startsAt} to ${endsAt}` : startsAt}
+                          </p>
+                          {day.notes && <p className="mt-0.5 text-zinc-500">{day.notes}</p>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : scheduledVisit ? (
                 <div className="bg-zinc-50 px-8 py-3">
                   <p className="text-[0.6rem] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">{scheduledVisit.label}</p>
                   <p className="font-semibold text-zinc-800">{scheduledVisit.time}</p>
                   {scheduledVisit.notes && <p className="mt-1 text-zinc-500">{scheduledVisit.notes}</p>}
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
