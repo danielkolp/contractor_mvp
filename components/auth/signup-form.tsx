@@ -231,8 +231,8 @@ export function SignupForm() {
       setErrorMessage("Enter a valid email address.")
       return
     }
-    if (password.length < 6 || password.length > 256) {
-      setErrorMessage("Password must be 6 to 256 characters.")
+    if (password.length < 8 || password.length > 256) {
+      setErrorMessage("Password must be 8 to 256 characters.")
       return
     }
     try {
