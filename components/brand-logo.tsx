@@ -29,7 +29,7 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        "flex h-10 min-w-0 shrink-0 items-center gap-2.5 text-ef-ink",
+        "flex h-10 min-w-0 shrink-0 items-center gap-2.5 text-ef-ink dark:text-white",
         className
       )}
       aria-label="Euroflo"

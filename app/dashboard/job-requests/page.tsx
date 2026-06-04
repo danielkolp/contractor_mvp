@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import {
   Calendar,
   Check,
@@ -685,6 +686,9 @@ function RequestsSkeleton() {
 
 export default function ContractorJobRequestsPage() {
   const supabase = useMemo(() => createClient(), [])
+  const searchParams = useSearchParams()
+  const focusRequestId = searchParams.get("request")
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const [requests, setRequests] = useState<JobRequest[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [requestSlug, setRequestSlug] = useState<string | null>(null)
@@ -836,6 +840,20 @@ export default function ContractorJobRequestsPage() {
     const id = window.setTimeout(() => void load(), 0)
     return () => window.clearTimeout(id)
   }, [load])
+
+  // Scroll to and highlight a specific request when arriving from the Today page
+  // (e.g. /dashboard/job-requests?request=<id>).
+  useEffect(() => {
+    if (!focusRequestId || isLoading) return
+    const el = document.querySelector(
+      `[data-request-id="${focusRequestId}"]`
+    )
+    if (!el) return
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    setHighlightedId(focusRequestId)
+    const timer = window.setTimeout(() => setHighlightedId(null), 2500)
+    return () => window.clearTimeout(timer)
+  }, [focusRequestId, isLoading])
 
   async function updateRequestStatus(
     request: JobRequest,
@@ -2199,7 +2217,11 @@ export default function ContractorJobRequestsPage() {
                       key={request.id}
                       data-testid="job-request-card"
                       data-request-id={request.id}
-                      className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+                      className={`rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md ${
+                        highlightedId === request.id
+                          ? "border-ef-ocean ring-2 ring-ef-ocean/40"
+                          : "border-border"
+                      }`}
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="min-w-0">

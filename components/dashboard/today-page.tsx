@@ -15,12 +15,22 @@ const OceanScene = dynamic(
   { ssr: false }
 )
 import {
+  ArrowRight,
   ArrowUpRight,
+  CalendarClock,
+  Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ClipboardList,
+  Clock,
+  Copy,
   Database,
+  ExternalLink,
   FileText,
+  Link2,
+  MapPin,
   Plus,
   Send,
   Sparkles,
@@ -34,6 +44,12 @@ import { RecoveryRepliesDialog } from "@/components/dashboard/recovery-replies-d
 import { SendFollowUpDialog } from "@/components/dashboard/send-follow-up-dialog"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { StatusPulse } from "@/components/ui/status-pulse"
 import { generateRecoveryItemMessage } from "@/lib/recovery-engine"
 import { money } from "@/lib/format-money"
@@ -58,6 +74,70 @@ type RecoveryItemUpdate = DB["public"]["Tables"]["recovery_items"]["Update"]
 type ClientRow = DB["public"]["Tables"]["clients"]["Row"]
 type InvoiceRow = DB["public"]["Tables"]["invoices"]["Row"]
 type EstimateRow = DB["public"]["Tables"]["estimates"]["Row"]
+type JobRequestRow = DB["public"]["Tables"]["job_requests"]["Row"]
+
+// Job-request statuses that still need the contractor to do something.
+// (Excludes terminal / handed-off states: estimate_created, accepted,
+// declined, declined_by_contractor, closed.)
+const ACTIONABLE_REQUEST_STATUSES = new Set([
+  "new",
+  "reviewed",
+  "needs_info",
+  "inspection_scheduled",
+  "inspection_confirmed",
+  "visit_completed",
+])
+
+function requestUrgencyLabel(urgency: string): string {
+  return urgency
+    .split("_")
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
+function requestStatusLabel(status: string): string {
+  if (status === "new") return "New"
+  return status
+    .split("_")
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
+// ─── Scheduled-visit agenda (inspections + work days) ───────────
+type VisitItem = {
+  kind: "inspection" | "work"
+  id: string
+  startsAt: string
+  confirmed: boolean
+  clientName: string
+  href: string
+}
+
+const visitTimeFmt = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+})
+const visitDayFmt = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+})
+
+function visitTime(iso: string): string {
+  return visitTimeFmt.format(new Date(iso))
+}
+function visitDay(iso: string): string {
+  return visitDayFmt.format(new Date(iso))
+}
+function isSameLocalDay(iso: string, ref: Date): boolean {
+  const d = new Date(iso)
+  return (
+    d.getFullYear() === ref.getFullYear() &&
+    d.getMonth() === ref.getMonth() &&
+    d.getDate() === ref.getDate()
+  )
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -91,6 +171,10 @@ export function TodayPage() {
   const [overdueInvoices, setOverdueInvoices] = useState<InvoiceRow[]>([])
   const [pendingEstimates, setPendingEstimates] = useState<EstimateRow[]>([])
   const [acceptedEstimates, setAcceptedEstimates] = useState<EstimateRow[]>([])
+  const [activeEstimates, setActiveEstimates] = useState<EstimateRow[]>([])
+  const [scheduledWork, setScheduledWork] = useState<EstimateRow[]>([])
+  const [jobRequests, setJobRequests] = useState<JobRequestRow[]>([])
+  const [requestSlug, setRequestSlug] = useState<string | null>(null)
   const [replyInfoMap, setReplyInfoMap] = useState<Record<string, ReplyInfo>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -117,12 +201,21 @@ export function TodayPage() {
 
     setUserId(user.id)
 
+    // Local midnight as an ISO instant — used to fetch only today-or-later visits.
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const startOfTodayIso = startOfToday.toISOString()
+
     const [
       itemsResult,
       clientsResult,
       invoicesResult,
       estimatesResult,
       acceptedEstimatesResult,
+      activeEstimatesResult,
+      jobRequestsResult,
+      scheduledWorkResult,
+      profileResult,
     ] =
       await Promise.all([
         supabase
@@ -157,6 +250,34 @@ export function TodayPage() {
           .eq("status", "Accepted")
           .order("updated_at", { ascending: false })
           .limit(5),
+        supabase
+          .from("estimates")
+          .select("*")
+          .eq("user_id", user.id)
+          .in("status", ["Sent", "Follow-up Sent", "Interested"])
+          .gt("follow_up_date", todayIso())
+          .order("sent_date", { ascending: false })
+          .limit(10),
+        supabase
+          .from("job_requests")
+          .select("*")
+          .eq("contractor_id", user.id)
+          .order("created_at", { ascending: false }),
+        // Scheduled work days / site visits booked on estimates (today onward).
+        supabase
+          .from("estimates")
+          .select("*")
+          .eq("user_id", user.id)
+          .in("scheduled_visit_type", ["job_start", "site_visit"])
+          .not("scheduled_visit_starts_at", "is", null)
+          .gte("scheduled_visit_starts_at", startOfTodayIso)
+          .order("scheduled_visit_starts_at", { ascending: true })
+          .limit(20),
+        supabase
+          .from("profiles")
+          .select("request_slug")
+          .eq("user_id", user.id)
+          .maybeSingle(),
       ])
 
     const loadedItems = itemsResult.data ?? []
@@ -165,6 +286,10 @@ export function TodayPage() {
     setOverdueInvoices(invoicesResult.data ?? [])
     setPendingEstimates(estimatesResult.data ?? [])
     setAcceptedEstimates(acceptedEstimatesResult.data ?? [])
+    setActiveEstimates(activeEstimatesResult.data ?? [])
+    setScheduledWork(scheduledWorkResult.data ?? [])
+    setJobRequests(jobRequestsResult.data ?? [])
+    setRequestSlug(profileResult.data?.request_slug ?? null)
 
     if (loadedItems.length > 0) {
       const itemIds = loadedItems.map((i) => i.id)
@@ -235,6 +360,79 @@ export function TodayPage() {
     [items]
   )
 
+  // Active, contractor-actionable job requests (the "did anyone contact me?" inbox).
+  const actionableRequests = useMemo(
+    () =>
+      jobRequests.filter((r) => ACTIONABLE_REQUEST_STATUSES.has(r.status ?? "")),
+    [jobRequests]
+  )
+
+  const newRequests = useMemo(
+    () => actionableRequests.filter((r) => r.status === "new"),
+    [actionableRequests]
+  )
+
+  // ─── Scheduled visits (inspections + work days) ───────────────
+  // Inspections live on job_requests; work days live on estimates. We merge
+  // them into one chronological agenda so Today can answer "where do I need to
+  // be?" — the question the app currently never answers for the contractor.
+  const upcomingVisits = useMemo<VisitItem[]>(() => {
+    const startOfTodayMs = (() => {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      return d.getTime()
+    })()
+
+    const inspections: VisitItem[] = jobRequests
+      .filter(
+        (r) =>
+          r.scheduled_visit_starts_at &&
+          (r.status === "inspection_confirmed" || r.status === "inspection_scheduled")
+      )
+      .map((r) => ({
+        kind: "inspection" as const,
+        id: r.id,
+        startsAt: r.scheduled_visit_starts_at!,
+        confirmed: r.status === "inspection_confirmed",
+        clientName: r.client_name || "a client",
+        href: `/dashboard/job-requests?request=${r.id}`,
+      }))
+
+    const work: VisitItem[] = scheduledWork
+      .filter((e) => e.scheduled_visit_starts_at)
+      .map((e) => ({
+        kind: "work" as const,
+        id: e.id,
+        startsAt: e.scheduled_visit_starts_at!,
+        confirmed: true,
+        clientName: e.client_name || "a client",
+        href: `/dashboard/estimates?highlight=${e.id}`,
+      }))
+
+    return [...inspections, ...work]
+      .filter((v) => new Date(v.startsAt).getTime() >= startOfTodayMs)
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+  }, [jobRequests, scheduledWork])
+
+  const todaysVisits = useMemo(
+    () => upcomingVisits.filter((v) => isSameLocalDay(v.startsAt, new Date())),
+    [upcomingVisits]
+  )
+
+  const todaysInspections = useMemo(
+    () => todaysVisits.filter((v) => v.kind === "inspection"),
+    [todaysVisits]
+  )
+  const todaysWork = useMemo(
+    () => todaysVisits.filter((v) => v.kind === "work"),
+    [todaysVisits]
+  )
+  // The next visit on a future day — used only when nothing is scheduled today.
+  const nextVisit = useMemo(
+    () => (todaysVisits.length === 0 ? upcomingVisits[0] ?? null : null),
+    [todaysVisits, upcomingVisits]
+  )
+
   const atRisk = useMemo(() => {
     const recoveryTotal = items.reduce((sum, i) => sum + i.amount, 0)
     const invoiceTotal = overdueInvoices.reduce((sum, i) => sum + (i.amount ?? 0), 0)
@@ -243,6 +441,14 @@ export function TodayPage() {
   }, [items, overdueInvoices, pendingEstimates])
 
   const totalActionCount =
+    actionableRequests.length +
+    checkInDueItems.length +
+    needsFollowUpItems.length +
+    overdueInvoices.length +
+    pendingEstimates.length +
+    acceptedEstimates.length
+
+  const followUpActionCount =
     checkInDueItems.length +
     needsFollowUpItems.length +
     overdueInvoices.length +
@@ -253,7 +459,9 @@ export function TodayPage() {
     items.length > 0 ||
     overdueInvoices.length > 0 ||
     pendingEstimates.length > 0 ||
-    acceptedEstimates.length > 0
+    acceptedEstimates.length > 0 ||
+    activeEstimates.length > 0 ||
+    jobRequests.length > 0
 
   // ─── Recovery item handlers ───────────────────────────────────
 
@@ -593,6 +801,10 @@ export function TodayPage() {
 
   // ─── Render ───────────────────────────────────────────────────
 
+  const shareableLink = requestSlug
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${requestSlug}`
+    : null
+
   const sharedCardProps = {
     isSaving,
     onMarkSent:      handleMarkSent,
@@ -643,91 +855,126 @@ export function TodayPage() {
       <div className="grid gap-4 p-4 sm:p-6 lg:p-8">
         <ContentReveal isLoading={isLoading} skeleton={<LoadingSkeleton />}>
           {!hasAnyItems ? (
-            <div className="ef-reveal ef-d0">
-              <OnboardingState
-                onAdd={() => setAddOpen(true)}
-                onDemo={() => void handleUseDemoData()}
-                isDemoSeeding={isDemoSeeding}
-              />
-            </div>
-          ) : totalActionCount === 0 ? (
             <div className="grid gap-6">
               <div className="ef-reveal ef-d0">
-                <AllCaughtUp atRisk={atRisk} waitingCount={waitingItems.length} onAdd={() => setAddOpen(true)} />
+                <OnboardingState
+                  requestLink={shareableLink}
+                  onAdd={() => setAddOpen(true)}
+                  onDemo={() => void handleUseDemoData()}
+                  isDemoSeeding={isDemoSeeding}
+                />
               </div>
-              {waitingItems.length > 0 && (
-                <div className="ef-reveal ef-d2">
-                  <WaitingSection
-                    items={waitingItems}
-                    replyInfoMap={replyInfoMap}
-                    defaultOpen
-                    sharedCardProps={sharedCardProps}
-                  />
-                </div>
-              )}
             </div>
           ) : (
             <div className="grid gap-6">
-              <div className="ef-reveal ef-d0 order-2 sm:order-1">
-                <CompactSummary
-                  actionCount={totalActionCount}
-                  atRisk={atRisk}
-                  onAdd={() => setAddOpen(true)}
-                  onStartNextTask={() =>
-                    actionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
-                />
+              {/* Request link — the contractor's most-asked "where is it?" */}
+              {shareableLink && (
+                <div className="ef-reveal ef-d0">
+                  <RequestLinkCard link={shareableLink} />
+                </div>
+              )}
+
+              {/* Summary hero — answers "did anyone contact me?", "where do I
+                  need to be?" (agenda + calendar), and "what's next?" */}
+              <div className="ef-reveal ef-d1">
+                {totalActionCount === 0 && upcomingVisits.length === 0 ? (
+                  <AllCaughtUp
+                    atRisk={atRisk}
+                    waitingCount={waitingItems.length}
+                    hasActiveEstimates={activeEstimates.length > 0}
+                    onAdd={() => setAddOpen(true)}
+                  />
+                ) : (
+                  <CompactSummary
+                    newRequestCount={newRequests.length}
+                    requestCount={actionableRequests.length}
+                    actionCount={followUpActionCount}
+                    todaysInspections={todaysInspections}
+                    todaysWork={todaysWork}
+                    nextVisit={nextVisit}
+                    visits={upcomingVisits}
+                    onAdd={() => setAddOpen(true)}
+                    onStartNextTask={() =>
+                      actionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    }
+                  />
+                )}
               </div>
 
-              <div ref={actionSectionRef} className="order-1 grid gap-6 sm:order-2">
-                <div className="ef-reveal ef-d2">
-                  <ActionSection
-                    label="Needs your attention"
-                    count={totalActionCount}
-                    urgent
-                  >
-                    {overdueInvoices.map((inv) => (
-                      <InvoiceActionCard
-                        key={inv.id}
-                        invoice={inv}
-                        isSaving={isSaving}
-                        onMarkPaid={handleInvoiceMarkPaid}
-                        onAddToQueue={handleInvoiceAddToQueue}
-                      />
-                    ))}
-                    {checkInDueItems.map((item) => (
-                      <RecoveryCard
-                        key={item.id}
-                        item={item}
-                        isCheckIn
-                        replyInfo={replyInfoMap[item.id]}
-                        {...sharedCardProps}
-                      />
-                    ))}
-                    {needsFollowUpItems.map((item) => (
-                      <RecoveryCard
-                        key={item.id}
-                        item={item}
-                        isCheckIn={false}
-                        replyInfo={replyInfoMap[item.id]}
-                        {...sharedCardProps}
-                      />
-                    ))}
-                    {acceptedEstimates.map((est) => (
-                      <AcceptedEstimateActionCard key={est.id} estimate={est} />
-                    ))}
-                    {pendingEstimates.map((est) => (
-                      <EstimateActionCard
-                        key={est.id}
-                        estimate={est}
-                        isSaving={isSaving}
-                        onWon={handleEstimateWon}
-                        onLost={handleEstimateLost}
-                        onSnooze={handleEstimateSnooze}
-                      />
-                    ))}
-                  </ActionSection>
-                </div>
+              <div ref={actionSectionRef} className="grid gap-6">
+                {/* New & active job requests — the inbox */}
+                {actionableRequests.length > 0 && (
+                  <div className="ef-reveal ef-d2">
+                    <ActionSection
+                      label="New job requests"
+                      count={actionableRequests.length}
+                      urgent={newRequests.length > 0}
+                    >
+                      {actionableRequests.map((request) => (
+                        <JobRequestCard key={request.id} request={request} />
+                      ))}
+                    </ActionSection>
+                  </div>
+                )}
+
+                {/* Pending actions — follow-ups, invoices, accepted estimates */}
+                {followUpActionCount > 0 && (
+                  <div className="ef-reveal ef-d3">
+                    <ActionSection
+                      label="Needs your attention"
+                      count={followUpActionCount}
+                      urgent
+                    >
+                      {overdueInvoices.map((inv) => (
+                        <InvoiceActionCard
+                          key={inv.id}
+                          invoice={inv}
+                          isSaving={isSaving}
+                          onMarkPaid={handleInvoiceMarkPaid}
+                          onAddToQueue={handleInvoiceAddToQueue}
+                        />
+                      ))}
+                      {checkInDueItems.map((item) => (
+                        <RecoveryCard
+                          key={item.id}
+                          item={item}
+                          isCheckIn
+                          replyInfo={replyInfoMap[item.id]}
+                          {...sharedCardProps}
+                        />
+                      ))}
+                      {needsFollowUpItems.map((item) => (
+                        <RecoveryCard
+                          key={item.id}
+                          item={item}
+                          isCheckIn={false}
+                          replyInfo={replyInfoMap[item.id]}
+                          {...sharedCardProps}
+                        />
+                      ))}
+                      {acceptedEstimates.map((est) => (
+                        <AcceptedEstimateActionCard key={est.id} estimate={est} />
+                      ))}
+                      {pendingEstimates.map((est) => (
+                        <EstimateActionCard
+                          key={est.id}
+                          estimate={est}
+                          isSaving={isSaving}
+                          onWon={handleEstimateWon}
+                          onLost={handleEstimateLost}
+                          onSnooze={handleEstimateSnooze}
+                        />
+                      ))}
+                    </ActionSection>
+                  </div>
+                )}
+
+                {/* Active estimates — sent, waiting on the client */}
+                {activeEstimates.length > 0 && (
+                  <div className="ef-reveal ef-d4">
+                    <ActiveEstimatesSection estimates={activeEstimates} />
+                  </div>
+                )}
 
                 {waitingItems.length > 0 && (
                   <div className="ef-reveal ef-d4">
@@ -751,75 +998,647 @@ export function TodayPage() {
 // ─── Compact summary card ─────────────────────────────────────
 
 function CompactSummary({
+  newRequestCount,
+  requestCount,
   actionCount,
-  atRisk,
+  todaysInspections,
+  todaysWork,
+  nextVisit,
+  visits,
   onAdd,
   onStartNextTask,
 }: {
+  newRequestCount: number
+  requestCount: number
   actionCount: number
-  atRisk: number
+  todaysInspections: VisitItem[]
+  todaysWork: VisitItem[]
+  nextVisit: VisitItem | null
+  visits: VisitItem[]
   onAdd: () => void
   onStartNextTask: () => void
 }) {
+  // Lead with the question a contractor logs in to answer: did a job come in?
+  let headline: React.ReactNode
+  let subline: string
+  if (newRequestCount > 0) {
+    headline = (
+      <>
+        {newRequestCount === 1 ? "1 new job request" : `${newRequestCount} new job requests`}
+        <span className="text-white/40"> came in</span>
+      </>
+    )
+    subline =
+      actionCount > 0
+        ? `Plus ${actionCount} ${actionCount === 1 ? "thing" : "things"} to follow up on.`
+        : "Review it and send an estimate."
+  } else if (requestCount > 0) {
+    headline = (
+      <>
+        {requestCount === 1 ? "1 job request" : `${requestCount} job requests`}
+        <span className="text-white/40"> in progress</span>
+      </>
+    )
+    subline =
+      actionCount > 0
+        ? `And ${actionCount} ${actionCount === 1 ? "thing" : "things"} to follow up on today.`
+        : "Keep them moving toward an estimate."
+  } else if (actionCount > 0) {
+    headline = (
+      <>
+        {actionCount === 1 ? "1 thing" : `${actionCount} things`}
+        <span className="text-white/40"> to follow up</span>
+      </>
+    )
+    subline = "No new job requests — share your link to get more."
+  } else {
+    headline = (
+      <>
+        You&apos;re
+        <span className="text-white/40"> all caught up</span>
+      </>
+    )
+    subline = "Nothing needs you right now."
+  }
+
+  const agenda = buildScheduleHeadline(todaysInspections, todaysWork, nextVisit)
+
   return (
     <div className="relative overflow-hidden rounded-2xl shadow-lg">
-      {/* CSS gradient base — also fallback if WebGL unavailable */}
-      <div className="absolute inset-0 bg-gradient-to-br from-ef-ink via-[#013060] to-ef-ocean" />
+      {/* CSS gradient base — also fallback if WebGL unavailable.
+          Fixed navy literals (not the ef-ink theme var, which turns charcoal
+          grey in dark mode and washes the blue ocean out). */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#002453] via-[#013060] to-[#024d8b]" />
       {/* Subtle dot texture */}
       <div className="absolute inset-0 ef-dot-grid opacity-[0.10]" />
 
-      {/* 3D ocean scene */}
-      <div className="absolute inset-0">
+      {/* 3D ocean scene — rounded + isolated so the animated canvas clips at its
+          own compositor layer (matching the card radius) instead of being masked
+          through the ancestor's clip every frame. Cuts the per-frame Paint cost;
+          no visual change. */}
+      <div className="absolute inset-0 overflow-hidden rounded-2xl [contain:paint] [will-change:transform]">
         <OceanScene />
       </div>
 
       {/* Left-side vignette — text legibility over the 3D scene */}
-      <div className="absolute inset-0 bg-gradient-to-r from-ef-ink/[0.92] via-ef-ink/50 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#002453]/[0.92] via-[#002453]/50 to-transparent" />
       {/* Bottom vignette — blends ocean into card edge */}
-      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-ef-ink/40 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#002453]/70 to-transparent" />
 
-      {/* Content */}
-      <div className="relative px-5 py-6 sm:px-10 sm:py-12">
-        {/* Today label */}
-        <div className="mb-3 flex items-center gap-2.5 sm:mb-5">
-          <StatusPulse variant="warning" pulse />
-          <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/50">
-            Today
-          </span>
+      {/* Content — two columns: summary + agenda (left), calendar (right) */}
+      <div className="relative grid gap-6 px-5 py-6 sm:px-10 sm:py-9 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-10">
+        <div className="min-w-0">
+          {/* Today label */}
+          <div className="mb-3 flex items-center gap-2.5 sm:mb-5">
+            <StatusPulse variant="warning" pulse />
+            <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/50">
+              Today
+            </span>
+          </div>
+
+          {/* Headline */}
+          <h2 className="text-3xl font-bold leading-none tracking-tight text-white sm:text-5xl">
+            {headline}
+          </h2>
+
+          {/* Subline */}
+          <p className="mt-4 text-base text-white/55">{subline}</p>
+
+          {/* Agenda — blends "where do I need to be?" into the hero */}
+          {agenda && (
+            <p className="mt-3 flex items-start gap-2 text-sm text-white/70">
+              <CalendarClock className="mt-0.5 size-4 shrink-0 text-ef-sky" />
+              <span>{agenda}</span>
+            </p>
+          )}
+
+          {/* CTAs */}
+          <div className="mt-5 flex flex-wrap gap-3 sm:mt-7">
+            <Button
+              className="bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
+              onClick={onStartNextTask}
+            >
+              See what&apos;s next
+            </Button>
+            <Button
+              variant="outline"
+              onClick={onAdd}
+              className="gap-1.5 border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
+            >
+              <Plus className="size-4" />
+              Follow up
+            </Button>
+          </div>
         </div>
 
-        {/* Headline */}
-        <h2 className="text-3xl font-bold leading-none tracking-tight text-white sm:text-5xl">
-          {actionCount === 1 ? "1 thing" : `${actionCount} things`}
-          <span className="text-white/40"> to handle</span>
-        </h2>
+        {/* Calendar — hoverable event markers */}
+        <HeroCalendar visits={visits} />
+      </div>
+    </div>
+  )
+}
 
-        {/* Money on the table */}
-        <p className="mt-4 flex items-baseline gap-2.5">
-          <span className="text-2xl font-bold tabular-nums text-ef-orange">
-            {money.format(atRisk)}
-          </span>
-          <span className="text-base text-white/50">on the table</span>
+// ─── Hero calendar (hoverable event markers) ──────────────────
+
+function localDayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`
+}
+
+const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"]
+const monthLabelFmt = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" })
+
+function HeroCalendar({ visits }: { visits: VisitItem[] }) {
+  const [monthStart, setMonthStart] = useState(() => {
+    const d = new Date()
+    d.setDate(1)
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [modalDay, setModalDay] = useState<string | null>(null)
+
+  const byDay = useMemo(() => {
+    const map = new Map<string, VisitItem[]>()
+    for (const v of visits) {
+      const key = localDayKey(new Date(v.startsAt))
+      const list = map.get(key)
+      if (list) list.push(v)
+      else map.set(key, [v])
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+    }
+    return map
+  }, [visits])
+
+  const year = monthStart.getFullYear()
+  const month = monthStart.getMonth()
+  const todayKey = localDayKey(new Date())
+  const leadingBlanks = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  // Always render a fixed 6-week (42-cell) grid so the calendar — and therefore
+  // the hero card — keeps a constant height across months.
+  const cells: (number | null)[] = Array.from({ length: 42 }, (_, i) => {
+    const day = i - leadingBlanks + 1
+    return day >= 1 && day <= daysInMonth ? day : null
+  })
+
+  const detailEvents = hovered ? byDay.get(hovered) ?? [] : []
+  const PREVIEW_LIMIT = 2
+  const previewEvents = detailEvents.slice(0, PREVIEW_LIMIT)
+  const moreCount = detailEvents.length - previewEvents.length
+  const modalEvents = modalDay ? byDay.get(modalDay) ?? [] : []
+
+  return (
+    <>
+    <div
+      data-testid="hero-calendar"
+      className="w-full shrink-0 rounded-xl bg-ef-ink/45 p-3 ring-1 ring-white/15 backdrop-blur-sm lg:w-[18rem]"
+    >
+      {/* Month header */}
+      <div className="mb-2 flex items-center justify-between px-1">
+        <span className="text-xs font-semibold text-white/85">
+          {monthLabelFmt.format(monthStart)}
+        </span>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => setMonthStart(new Date(year, month - 1, 1))}
+            className="grid size-6 place-items-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <ChevronLeft className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => setMonthStart(new Date(year, month + 1, 1))}
+            className="grid size-6 place-items-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Weekday labels */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {WEEKDAY_LABELS.map((d, i) => (
+          <div key={i} className="py-1 text-center text-[10px] font-medium text-white/35">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div className="grid grid-cols-7 gap-0.5" onMouseLeave={() => setHovered(null)}>
+        {cells.map((day, i) => {
+          // Blank cells must keep the row height so months with fewer occupied
+          // weeks don't collapse the grid (which would resize the card).
+          if (day === null) return <div key={`b${i}`} className="h-8" />
+          const key = localDayKey(new Date(year, month, day))
+          const events = byDay.get(key)
+          const isToday = key === todayKey
+          const hasInspection = events?.some((e) => e.kind === "inspection")
+          const hasWork = events?.some((e) => e.kind === "work")
+
+          return (
+            <button
+              key={key}
+              type="button"
+              data-daykey={key}
+              data-has-events={events ? "true" : undefined}
+              disabled={!events}
+              onMouseEnter={() => events && setHovered(key)}
+              onFocus={() => events && setHovered(key)}
+              onClick={() => events && setModalDay(key)}
+              className={cn(
+                "relative flex h-8 flex-col items-center justify-center rounded-md text-xs tabular-nums transition-colors",
+                events ? "cursor-pointer" : "cursor-default",
+                isToday
+                  ? "bg-ef-orange font-bold text-white"
+                  : events
+                    ? "font-semibold text-white hover:bg-white/10"
+                    : "text-white/45",
+                hovered === key && !isToday && "bg-white/10"
+              )}
+            >
+              <span>{day}</span>
+              {/* Event markers */}
+              {events && (
+                <span className="mt-0.5 flex gap-0.5">
+                  {hasInspection && (
+                    <span className="size-1.5 rounded-full bg-amber-400" />
+                  )}
+                  {hasWork && <span className="size-1.5 rounded-full bg-ef-sky" />}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Hover detail — fixed height (sized for date header + 2 rows + "more")
+          so hovering never changes the card height. */}
+      <div className="mt-2 h-24 overflow-hidden border-t border-white/10 pt-2">
+        {detailEvents.length > 0 ? (
+          <div
+            key={hovered ?? "none"}
+            className="grid animate-in gap-0.5 fade-in-0 slide-in-from-bottom-1 duration-200 ease-out"
+          >
+            <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              {visitDay(detailEvents[0].startsAt)}
+            </div>
+            {previewEvents.map((e) => (
+              <Link
+                key={`${e.kind}-${e.id}`}
+                href={e.href}
+                className="flex items-center gap-2 rounded-md px-1 py-0.5 text-xs text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <span
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    e.kind === "work" ? "bg-ef-sky" : "bg-amber-400"
+                  )}
+                />
+                <span className="font-medium tabular-nums">{visitTime(e.startsAt)}</span>
+                <span className="truncate text-white/60">
+                  {e.kind === "work" ? "Work day" : "Inspection"} · {e.clientName}
+                </span>
+              </Link>
+            ))}
+            {moreCount > 0 && (
+              <button
+                type="button"
+                onClick={() => hovered && setModalDay(hovered)}
+                className="px-1 py-0.5 text-left text-xs text-white/40 transition-colors hover:text-white/70"
+              >
+                and {moreCount} more…
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="px-1 pt-1 text-[11px] text-white/35">
+            Hover a marked day to see what&apos;s on.
+          </p>
+        )}
+      </div>
+    </div>
+
+    {/* Full-day modal — opened by clicking a marked day or "and X more…" */}
+    <Dialog open={modalDay !== null} onOpenChange={(open) => !open && setModalDay(null)}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>
+            {modalEvents.length > 0
+              ? `${visitDay(modalEvents[0].startsAt)} · ${modalEvents.length} ${
+                  modalEvents.length === 1 ? "visit" : "visits"
+                }`
+              : "Schedule"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-1.5">
+          {modalEvents.map((e) => (
+            <Link
+              key={`${e.kind}-${e.id}`}
+              href={e.href}
+              onClick={() => setModalDay(null)}
+              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 transition-colors hover:bg-muted/50"
+            >
+              <span
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-md",
+                  e.kind === "work"
+                    ? "bg-ef-mist text-ef-ocean dark:bg-ef-navy/25 dark:text-ef-cyan"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300"
+                )}
+              >
+                {e.kind === "work" ? (
+                  <ClipboardList className="size-3.5" />
+                ) : (
+                  <CalendarClock className="size-3.5" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium tabular-nums text-foreground">
+                  {visitTime(e.startsAt)}
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {e.kind === "work" ? "Work day" : "Inspection"}
+                  </span>
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {e.clientName}
+                  {e.kind === "inspection" && !e.confirmed && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {" · awaiting confirmation"}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+            </Link>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
+  )
+}
+
+// ─── Request link card ────────────────────────────────────────
+
+function RequestLinkCard({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false)
+
+  function copy() {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true)
+      toast.success("Request link copied — share it to get new jobs.")
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-ef-200 bg-ef-mist p-4 dark:border-ef-navy/60 dark:bg-ef-ink/20 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-sm font-semibold text-ef-navy dark:text-ef-mist">
+          <Link2 className="size-4 shrink-0" />
+          Your request link
+        </div>
+        <p className="mt-0.5 truncate text-xs text-ef-ocean dark:text-ef-300" data-testid="today-request-link">
+          {link}
         </p>
+        <p className="mt-1 text-xs text-ef-ocean/70 dark:text-ef-cyan">
+          Share this with clients — new jobs land here. No account needed on their end.
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <Button
+          size="sm"
+          className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+          onClick={copy}
+          data-testid="today-copy-request-link"
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? "Copied!" : "Copy link"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          asChild
+          className="border-ef-300 bg-white text-ef-ocean hover:bg-ef-mist dark:border-ef-ocean dark:bg-transparent dark:text-ef-200"
+        >
+          <a href={link} target="_blank" rel="noreferrer">
+            <ExternalLink className="size-3.5" />
+            Preview
+          </a>
+        </Button>
+      </div>
+    </div>
+  )
+}
 
-        {/* CTAs */}
-        <div className="mt-5 flex flex-wrap gap-3 sm:mt-8">
-          <Button
-            className="bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
-            onClick={onStartNextTask}
+// ─── Today's agenda strip (inspections + work days) ───────────
+
+function buildScheduleHeadline(
+  todaysInspections: VisitItem[],
+  todaysWork: VisitItem[],
+  nextVisit: VisitItem | null
+): string | null {
+  const insp = todaysInspections.length
+  const work = todaysWork.length
+
+  // Nothing today → point at the next visit, if any.
+  if (insp === 0 && work === 0) {
+    if (!nextVisit) return null
+    const label = nextVisit.kind === "inspection" ? "inspection" : "work day"
+    return `No visits today. Next: ${label} with ${nextVisit.clientName} ${visitDay(
+      nextVisit.startsAt
+    )} at ${visitTime(nextVisit.startsAt)}.`
+  }
+
+  const segs: string[] = []
+  if (insp === 1) {
+    segs.push(
+      `an inspection with ${todaysInspections[0].clientName} at ${visitTime(
+        todaysInspections[0].startsAt
+      )}`
+    )
+  } else if (insp > 1) {
+    segs.push(`${insp} inspections`)
+  }
+  if (work === 1) {
+    segs.push(
+      `a work day with ${todaysWork[0].clientName} at ${visitTime(
+        todaysWork[0].startsAt
+      )}`
+    )
+  } else if (work > 1) {
+    segs.push(`${work} work days`)
+  }
+
+  const joined = segs.join(" and ")
+  // Lead with "No inspections today" when only work is booked (the contractor's
+  // own phrasing) so the absence is explicit, not just implied.
+  if (insp === 0) return `No inspections today — you have ${joined}.`
+  return `You have ${joined} today.`
+}
+
+// ─── Job request card ─────────────────────────────────────────
+
+function JobRequestCard({ request }: { request: JobRequestRow }) {
+  const isNew = request.status === "new"
+  const hasInfo = Boolean(request.more_details_response)
+
+  return (
+    <div
+      className={cn(
+        "euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md",
+        "before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
+        isNew ? "before:bg-ef-orange" : "before:bg-ef-cyan"
+      )}
+      data-testid="today-job-request-card"
+    >
+      <div className="flex flex-col gap-3 py-3.5 pl-5 pr-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-lg",
+              isNew ? "bg-orange-100 dark:bg-orange-900/25" : "bg-ef-mist dark:bg-ef-navy/25"
+            )}
           >
-            Start next task
-          </Button>
+            <ClipboardList
+              className={cn(
+                "size-3.5",
+                isNew ? "text-ef-orange" : "text-ef-ocean dark:text-ef-cyan"
+              )}
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="truncate text-sm font-semibold text-foreground">
+                {request.title}
+              </p>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                  isNew
+                    ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                    : "bg-ef-mist text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300"
+                )}
+              >
+                {requestStatusLabel(request.status)}
+              </span>
+              {hasInfo && (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/25 dark:text-amber-300">
+                  Info received
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+              {request.client_name && (
+                <>
+                  <span className="font-medium text-foreground">{request.client_name}</span>
+                  <span>·</span>
+                </>
+              )}
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="size-3" />
+                {request.service_area}
+              </span>
+              <span>·</span>
+              <span>{requestUrgencyLabel(request.urgency)}</span>
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 pl-11 lg:pl-0">
           <Button
-            variant="outline"
-            onClick={onAdd}
-            className="gap-1.5 border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
+            size="sm"
+            className="gap-1.5 bg-ef-ocean text-white hover:bg-ef-ocean"
+            asChild
           >
-            <Plus className="size-4" />
-            Follow up
+            <Link href={`/dashboard/job-requests?request=${request.id}`}>
+              {isNew ? "Review" : "Open"}
+              <ArrowRight className="size-3.5" />
+            </Link>
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Active estimates (sent, waiting on client) ───────────────
+
+function ActiveEstimatesSection({ estimates }: { estimates: EstimateRow[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="grid gap-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2.5 text-left"
+      >
+        <StatusPulse variant="info" className="shrink-0" />
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Estimates waiting on clients
+        </span>
+        <span className="shrink-0 rounded-full border border-border bg-background px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+          {estimates.length}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+        {open ? (
+          <ChevronUp className="size-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
+      </button>
+      {open && (
+        <div className="grid gap-3">
+          {estimates.map((est) => (
+            <div
+              key={est.id}
+              className="euroflo-card-transition relative overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-ef-cyan"
+            >
+              <div className="flex flex-col gap-2.5 py-3.5 pl-5 pr-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ef-mist dark:bg-ef-navy/25">
+                    <Clock className="size-3.5 text-ef-ocean dark:text-ef-cyan" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {est.client_name || "No client"}
+                      </p>
+                      <span className="shrink-0 rounded-full bg-ef-mist px-2 py-0.5 text-xs font-medium text-ef-ocean dark:bg-ef-navy/30 dark:text-ef-300">
+                        Sent
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {est.estimate_number}
+                      {" · "}
+                      <span className="font-medium tabular-nums text-foreground">
+                        {money.format(est.amount ?? 0)}
+                      </span>
+                      {" · "}
+                      Waiting for the client to accept
+                    </p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/dashboard/estimates?highlight=${est.id}`}>
+                    <FileText className="size-3.5" />
+                    View
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1138,14 +1957,27 @@ function AcceptedEstimateActionCard({ estimate }: { estimate: EstimateRow }) {
 // ─── Onboarding state ──────────────────────────────────────────
 
 function OnboardingState({
+  requestLink,
   onAdd,
   onDemo,
   isDemoSeeding,
 }: {
+  requestLink: string | null
   onAdd: () => void
   onDemo: () => void
   isDemoSeeding: boolean
 }) {
+  const [copied, setCopied] = useState(false)
+
+  function copyLink() {
+    if (!requestLink) return
+    navigator.clipboard.writeText(requestLink).then(() => {
+      setCopied(true)
+      toast.success("Request link copied — share it to get your first job.")
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   return (
     <div className="relative overflow-hidden rounded-2xl shadow-lg">
       <div className="absolute inset-0 bg-gradient-to-br from-ef-ink via-[#013060] to-ef-ocean" />
@@ -1153,26 +1985,35 @@ function OnboardingState({
       <div className="pointer-events-none absolute -right-12 top-1/4 size-48 rounded-full bg-ef-sky/12 blur-3xl" />
       <div className="pointer-events-none absolute -top-8 left-1/4 size-40 rounded-full bg-ef-cyan/10 blur-2xl" />
 
-      <div className="relative mx-auto max-w-sm px-6 py-16 text-center sm:py-20">
+      <div className="relative mx-auto max-w-md px-6 py-16 text-center sm:py-20">
         <div className="mx-auto mb-7 flex size-16 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
           <Sparkles className="size-7 text-ef-sky" />
         </div>
         <h2 className="text-3xl font-bold tracking-tight text-white">
-          Follow up with your first customer.
+          No job requests yet.
         </h2>
         <p className="mt-4 text-sm leading-7 text-white/55">
-          Add a customer and the reason you&apos;re chasing them — an unpaid
-          invoice or a quiet estimate — and Euroflo drafts the message and shows
-          you who to contact today.
+          Share your request link and new jobs show up right here. Clients fill
+          out a quick form — no account needed — and you turn it into an estimate
+          and get paid.
         </p>
-        <div className="mt-9 flex flex-col gap-3">
-          <Button
-            className="w-full gap-2 bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
-            onClick={onAdd}
-          >
-            <Plus className="size-4" />
-            Add a real customer
-          </Button>
+
+        {requestLink && (
+          <div className="mt-7 rounded-xl border border-white/15 bg-white/5 p-3 text-left">
+            <p className="truncate text-xs text-white/60">{requestLink}</p>
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col gap-3">
+          {requestLink && (
+            <Button
+              className="w-full gap-2 bg-ef-orange text-white shadow-md shadow-black/25 hover:bg-ef-orange/90"
+              onClick={copyLink}
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {copied ? "Copied!" : "Copy request link"}
+            </Button>
+          )}
           <Button
             variant="outline"
             className="w-full gap-2 border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white"
@@ -1184,10 +2025,14 @@ function OnboardingState({
           </Button>
         </div>
         <p className="mt-7 text-xs text-white/35">
-          Already have customers?{" "}
-          <Link href="/dashboard/clients" className="font-medium text-white/60 transition-colors hover:text-white">
-            Go to Clients
-          </Link>
+          Already have a customer to follow up with?{" "}
+          <button
+            type="button"
+            onClick={onAdd}
+            className="font-medium text-white/60 underline-offset-2 transition-colors hover:text-white hover:underline"
+          >
+            Add them
+          </button>
         </p>
       </div>
     </div>
@@ -1199,10 +2044,12 @@ function OnboardingState({
 function AllCaughtUp({
   atRisk,
   waitingCount,
+  hasActiveEstimates,
   onAdd,
 }: {
   atRisk: number
   waitingCount: number
+  hasActiveEstimates: boolean
   onAdd: () => void
 }) {
   return (
@@ -1228,9 +2075,15 @@ function AllCaughtUp({
           You&apos;re caught up.
         </h3>
         <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-white/50">
-          {atRisk > 0
-            ? `${money.format(atRisk)} is being tracked.${waitingCount > 0 ? ` ${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.` : ""} Come back tomorrow.`
-            : "No follow-ups due. Come back tomorrow, or follow up with someone new."}
+          {(() => {
+            const parts: string[] = []
+            if (atRisk > 0) parts.push(`${money.format(atRisk)} is being tracked.`)
+            if (hasActiveEstimates) parts.push("Your sent estimates are waiting on clients.")
+            if (waitingCount > 0)
+              parts.push(`${waitingCount} item${waitingCount === 1 ? "" : "s"} waiting for a reply.`)
+            parts.push("New job requests will show up here. Come back tomorrow.")
+            return parts.join(" ")
+          })()}
         </p>
 
         <div className="mt-8 flex flex-wrap justify-center gap-3">

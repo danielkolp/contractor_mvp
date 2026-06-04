@@ -42,4 +42,8 @@ yarn-error.log*
 
 # local artifacts
 *_QA_REPORT.md
+*_AUDIT.md
 *.png
+audit-screens/
+audit-screens.zip
+debug.log

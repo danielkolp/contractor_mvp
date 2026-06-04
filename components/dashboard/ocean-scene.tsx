@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import * as THREE from "three"
 
@@ -229,7 +229,10 @@ const OCEAN_FRAG = /* glsl */ `
   }
 `
 
-function Ocean({ matRef }: { matRef: React.RefObject<THREE.ShaderMaterial | null> }) {
+function Ocean({ matRef, segments }: {
+  matRef: React.RefObject<THREE.ShaderMaterial | null>
+  segments: [number, number]
+}) {
   const uniforms = useMemo(() => ({
     uCam:     { value: new THREE.Vector3() },
     uSunDir:  { value: new THREE.Vector3(0, 1, 0) },
@@ -243,9 +246,11 @@ function Ocean({ matRef }: { matRef: React.RefObject<THREE.ShaderMaterial | null
 
   // Rotated flat; extends far in -z. Width covers the frame out to mid-distance;
   // far corners that fall short are hidden by the matching horizon haze.
+  // Tessellation is tuned per device: full detail on capable GPUs, coarser on
+  // weak ones (the big swells stay well-sampled; only the faintest ripple softens).
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -40]} renderOrder={3}>
-      <planeGeometry args={[260, 150, 170, 120]} />
+      <planeGeometry args={[260, 150, segments[0], segments[1]]} />
       <shaderMaterial
         ref={matRef}
         vertexShader={OCEAN_VERT}
@@ -321,20 +326,50 @@ if (coreMat.current) coreMat.current.uniforms.uIntensity.value = 0.45 + Math.sin
 }
 
 // ─── Clouds ──────────────────────────────────────────────────────────────────
+//
+// All cloud puffs across every cloud are drawn as ONE instanced mesh — a single
+// draw call and program bind instead of ~30. Per-puff differences (size, opacity,
+// noise seed, horizontal drift) ride along as per-instance attributes, and the
+// drift that used to be a JS-per-frame transform now happens in the vertex shader.
+// The fragment math is byte-for-byte the old CloudPuff shader, so the clouds look
+// identical — only the CPU cost of issuing them collapses.
+
+const CLOUD_VERT = /* glsl */ `
+  attribute float aOpacity;
+  attribute float aSeed;
+  attribute float aSpeed;
+  attribute float aPhase;
+  attribute float aAmp;
+  uniform   float uTime;
+  varying   vec2  vUv;
+  varying   float vOpacity;
+  varying   float vSeed;
+  void main(){
+    vUv      = uv;
+    vOpacity = aOpacity;
+    vSeed    = aSeed;
+    // instanceMatrix places each puff at its resting position/scale; the drift is
+    // a horizontal sway in the same space the old group.position.x used.
+    vec4 ip  = instanceMatrix * vec4(position, 1.0);
+    ip.x    += sin(uTime * aSpeed + aPhase) * aAmp;
+    gl_Position = projectionMatrix * modelViewMatrix * ip;
+  }
+`
 
 const CLOUD_FRAG = /* glsl */ `
   uniform vec3  uColor, uRim;
-  uniform float uOpacity, uSeed;
   varying vec2  vUv;
+  varying float vOpacity;
+  varying float vSeed;
   ${NOISE_GLSL}
   void main(){
     vec2  c = vUv - 0.5;
     float r = length(c) * 2.0;
 
     // ragged, noisy falloff for a soft fluffy silhouette
-    float n    = vnoise(vUv * 4.0 + uSeed) * 0.55 + vnoise(vUv * 9.0 - uSeed * 1.7) * 0.45;
+    float n    = vnoise(vUv * 4.0 + vSeed) * 0.55 + vnoise(vUv * 9.0 - vSeed * 1.7) * 0.45;
     float edge = 0.95 - n * 0.4;
-    float a    = smoothstep(edge, edge - 0.5, r) * uOpacity;
+    float a    = smoothstep(edge, edge - 0.5, r) * vOpacity;
     if (a < 0.01) discard;
 
     // rim-lit on the sun side (right), shaded underneath
@@ -346,34 +381,7 @@ const CLOUD_FRAG = /* glsl */ `
   }
 `
 
-function CloudPuff({ pos, size, opacity, seed }: {
-  pos: [number, number]
-  size: number
-  opacity: number
-  seed: number
-}) {
-  const uniforms = useMemo(() => ({
-    uColor:   { value: PALETTE.cloud.clone() },
-    uRim:     { value: PALETTE.cloudRim.clone() },
-    uOpacity: { value: opacity },
-    uSeed:    { value: seed },
-  }), [opacity, seed])
-
-  return (
-    <mesh position={[pos[0], pos[1], 0]}>
-      <planeGeometry args={[size, size * 0.72]} />
-      <shaderMaterial
-        vertexShader={SPRITE_VERT}
-        fragmentShader={CLOUD_FRAG}
-        uniforms={uniforms}
-        transparent
-        depthWrite={false}
-      />
-    </mesh>
-  )
-}
-
-// A cloud is several overlapping puffs; the group drifts horizontally.
+// A cloud is several overlapping puffs; each cloud drifts horizontally as a unit.
 const PUFFS: { pos: [number, number]; s: number; o: number }[] = [
   { pos: [ 0.0,  0.0],  s: 1.00, o: 0.95 },
   { pos: [ 4.2,  0.8],  s: 0.72, o: 0.85 },
@@ -383,33 +391,109 @@ const PUFFS: { pos: [number, number]; s: number; o: number }[] = [
   { pos: [ 2.6, -0.9],  s: 0.55, o: 0.50 },
 ]
 
-function Cloud({ position, scale = 1, speed = 0.04, seed = 0 }: {
-  position: [number, number, number]
-  scale?: number
-  speed?: number
-  seed?: number
-}) {
-  const ref   = useRef<THREE.Group>(null)
-  const baseX = position[0]
+// The five cloud banks — same positions/scales/speeds/seeds as before.
+const CLOUDS: { pos: [number, number, number]; scale: number; speed: number; seed: number }[] = [
+  { pos: [-12, 10.5, -36], scale: 1.10, speed: 0.05,  seed: 1.2 },
+  { pos: [-28, 12.5, -50], scale: 1.30, speed: 0.03,  seed: 3.4 },
+  { pos: [  4, 13.5, -54], scale: 1.00, speed: 0.04,  seed: 5.6 },
+  { pos: [ -3, 10.0, -34], scale: 0.95, speed: 0.06,  seed: 7.8 },
+  { pos: [ 33, 12.5, -46], scale: 0.85, speed: 0.035, seed: 9.1 },
+]
+
+const CLOUD_DRIFT = 2.2 // horizontal sway amplitude, matches the old Cloud component
+
+// Instances draw in index order (no per-frame depth sort), so bake the back-to-
+// front order in once. The puffs only sway in x, so z is fixed → ordering clouds
+// farthest-first reproduces the painter's-order alpha blend three.js gave before.
+const CLOUDS_BY_DEPTH = [...CLOUDS].sort((a, b) => a.pos[2] - b.pos[2])
+
+function CloudField() {
+  const count  = CLOUDS.length * PUFFS.length
+  const meshRef = useRef<THREE.InstancedMesh>(null)
+  const matRef  = useRef<THREE.ShaderMaterial>(null)
+
+  const uniforms = useMemo(() => ({
+    uColor: { value: PALETTE.cloud.clone() },
+    uRim:   { value: PALETTE.cloudRim.clone() },
+    uTime:  { value: 0 },
+  }), [])
+
+  // Unit quad carrying the per-instance attributes. Built once.
+  const geometry = useMemo(() => {
+    const g = new THREE.PlaneGeometry(1, 1)
+    const opacity = new Float32Array(count)
+    const seed    = new Float32Array(count)
+    const speed   = new Float32Array(count)
+    const phase   = new Float32Array(count)
+    const amp     = new Float32Array(count)
+    let k = 0
+    for (const cl of CLOUDS_BY_DEPTH) {
+      for (let i = 0; i < PUFFS.length; i++) {
+        opacity[k] = PUFFS[i].o
+        seed[k]    = cl.seed + i * 1.37  // matches old CloudPuff seed = seed + i*1.37
+        speed[k]   = cl.speed
+        phase[k]   = cl.seed             // matches old drift phase = seed
+        amp[k]     = CLOUD_DRIFT
+        k++
+      }
+    }
+    g.setAttribute("aOpacity", new THREE.InstancedBufferAttribute(opacity, 1))
+    g.setAttribute("aSeed",    new THREE.InstancedBufferAttribute(seed, 1))
+    g.setAttribute("aSpeed",   new THREE.InstancedBufferAttribute(speed, 1))
+    g.setAttribute("aPhase",   new THREE.InstancedBufferAttribute(phase, 1))
+    g.setAttribute("aAmp",     new THREE.InstancedBufferAttribute(amp, 1))
+    return g
+  }, [count])
+
+  // Resting transform per puff: the old (group position + scale·puffOffset) and
+  // (group scale · plane size). Set once; drift is added live in the shader.
+  useEffect(() => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    const dummy = new THREE.Object3D()
+    let k = 0
+    for (const cl of CLOUDS_BY_DEPTH) {
+      for (let i = 0; i < PUFFS.length; i++) {
+        const pf = PUFFS[i]
+        const w  = cl.scale * 11 * pf.s
+        dummy.position.set(
+          cl.pos[0] + cl.scale * pf.pos[0],
+          cl.pos[1] + cl.scale * pf.pos[1],
+          cl.pos[2],
+        )
+        dummy.scale.set(w, w * 0.72, 1)
+        dummy.updateMatrix()
+        mesh.setMatrixAt(k, dummy.matrix)
+        k++
+      }
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  }, [])
 
   useFrame(({ clock }) => {
-    if (ref.current)
-      ref.current.position.x = baseX + Math.sin(clock.getElapsedTime() * speed + seed) * 2.2
+    if (matRef.current) matRef.current.uniforms.uTime.value = clock.getElapsedTime()
   })
 
+  // frustumCulled off: the instances span far wider than the unit-quad bounds, so
+  // the default per-instance-blind cull test would wrongly drop the whole mesh.
   return (
-    <group ref={ref} position={position} scale={scale} renderOrder={2}>
-      {PUFFS.map((pf, i) => (
-        <CloudPuff key={i} pos={pf.pos} size={11 * pf.s} opacity={pf.o} seed={seed + i * 1.37} />
-      ))}
-    </group>
+    <instancedMesh ref={meshRef} args={[geometry, undefined, count]} renderOrder={2} frustumCulled={false}>
+      <shaderMaterial
+        ref={matRef}
+        vertexShader={CLOUD_VERT}
+        fragmentShader={CLOUD_FRAG}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+      />
+    </instancedMesh>
   )
 }
 
 // ─── Scene root — wiring, sun direction, parallax ────────────────────────────
 
 function ResponsiveCamera() {
-  const { set, size } = useThree()
+  const { set, size, invalidate } = useThree()
   const cameraRef = useRef<THREE.PerspectiveCamera>(null)
   const fov = size.width / size.height < 2.2 ? 54 : 42
 
@@ -420,7 +504,10 @@ function ResponsiveCamera() {
     cam.lookAt(0, 6, -60)
     cam.updateProjectionMatrix()
     set({ camera: cam })
-  }, [fov, set])
+    // Force a render now in case the loop is on-demand (reduced-motion path),
+    // so the static frame reflects the final camera/aspect.
+    invalidate()
+  }, [fov, set, invalidate])
 
   return (
     <perspectiveCamera
@@ -433,7 +520,56 @@ function ResponsiveCamera() {
   )
 }
 
-function SceneRoot() {
+// ─── Adaptive resolution — holds the framerate without touching the look ──────
+//
+// The ocean's per-pixel fragment shader (layered noise glitter + reflected sky)
+// is the scene's dominant cost, so the cheapest thing to trade when a frame runs
+// long is pixel density — never the geometry, shaders or animation. We watch the
+// real framerate and nudge DPR within [min, cap]:
+//   • capable GPUs settle at the cap → pixel-for-pixel identical to before
+//   • weaker GPUs ease DPR down just enough to stay at 50–60fps and leave the
+//     rest of the page responsive, instead of pinning the GPU at 20fps.
+// The floor goes fairly low so even an underpowered GPU can keep a smooth cadence.
+function AdaptiveResolution({ min = 0.65, max = 1.6 }: { min?: number; max?: number }) {
+  const setDpr = useThree((s) => s.setDpr)
+  const dpr     = useRef(max)
+  const frames  = useRef(0)
+  const since   = useRef(0)
+
+  useEffect(() => {
+    const cap = Math.min(max, window.devicePixelRatio || 1)
+    dpr.current = cap
+    since.current = performance.now()
+    setDpr(cap)
+  }, [max, setDpr])
+
+  useFrame(() => {
+    frames.current++
+    const now     = performance.now()
+    const elapsed = now - since.current
+    if (elapsed < 600) return // measure over ~0.6s windows to ignore jitter
+
+    const fps = (frames.current * 1000) / elapsed
+    frames.current = 0
+    since.current  = now
+
+    const cap = Math.min(max, window.devicePixelRatio || 1)
+    let next = dpr.current
+    if (fps < 50 && dpr.current > min) {
+      next = Math.max(min, dpr.current - 0.2)      // shed pixels to recover fps
+    } else if (fps > 58 && dpr.current < cap) {
+      next = Math.min(cap, dpr.current + 0.1)       // headroom to spare → sharpen
+    }
+    if (next !== dpr.current) {
+      dpr.current = next
+      setDpr(next)
+    }
+  })
+
+  return null
+}
+
+function SceneRoot({ segments }: { segments: [number, number] }) {
   const { camera } = useThree()
   const groupRef = useRef<THREE.Group>(null)
   const skyMat   = useRef<THREE.ShaderMaterial>(null)
@@ -463,9 +599,15 @@ function SceneRoot() {
     const r = rot.current, m = mouse.current
     r.x += ( m.y * 0.018 - r.x) * 0.04
     r.y += (-m.x * 0.030 - r.y) * 0.04
+    // Only touch the transform when it actually moved by a perceptible amount.
+    // Writing rotation every frame dirties the whole subtree's world matrices;
+    // skipping it while the pointer is idle lets three.js avoid that traversal.
     if (groupRef.current) {
-      groupRef.current.rotation.x = r.x
-      groupRef.current.rotation.y = r.y
+      const g = groupRef.current
+      if (Math.abs(g.rotation.x - r.x) > 1e-5 || Math.abs(g.rotation.y - r.y) > 1e-5) {
+        g.rotation.x = r.x
+        g.rotation.y = r.y
+      }
     }
 
     // world-space sun direction (follows the parallax) feeds sky + water
@@ -486,33 +628,114 @@ function SceneRoot() {
     <group ref={groupRef}>
       <Sky matRef={skyMat} />
       <Sun groupRef={sunGroup} />
-      <Ocean matRef={oceanMat} />
+      <Ocean matRef={oceanMat} segments={segments} />
 
-      {/* drifting cloud bank, kept clear of the sun's disk */}
-      <Cloud position={[-12, 10.5, -36]} scale={1.10} speed={0.05} seed={1.2} />
-      <Cloud position={[-28, 12.5, -50]} scale={1.30} speed={0.03} seed={3.4} />
-      <Cloud position={[  4, 13.5, -54]} scale={1.00} speed={0.04} seed={5.6} />
-      <Cloud position={[ -3, 10.0, -34]} scale={0.95} speed={0.06} seed={7.8} />
-      <Cloud position={[ 33, 12.5, -46]} scale={0.85} speed={0.035} seed={9.1} />
+      {/* drifting cloud bank (one instanced draw call), kept clear of the sun */}
+      <CloudField />
     </group>
   )
 }
 
 // ─── Canvas ──────────────────────────────────────────────────────────────────
 
+// One-time quality tier picked from coarse device hints, so weak hardware starts
+// light instead of janking through the adaptive governor's first second. Desktops
+// stay at full quality (pixel-identical); phones/tablets and low-memory machines
+// get cheaper MSAA-off rendering, a lower DPR cap, and coarser ocean tessellation.
+// The runtime fps governor still refines DPR from whatever cap we choose here.
+type Quality = { antialias: boolean; maxDpr: number; oceanSegments: [number, number] }
+
+function detectQuality(): Quality {
+  const HIGH: Quality = { antialias: true,  maxDpr: 1.6, oceanSegments: [170, 120] }
+  const LOW:  Quality = { antialias: false, maxDpr: 1.3, oceanSegments: [110, 80] }
+  if (typeof window === "undefined" || typeof navigator === "undefined") return HIGH
+  const coarse = window.matchMedia("(pointer: coarse)").matches            // phone/tablet
+  const mem    = (navigator as { deviceMemory?: number }).deviceMemory     // GB (Chromium)
+  const cores  = navigator.hardwareConcurrency || 8
+  const lowEnd = coarse || (mem !== undefined && mem <= 4) || cores <= 2
+  return lowEnd ? LOW : HIGH
+}
+
 export default function OceanScene() {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  // Only drive the render loop while the banner is actually on screen and the
+  // tab is focused. The scene is purely decorative, so rendering frames nobody
+  // can see just burns GPU/battery — visually identical, far cheaper. When
+  // `active` is false R3F's frameloop stops entirely (no draw calls, no rAF).
+  const [active, setActive] = useState(true)
+  // Quality tier is fixed for the canvas's lifetime (antialias/dpr/segments are
+  // creation-time choices), so resolve it once.
+  const [quality] = useState(detectQuality)
+
+  // Reduced-motion users get a single static frame — no ongoing render at all.
+  const [reduced, setReduced] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const sync = () => setReduced(mq.matches)
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+
+    let onScreen = true
+    const sync = () => setActive(onScreen && !document.hidden)
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        onScreen = entry.isIntersecting
+        sync()
+      },
+      // a tiny margin keeps it running through the last sliver of scroll
+      { rootMargin: "120px" }
+    )
+    io.observe(el)
+
+    document.addEventListener("visibilitychange", sync)
+    return () => {
+      io.disconnect()
+      document.removeEventListener("visibilitychange", sync)
+    }
+  }, [])
+
   return (
-    <Canvas
-      gl={{ antialias: true, powerPreference: "high-performance" }}
-      dpr={[1, 1.6]}
-      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
-      onCreated={({ gl }) => {
-        // match the sky horizon so no gap shows at extreme aspect ratios
-        gl.setClearColor("#c9efff", 1)
+    <div
+      ref={wrapRef}
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        // Promote the animated canvas onto its own compositor layer and isolate
+        // its paint. Without this the canvas sits mid-stack under static gradient
+        // overlays, so each WebGL frame drags the surrounding content into the
+        // browser's Paint pass instead of just recompositing the canvas texture.
+        // Purely a compositing hint — the pixels are unchanged. (The banner-side
+        // rounded clip is applied by the wrapper in today-page so it doesn't
+        // round the full-bleed landing hero, which shares this component.)
+        willChange: "transform",
+        contain: "paint",
       }}
     >
-      <ResponsiveCamera />
-      <SceneRoot />
-    </Canvas>
+      <Canvas
+        // reduced-motion → render on demand only (one static frame); otherwise
+        // run while visible and pause entirely when scrolled away / tab hidden.
+        frameloop={reduced ? "demand" : active ? "always" : "never"}
+        gl={{ antialias: quality.antialias, powerPreference: "high-performance" }}
+        dpr={[1, quality.maxDpr]}
+        style={{ width: "100%", height: "100%" }}
+        onCreated={({ gl }) => {
+          // match the sky horizon so no gap shows at extreme aspect ratios
+          gl.setClearColor("#c9efff", 1)
+        }}
+      >
+        <ResponsiveCamera />
+        {/* No fps governor when frozen — there's nothing to measure. */}
+        {!reduced && <AdaptiveResolution min={0.65} max={quality.maxDpr} />}
+        <SceneRoot segments={quality.oceanSegments} />
+      </Canvas>
+    </div>
   )
 }
