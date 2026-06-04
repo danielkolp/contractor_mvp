@@ -571,7 +571,7 @@ export default function RequestPage({
       })
       email = emailField(fd.get("email"))
       phone = optionalPhoneField(fd.get("phone"))
-      title = textField(trade || fd.get("title"), "Project type", {
+      title = textField(fd.get("title"), "Job title", {
         required: true,
         maxLength: INPUT_LIMITS.title,
       })
@@ -604,6 +604,7 @@ export default function RequestPage({
         payload.append("email",            email)
         payload.append("phone",            phone ?? "")
         payload.append("title",            title)
+        payload.append("trade",            trade)
         payload.append("description",      description)
         payload.append("address_street",   addressStreet ?? "")
         payload.append("location",         location)
@@ -737,6 +738,23 @@ export default function RequestPage({
                 <MessageSquare className="h-3.5 w-3.5" />
                 Project details
               </h2>
+            </div>
+
+            <div>
+              <FieldLabel htmlFor="title">Job title</FieldLabel>
+              <input
+                id="title"
+                name="title"
+                type="text"
+                required
+                maxLength={INPUT_LIMITS.title}
+                data-testid="request-title-input"
+                placeholder="e.g. Leaky kitchen sink"
+                className={inputClass}
+              />
+              <p className="mt-1.5 text-xs text-gray-400">
+                A short summary so your contractor can tell jobs apart at a glance.
+              </p>
             </div>
 
             {trades.length !== 1 ? (

@@ -47,6 +47,7 @@ type ParsedClientRequest = {
   email: string
   phone: string | null
   title: string
+  trade: string | null
   description: string
   location: string
   requestSlug: string
@@ -82,9 +83,12 @@ function parseJsonBody(body: Record<string, unknown>): ParsedClientRequest {
     }),
     email: emailField(body.email),
     phone: optionalPhoneField(body.phone),
-    title: textField(body.title, "Project type", {
+    title: textField(body.title, "Job title", {
       required: true,
       maxLength: INPUT_LIMITS.title,
+    }),
+    trade: optionalTextField(body.trade, "Type of work", {
+      maxLength: INPUT_LIMITS.mediumText,
     }),
     description: textField(body.description, "Description", {
       required: true,
@@ -128,9 +132,12 @@ function parseFormBody(formData: FormData): ParsedClientRequest {
     }),
     email: emailField(getStringField(formData, "email")),
     phone: optionalPhoneField(getStringField(formData, "phone")),
-    title: textField(getStringField(formData, "title"), "Project type", {
+    title: textField(getStringField(formData, "title"), "Job title", {
       required: true,
       maxLength: INPUT_LIMITS.title,
+    }),
+    trade: optionalTextField(getStringField(formData, "trade"), "Type of work", {
+      maxLength: INPUT_LIMITS.mediumText,
     }),
     description: textField(getStringField(formData, "description"), "Description", {
       required: true,
@@ -245,6 +252,7 @@ export async function POST(req: NextRequest) {
     email,
     phone,
     title,
+    trade,
     description,
     location,
     requestSlug,
@@ -363,6 +371,7 @@ export async function POST(req: NextRequest) {
     client_email:       email,
     client_phone:       phone,
     title,
+    trade,
     description,
     photo_notes:        photoNotes,
     address_street:     addressStreet,

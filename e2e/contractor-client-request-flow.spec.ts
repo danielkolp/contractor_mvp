@@ -30,18 +30,14 @@ async function login(page: Page, email: string, password: string) {
 async function chooseRequestTitle(page: Page) {
   await expect(page.getByTestId("request-submit-button")).toBeEnabled()
 
-  const hiddenTrade = page.locator('input[name="trade"]')
-  if ((await hiddenTrade.count()) > 0) {
-    return (await hiddenTrade.inputValue()) || "Project request"
-  }
-
+  // Trade is now stored separately from the title. Pick a trade (from the
+  // dropdown when present; the single-trade case uses a hidden input) so the
+  // request is categorized, then fill the required free-text job title.
   const tradeSelect = page.locator(
     '[data-testid="request-trade-select"], select[name="trade"]'
   )
 
-  if ((await tradeSelect.count()) > 0) {
-    await expect(tradeSelect.first()).toBeVisible()
-
+  if ((await tradeSelect.count()) > 0 && (await tradeSelect.first().isVisible())) {
     const optionValues = await tradeSelect
       .first()
       .locator("option:not([disabled])")
@@ -55,11 +51,14 @@ async function chooseRequestTitle(page: Page) {
       ? "Plumbing"
       : optionValues[0]
 
-    await tradeSelect.first().selectOption(selectedTrade)
-    return selectedTrade
+    if (selectedTrade) {
+      await tradeSelect.first().selectOption(selectedTrade)
+    }
   }
 
-  return "Project request"
+  const title = "Leaky kitchen sink"
+  await page.getByTestId("request-title-input").fill(title)
+  return title
 }
 
 test.describe("contractor/client request flow", () => {

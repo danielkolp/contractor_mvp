@@ -187,6 +187,7 @@ test.describe("Stripe payment flow", () => {
         }
       }
 
+      await requestPage.getByTestId("request-title-input").fill("Leaky kitchen sink")
       await requestPage.getByLabel("Project description").fill(description)
       await requestPage.getByLabel("Street address").fill(address)
       await requestPage.getByLabel("City").fill(city)

@@ -136,31 +136,6 @@ export function FollowUpListSkeleton() {
   )
 }
 
-export function RemindersListSkeleton({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="rounded-lg border border-border bg-background p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-4 w-36" />
-              <Skeleton className="h-3.5 w-24" />
-            </div>
-            <Skeleton className="h-5 w-20 rounded-full" />
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <Skeleton className="h-3.5 w-32" />
-            <div className="flex gap-2">
-              <Skeleton className="h-8 w-20 rounded-lg" />
-              <Skeleton className="h-8 w-20 rounded-lg" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 export function SettingsSkeleton() {
   return (
     <div className="grid gap-6 p-4 sm:p-6 lg:p-8">

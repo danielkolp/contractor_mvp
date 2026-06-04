@@ -119,6 +119,7 @@ test.describe("contractor audit", () => {
         const sel = requestPage.locator('select[name="trade"], [data-testid="request-trade-select"]')
         if ((await sel.count()) > 0) await sel.first().selectOption({ index: 1 }).catch(() => {})
       } catch {}
+      await requestPage.getByTestId("request-title-input").fill("Leaky kitchen sink")
       await requestPage.getByLabel("Project description").fill(
         `Leaking shutoff valve under the kitchen sink, needs replacing. ${data.runId}`
       )

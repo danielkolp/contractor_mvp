@@ -49,6 +49,7 @@ async function submitJobRequest(
 
   await page.getByLabel("Full name").fill(clientName)
   await page.getByLabel("Email address").fill(clientEmail)
+  await page.getByTestId("request-title-input").fill("Leaky kitchen sink")
   await page.getByLabel("Project description").fill(description)
   await page.getByLabel("Street address").fill(address)
   await page.getByLabel("City").fill("North Vancouver, BC")
