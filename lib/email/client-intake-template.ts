@@ -40,7 +40,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Your request was submitted — ${safeContractor}</title>
+  <title>Your request was submitted to ${safeContractor}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#F0F4F1; -webkit-text-size-adjust:100%;">
 
@@ -118,7 +118,7 @@ export function renderClientIntakeEmailHtml(args: ClientIntakeEmailArgs): string
                        padding:16px 32px; border-radius:0 0 10px 10px; text-align:center;">
               <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
                         margin:0; font-size:12px; color:#9CA3AF; line-height:1.6;">
-                Powered by ${safeApp} — contractor project management
+                Powered by ${safeApp}, contractor project management
               </p>
             </td>
           </tr>
@@ -152,7 +152,7 @@ export function renderClientIntakeEmailText(args: ClientIntakeEmailArgs): string
     `This link signs you in automatically and expires in 24 hours.`,
     `You can use this same email address anytime to request a fresh login link.`,
     ``,
-    `—`,
+    `--`,
     `Powered by ${appName}`,
   ].join("\n")
 }

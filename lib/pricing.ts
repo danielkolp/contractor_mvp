@@ -1,53 +1,99 @@
 /**
  * Centralised money calculations for Euroflo estimates.
  *
- * Money rules:
- *   contractor subtotal  = what the contractor wants to receive
- *   platform fee         = 15 % of contractor subtotal
+ * Money rules (per the locked fee model):
+ *   contractor subtotal  = what the contractor wants to receive (they always get this)
+ *   platform fee         = plan fee % of contractor subtotal (Free 5 / Pro 2 / Team 1),
+ *                          Free capped per transaction
  *   taxable subtotal     = contractor subtotal + platform fee
  *   GST                  = 5 % of taxable subtotal
- *   client total         = taxable subtotal + GST
+ *   pre-Stripe total     = taxable subtotal + GST
+ *   Stripe fee           = grossed up so Stripe's 2.9% + 30¢ is covered by the client
+ *   client total         = pre-Stripe total + Stripe fee  (what the client pays)
  *   deposit              = initial Stripe charge (user-supplied or 30 % default)
  *   remaining balance    = client total − deposit
+ *
+ * Both the platform fee and Stripe's processing fee are charged to the client on
+ * top, so the contractor receives their quoted amount in full.
  *
  * All amounts are integers in cents.
  */
 
+/** Legacy/default platform fee % when no plan fee is supplied. */
 export const PLATFORM_FEE_PERCENT = Number(
   process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? 15
 )
 export const GST_PERCENT = 5
+
+/** Stripe standard card processing fee (CAD): 2.9% + 30¢. */
+export const STRIPE_PERCENT = 2.9
+export const STRIPE_FIXED_CENTS = 30
 
 export interface PricingBreakdown {
   contractorSubtotalCents: number
   platformFeeCents: number
   taxableSubtotalCents: number
   gstCents: number
+  stripeFeeCents: number
   clientTotalCents: number
   depositCents: number
   remainingBalanceCents: number
+}
+
+export interface ComputePricingOptions {
+  /** Explicit deposit in cents; null/undefined → default 30 % of client total. */
+  depositInputCents?: number | null
+  /** Platform fee percentage (e.g. 5, 2, 1). Defaults to PLATFORM_FEE_PERCENT. */
+  feePercent?: number
+  /** Cap on the platform fee in cents (used for the Free tier). null = uncapped. */
+  feeCapCents?: number | null
+  /** Gross up the client total to cover Stripe's processing fee. Default true. */
+  includeStripeFee?: boolean
+}
+
+/**
+ * Gross up a net amount so that after Stripe deducts 2.9% + 30¢ the net remains.
+ * Returns the Stripe fee in cents (clientTotal − net).
+ */
+export function stripeProcessingFeeCents(netCents: number): number {
+  if (netCents <= 0) return 0
+  const gross = (netCents + STRIPE_FIXED_CENTS) / (1 - STRIPE_PERCENT / 100)
+  return Math.ceil(gross) - netCents
 }
 
 /**
  * Compute all pricing figures from the contractor's desired payout.
  *
  * @param contractorSubtotalCents  What the contractor wants (integer cents).
- * @param depositInput             Explicit deposit in cents; null/undefined → default 30 %.
+ * @param options                  Deposit, plan fee %, cap, and Stripe gross-up.
  */
 export function computePricing(
   contractorSubtotalCents: number,
-  depositInput?: number | null
+  options: ComputePricingOptions = {}
 ): PricingBreakdown {
-  const platformFeeCents = Math.round(
-    contractorSubtotalCents * (PLATFORM_FEE_PERCENT / 100)
-  )
+  const {
+    depositInputCents,
+    feePercent = PLATFORM_FEE_PERCENT,
+    feeCapCents = null,
+    includeStripeFee = true,
+  } = options
+
+  const rawPlatformFee = Math.round(contractorSubtotalCents * (feePercent / 100))
+  const platformFeeCents =
+    feeCapCents != null ? Math.min(rawPlatformFee, feeCapCents) : rawPlatformFee
+
   const taxableSubtotalCents = contractorSubtotalCents + platformFeeCents
   const gstCents = Math.round(taxableSubtotalCents * (GST_PERCENT / 100))
-  const clientTotalCents = taxableSubtotalCents + gstCents
+  const preStripeTotalCents = taxableSubtotalCents + gstCents
+
+  const stripeFeeCents = includeStripeFee
+    ? stripeProcessingFeeCents(preStripeTotalCents)
+    : 0
+  const clientTotalCents = preStripeTotalCents + stripeFeeCents
 
   const rawDeposit =
-    depositInput != null && depositInput > 0
-      ? depositInput
+    depositInputCents != null && depositInputCents > 0
+      ? depositInputCents
       : Math.round(clientTotalCents * 0.3)
 
   const depositCents = Math.min(rawDeposit, clientTotalCents)
@@ -57,6 +103,7 @@ export function computePricing(
     platformFeeCents,
     taxableSubtotalCents,
     gstCents,
+    stripeFeeCents,
     clientTotalCents,
     depositCents,
     remainingBalanceCents: clientTotalCents - depositCents,
@@ -74,6 +121,20 @@ export function depositApplicationFee(
 ): number {
   if (clientTotalCents <= 0) return 0
   return Math.round((depositCents * platformFeeCents) / clientTotalCents)
+}
+
+/**
+ * The Stripe Connect application fee for a charge of `chargeCents`: the
+ * proportional platform fee plus the actual Stripe processing fee on that charge,
+ * so the contractor receives their proportional quoted amount in full.
+ */
+export function chargeApplicationFee(
+  chargeCents: number,
+  platformFeeCents: number,
+  clientTotalCents: number
+): number {
+  const platformPortion = depositApplicationFee(chargeCents, platformFeeCents, clientTotalCents)
+  return platformPortion + stripeProcessingFeeCents(chargeCents - platformPortion)
 }
 
 /**

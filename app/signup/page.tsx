@@ -46,11 +46,11 @@ export default async function SignupPage() {
             </Link>
 
             <h1 className="max-w-xl break-words text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">
-              Find missed money and follow up — without doing it yourself.
+              Find missed money and follow up, without doing it yourself.
             </h1>
             <p className="mt-4 max-w-xl break-words text-base leading-7 text-zinc-600">
               Create a contractor workspace for invoices, clients, and
-              AI-drafted follow-up messages you approve before they send.
+              ready-to-send follow-up messages you approve before they go out.
             </p>
 
             <div className="mt-8 grid gap-3">
@@ -77,7 +77,7 @@ export default async function SignupPage() {
             <CardHeader className="pb-4">
               <CardTitle className="text-xl">Create your account</CardTitle>
               <CardDescription>
-                Sign up with email and password. Free to try — no credit card
+                Sign up with email and password. Free to try, no credit card
                 required.
               </CardDescription>
             </CardHeader>

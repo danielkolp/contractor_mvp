@@ -8,7 +8,7 @@ import {
   retrieveAccountsV2ConnectedAccount,
 } from "@/lib/stripe/accounts-v2"
 import {
-  depositApplicationFee,
+  chargeApplicationFee,
   resolveBalanceCents,
   resolveDepositCents,
 } from "@/lib/pricing"
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
   if (paymentType === "balance") {
     chargeAmountCents = balanceCents
     isFullPayment     = true   // balance payment completes the job
-    productName       = `Balance — Estimate ${estimate.estimate_number}`
+    productName       = `Balance for Estimate ${estimate.estimate_number}`
   } else if (paymentType === "full") {
     chargeAmountCents = clientTotal
     isFullPayment     = true
@@ -190,10 +190,12 @@ export async function POST(req: NextRequest) {
     isFullPayment     = depositCents >= clientTotal
     productName       = isFullPayment
       ? `Estimate ${estimate.estimate_number}`
-      : `Deposit — Estimate ${estimate.estimate_number}`
+      : `Deposit for Estimate ${estimate.estimate_number}`
   }
 
-  const appFee = depositApplicationFee(chargeAmountCents, platformFee, clientTotal)
+  // Application fee = proportional platform fee + Stripe's processing fee on this
+  // charge, so the contractor receives their quoted amount in full.
+  const appFee = chargeApplicationFee(chargeAmountCents, platformFee, clientTotal)
 
   if (chargeAmountCents < 50) {
     return NextResponse.json(

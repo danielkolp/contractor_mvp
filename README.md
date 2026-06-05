@@ -238,11 +238,15 @@ Two new tables / columns are added by `20240115000000_recovery_inbound_replies.s
 
 ## Known limitations / future work
 
-- Photo uploads in client job requests are not yet implemented
-- Templates feature is not yet implemented
 - Invoice and estimate email sending not yet implemented (only recovery follow-ups use Resend)
 - No SMS sending (Twilio integration is future work)
-- No Stripe or payment processing
+- Recovery follow-up emails support a "Pay now" button, but recovery items are not yet
+  linked to a payable estimate, so the deep link isn't wired in the send route yet
+- Real Stripe subscription and payout charges need an environment where Stripe's hosts
+  are reachable (blocked in the sandbox)
+
+Implemented: client job-request photo uploads, Stripe Connect payments (deposits +
+balances), and Stripe Billing subscriptions (Free / Pro / Team) with per-plan card fees.
 
 ## Run commands
 

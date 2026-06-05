@@ -60,6 +60,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { money } from "@/lib/format-money"
 import { computePricing } from "@/lib/pricing"
 import {
+  FREE_FEE_CAP_CENTS,
+  effectivePlan,
+  transactionFeePercent,
+  type PlanTier,
+} from "@/lib/plans"
+import {
   INPUT_LIMITS,
   InputValidationError,
   enumField,
@@ -697,6 +703,7 @@ export default function ContractorJobRequestsPage() {
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const [requests, setRequests] = useState<JobRequest[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [plan, setPlan] = useState<PlanTier>("free")
   const [requestSlug, setRequestSlug] = useState<string | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<JobRequest | null>(null)
   const [estimateRequest, setEstimateRequest] = useState<JobRequest | null>(null)
@@ -783,10 +790,21 @@ export default function ContractorJobRequestsPage() {
     : parseAmount(estimateForm.flatAmount)
 
   // ── Stripe payout derivations via shared pricing helper ──────────────────────
+  // Plan-based fee: Free 5% (capped) / Pro 2% / Team 1%, charged to the client on top.
+  const feeOptions = useMemo(
+    () => ({
+      feePercent: transactionFeePercent(plan),
+      feeCapCents: plan === "free" ? FREE_FEE_CAP_CENTS : null,
+    }),
+    [plan]
+  )
   const rawContractorCents = Math.round((parseFloat(estimateForm.contractorAmount) || 0) * 100)
   const rawDepositCents    = Math.round((parseFloat(estimateForm.depositAmount) || 0) * 100)
   const pricing = rawContractorCents > 0
-    ? computePricing(rawContractorCents, rawDepositCents > 0 ? rawDepositCents : null)
+    ? computePricing(rawContractorCents, {
+        depositInputCents: rawDepositCents > 0 ? rawDepositCents : null,
+        ...feeOptions,
+      })
     : null
   const contractorCents  = pricing?.contractorSubtotalCents ?? 0
   const platformFeeCents = pricing?.platformFeeCents ?? 0
@@ -825,13 +843,14 @@ export default function ContractorJobRequestsPage() {
 
     setUserId(user.id)
 
-    // Fetch profile to get the request slug for the shareable link.
+    // Fetch profile to get the request slug for the shareable link + plan (fee tier).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("request_slug")
+      .select("request_slug, plan, plan_status")
       .eq("user_id", user.id)
       .maybeSingle()
     if (profile?.request_slug) setRequestSlug(profile.request_slug)
+    setPlan(effectivePlan(profile?.plan ?? "free", profile?.plan_status ?? "active"))
 
     const { data, error } = await supabase
       .from("job_requests")
@@ -1105,7 +1124,7 @@ export default function ContractorJobRequestsPage() {
       visit_client_proposed_at:    null,
       visit_client_notes:          null,
     })
-    toast.success("Client's suggested time accepted — visit confirmed")
+    toast.success("Client's suggested time accepted. Visit confirmed.")
   }
 
   async function closeJob(request: JobRequest) {
@@ -1175,7 +1194,7 @@ export default function ContractorJobRequestsPage() {
     setInspectionDate("")
     setInspectionStartTime("")
     setInspectionNotes("")
-    toast.success("Inspection scheduled — client will be asked to confirm")
+    toast.success("Inspection scheduled. The client will be asked to confirm.")
   }
 
   // Open the work-day manager for an estimate and load its existing days.
@@ -1259,7 +1278,7 @@ export default function ContractorJobRequestsPage() {
     setWorkEndTime("")
     setWorkNotes("")
     setWorkConflicts([])
-    toast.success("Work day added — the client will see it in their portal")
+    toast.success("Work day added. The client will see it in their portal.")
   }
 
   async function removeWorkDay(id: string) {
@@ -1351,10 +1370,10 @@ export default function ContractorJobRequestsPage() {
       const depositAmountCents = Math.round(depositAmount * 100)
       pricingForSave =
         contractorAmountCents > 0
-          ? computePricing(
-              contractorAmountCents,
-              depositAmountCents > 0 ? depositAmountCents : null
-            )
+          ? computePricing(contractorAmountCents, {
+              depositInputCents: depositAmountCents > 0 ? depositAmountCents : null,
+              ...feeOptions,
+            })
           : null
       sendAmount = pricingForSave ? pricingForSave.clientTotalCents / 100 : finalAmount
       billingType = enumField(estimateForm.billingType, "Billing type", billingTypes)
@@ -2227,7 +2246,7 @@ export default function ContractorJobRequestsPage() {
                 className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
                 data-testid="work-day-conflict-warning"
               >
-                <p className="font-medium">Heads up — possible scheduling conflict</p>
+                <p className="font-medium">Heads up: possible scheduling conflict</p>
                 <ul className="mt-1 list-disc pl-4 text-xs text-amber-800/90 dark:text-amber-300/90">
                   {workConflicts.map((c, i) => (
                     <li key={i}>
@@ -2307,7 +2326,7 @@ export default function ContractorJobRequestsPage() {
                 {shareableLink}
               </p>
               <p className="mt-1 text-xs text-ef-ocean/70 dark:text-ef-cyan">
-                Send this link to clients so they can submit a project request — no account needed.
+                Send this link to clients so they can submit a project request. No account needed.
               </p>
             </div>
             <div className="flex shrink-0 gap-2">

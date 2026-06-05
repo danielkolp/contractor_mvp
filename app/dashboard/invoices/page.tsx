@@ -26,6 +26,11 @@ import {
 } from "lucide-react"
 
 import { PageHeader } from "@/components/dashboard/page-header"
+import {
+  MarkPaidDialog,
+  PAYMENT_METHOD_LABEL,
+  type PaymentMethod,
+} from "@/components/dashboard/mark-paid-dialog"
 import { InvoiceListSkeleton } from "@/components/dashboard/skeleton-loaders"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import {
@@ -663,6 +668,7 @@ export default function InvoicesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
   const [editingInvoice, setEditingInvoice] = useState<InvoiceRow | null>(null)
+  const [markPaidInvoice, setMarkPaidInvoice] = useState<InvoiceRow | null>(null)
   const [form, setForm] = useState<InvoiceForm>(initialForm)
   const [reminderForm, setReminderForm] = useState<ReminderFormValues>(
     getInitialReminderForm()
@@ -1004,7 +1010,8 @@ export default function InvoicesPage() {
 
   async function updateInvoiceStatus(
     invoiceId: string,
-    status: InvoiceStatus
+    status: InvoiceStatus,
+    method?: PaymentMethod
   ) {
     if (!userId) {
       setErrorMessage("You must be logged in to update invoices.")
@@ -1029,6 +1036,7 @@ export default function InvoicesPage() {
     const payload: InvoiceUpdate = {
       status: safeStatus,
       paid_at: safeStatus === "Paid" ? new Date().toISOString() : null,
+      payment_method: safeStatus === "Paid" ? method ?? null : null,
     }
 
     const { data, error } = await supabase
@@ -1045,7 +1053,11 @@ export default function InvoicesPage() {
       setInvoices((current) =>
         current.map((invoice) => (invoice.id === safeInvoiceId ? data : invoice))
       )
-      toast.success(`Invoice marked ${getStatusDisplayLabel(safeStatus).toLowerCase()}`)
+      toast.success(
+        safeStatus === "Paid" && method
+          ? `Invoice marked paid by ${PAYMENT_METHOD_LABEL[method].toLowerCase()}`
+          : `Invoice marked ${getStatusDisplayLabel(safeStatus).toLowerCase()}`
+      )
     }
 
     setIsSaving(false)
@@ -1092,7 +1104,7 @@ export default function InvoicesPage() {
         toast.success(
           isWaitingRecoveryDraft(activeDraft)
             ? "Follow-up already sent. Opening Follow-ups."
-            : "Draft ready — opening Follow-ups to review and send."
+            : "Draft ready. Opening Follow-ups to review and send."
         )
         router.push("/dashboard/recoveries")
         return
@@ -1129,7 +1141,7 @@ export default function InvoicesPage() {
         }
       }
 
-      toast.success("Draft ready — opening Follow-ups to review and send.")
+      toast.success("Draft ready. Opening Follow-ups to review and send.")
       router.push("/dashboard/recoveries")
     } catch (error) {
       const message = getRecoveryDraftErrorMessage(error)
@@ -1341,9 +1353,21 @@ export default function InvoicesPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background text-foreground dark:bg-background dark:text-foreground">
+      <MarkPaidDialog
+        open={markPaidInvoice !== null}
+        onClose={() => setMarkPaidInvoice(null)}
+        clientName={markPaidInvoice?.client_name ?? markPaidInvoice?.invoice_number}
+        amountLabel={markPaidInvoice ? moneyFormatter.format(markPaidInvoice.amount) : null}
+        isSaving={isSaving}
+        onConfirm={(method) => {
+          const inv = markPaidInvoice
+          setMarkPaidInvoice(null)
+          if (inv) void updateInvoiceStatus(inv.id, "Paid", method)
+        }}
+      />
       <PageHeader
         title="Invoices"
-        description="Your record of what's owed and paid. To collect online, send the estimate — clients pay from there. Use an invoice for cash, cheque, or e-transfer, then mark it paid."
+        description="Your record of what's owed and paid. To collect online, send the estimate and clients pay from there. Use an invoice for cash, cheque, or e-transfer, then mark it paid."
         className="dark:border-border dark:bg-background dark:[&_h1]:text-foreground dark:[&_p]:text-muted-foreground"
       >
         <Dialog open={dialogOpen} onOpenChange={closeInvoiceDialog}>
@@ -1811,7 +1835,7 @@ export default function InvoicesPage() {
                             <Button
                               size="sm"
                               className="h-9 w-full bg-[#024D8B] px-4 text-white shadow-sm hover:bg-[#024D8B] disabled:border disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 dark:disabled:border-border dark:disabled:bg-muted dark:disabled:text-muted-foreground"
-                              disabled={isSaving || !followUpEnabled}
+                              disabled={isSaving}
                               onClick={(event) => {
                                 event.stopPropagation()
                                 void prepareRecoveryDraft(invoice)
@@ -1885,7 +1909,7 @@ export default function InvoicesPage() {
                                 <DropdownMenuItem
                                   onSelect={(event) => {
                                     event.stopPropagation()
-                                    void updateInvoiceStatus(invoice.id, "Paid")
+                                    setMarkPaidInvoice(invoice)
                                   }}
                                 >
                                   <CalendarDays className="size-4" />

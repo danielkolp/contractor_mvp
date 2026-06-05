@@ -2,13 +2,14 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { AlertCircle, Check, CheckCircle2, ClipboardCopy, ExternalLink, Loader2, RefreshCw, RotateCcw, Save } from "lucide-react"
+import { AlertCircle, Check, CheckCircle2, ClipboardCopy, CreditCard, ExternalLink, Loader2, RefreshCw, RotateCcw, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/dashboard/page-header"
 import { SettingsSkeleton } from "@/components/dashboard/skeleton-loaders"
 import { ContentReveal } from "@/components/ui/content-reveal"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -32,6 +33,16 @@ import {
 } from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
+import {
+  PAID_PLANS,
+  PLAN_META,
+  comparePlans,
+  isPlanActive,
+  normalizePlan,
+  type BillingInterval,
+  type PlanTier,
+} from "@/lib/plans"
+import { formatMoney } from "@/lib/format-money"
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"]
@@ -88,12 +99,336 @@ function toSettingsForm(settings: SettingsRow | null): SettingsForm {
   return {
     default_payment_terms: String(settings?.default_payment_terms ?? 30),
     late_fee_percentage: String(settings?.late_fee_percentage ?? 0),
-    currency: settings?.currency ?? "CAD",
+    // CAD-only for now; ignore any legacy stored currency so saves never block.
+    currency: "CAD",
     first_reminder_days: String(settings?.first_reminder_days ?? 3),
     second_reminder_days: String(settings?.second_reminder_days ?? 7),
     final_notice_days: String(settings?.final_notice_days ?? 14),
     default_tone: settings?.default_tone ?? "friendly",
   }
+}
+
+// ── Account (self-serve email / password) ─────────────────────────────────────
+
+function AccountCard({ currentEmail }: { currentEmail: string | null }) {
+  const supabase = useMemo(() => createClient(), [])
+  const [email, setEmail] = useState(currentEmail ?? "")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [savingEmail, setSavingEmail] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
+
+  async function saveEmail(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const next = email.trim().toLowerCase()
+    if (!next || next === (currentEmail ?? "").toLowerCase()) {
+      toast.error("Enter a new email address.")
+      return
+    }
+    setSavingEmail(true)
+    const { error } = await supabase.auth.updateUser({ email: next })
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Check both inboxes. We sent a confirmation link to update your email.")
+    }
+    setSavingEmail(false)
+  }
+
+  async function savePassword(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match.")
+      return
+    }
+    setSavingPassword(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Password updated.")
+      setPassword("")
+      setConfirmPassword("")
+    }
+    setSavingPassword(false)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Account</CardTitle>
+        <CardDescription>Update your sign-in email and password.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6">
+        <form noValidate onSubmit={(e) => void saveEmail(e)} className="grid gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="account_email">Email</Label>
+            <Input
+              id="account_email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+            <p className="text-xs text-muted-foreground">
+              Changing this sends a confirmation link to the new address.
+            </p>
+          </div>
+          <Button type="submit" size="sm" variant="outline" className="w-fit" disabled={savingEmail}>
+            {savingEmail ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            Update email
+          </Button>
+        </form>
+
+        <form noValidate onSubmit={(e) => void savePassword(e)} className="grid gap-3 border-t border-border pt-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="account_password">New password</Label>
+              <Input
+                id="account_password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="account_password_confirm">Confirm password</Label>
+              <Input
+                id="account_password_confirm"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+          <Button type="submit" size="sm" variant="outline" className="w-fit" disabled={savingPassword}>
+            {savingPassword ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            Update password
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Billing / subscription card ───────────────────────────────────────────────
+
+function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onChanged: () => void }) {
+  const [interval, setInterval] = useState<BillingInterval>(
+    (profile?.plan_interval as BillingInterval) ?? "month"
+  )
+  const [pendingPlan, setPendingPlan] = useState<PlanTier | null>(null)
+  const [openingPortal, setOpeningPortal] = useState(false)
+
+  const currentPlan = normalizePlan(profile?.plan)
+  const status = profile?.plan_status ?? "active"
+  const active = isPlanActive(status)
+  const periodEnd = profile?.current_period_end
+    ? new Date(profile.current_period_end).toLocaleDateString("en-CA", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null
+
+  // Surface the post-checkout redirect once.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const billing = params.get("billing")
+    if (billing === "success") {
+      toast.success("Subscription updated. Your plan is now active.")
+      onChanged()
+    } else if (billing === "cancelled") {
+      toast("Checkout cancelled. Your plan is unchanged.")
+    }
+    if (billing) {
+      params.delete("billing")
+      const qs = params.toString()
+      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`)
+    }
+  }, [onChanged])
+
+  async function startCheckout(plan: PlanTier) {
+    setPendingPlan(plan)
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, interval }),
+      })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Could not start checkout")
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      toast.error("Could not reach Stripe. Please try again.")
+    } finally {
+      setPendingPlan(null)
+    }
+  }
+
+  async function openPortal() {
+    setOpeningPortal(true)
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Could not open billing portal")
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      toast.error("Could not reach Stripe. Please try again.")
+    } finally {
+      setOpeningPortal(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="text-base">Plan &amp; billing</CardTitle>
+            <CardDescription>
+              Your Euroflo subscription. Lower plans mean a lower card fee on every job you collect.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={currentPlan === "free" ? "secondary" : "default"} className="capitalize">
+              {PLAN_META[currentPlan].name}
+              {currentPlan !== "free" && !active ? " (inactive)" : ""}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {currentPlan !== "free" && periodEnd && (
+          <p className="text-xs text-muted-foreground">
+            {status === "canceled"
+              ? `Access ends ${periodEnd}.`
+              : status === "past_due"
+                ? `Payment past due. Update your card to keep ${PLAN_META[currentPlan].name}.`
+                : `Renews ${periodEnd}.`}
+          </p>
+        )}
+
+        {/* Monthly / annual toggle */}
+        <div className="inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1 text-xs">
+          {(["month", "year"] as const).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setInterval(opt)}
+              className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                interval === opt ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {opt === "month" ? "Monthly" : "Annual"}
+              {opt === "year" && <span className="ml-1 text-ef-ocean">save ~17%</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(["free", ...PAID_PLANS] as PlanTier[]).map((tier) => {
+            const meta = PLAN_META[tier]
+            const isCurrent = tier === currentPlan
+            const direction = comparePlans(tier, currentPlan)
+            const priceDollars = tier === "free" ? 0 : interval === "year" ? meta.annualPrice : meta.monthlyPrice
+
+            return (
+              <div
+                key={tier}
+                className={`flex flex-col rounded-lg border p-4 ${
+                  isCurrent ? "border-ef-ocean bg-ef-ocean/5" : "border-border"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">{meta.name}</p>
+                  {isCurrent && (
+                    <span className="text-[0.6rem] font-bold uppercase tracking-wider text-ef-ocean">
+                      Current
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-lg font-bold">
+                  {tier === "free" ? "$0" : formatMoney(priceDollars)}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {tier === "free" ? "" : interval === "year" ? "/yr" : "/mo"}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs font-medium text-ef-ocean">{meta.feeLabel}</p>
+                <ul className="mt-3 flex flex-1 flex-col gap-1.5">
+                  {meta.highlights.map((h) => (
+                    <li key={h} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Check className="mt-0.5 size-3 shrink-0 text-ef-ocean" />
+                      <span>{h}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4">
+                  {isCurrent ? (
+                    tier === "free" ? (
+                      <p className="text-center text-xs text-muted-foreground">Your current plan</p>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => void openPortal()}
+                        disabled={openingPortal}
+                      >
+                        {openingPortal ? <Loader2 className="size-3.5 animate-spin" /> : <CreditCard className="size-3.5" />}
+                        Manage billing
+                      </Button>
+                    )
+                  ) : tier === "free" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => void openPortal()}
+                      disabled={openingPortal || !profile?.stripe_customer_id}
+                    >
+                      Downgrade
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      variant={direction > 0 ? "default" : "outline"}
+                      onClick={() => void startCheckout(tier)}
+                      disabled={pendingPlan !== null}
+                    >
+                      {pendingPlan === tier ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : null}
+                      {direction > 0 ? `Upgrade to ${meta.name}` : `Switch to ${meta.name}`}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Plans and cancellation are handled securely by Stripe. Downgrades and cancellations take effect at the end of your billing period.
+        </p>
+      </CardContent>
+    </Card>
+  )
 }
 
 // ── Stripe Connect card ───────────────────────────────────────────────────────
@@ -197,7 +532,7 @@ function StripeConnectCard({ stripeAccountId }: { stripeAccountId: string | null
                 <p className="text-sm font-medium">Stripe not connected</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Connect your Stripe account so clients can pay estimates online. Euroflo
-                  adds a platform fee on top of your payout — you receive the amount you
+                  adds a platform fee on top of your payout, so you receive the amount you
                   set on each estimate.
                 </p>
               </div>
@@ -476,6 +811,7 @@ function validateSettingsForm(form: SettingsForm): {
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), [])
   const [userId, setUserId] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [settings, setSettings] = useState<SettingsRow | null>(null)
   const [profileForm, setProfileForm] = useState<ProfileForm>(toProfileForm(null))
@@ -503,6 +839,7 @@ export default function SettingsPage() {
     }
 
     setUserId(user.id)
+    setUserEmail(user.email ?? null)
 
     const [profileResult, settingsResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
@@ -626,7 +963,8 @@ export default function SettingsPage() {
     let currency: string
     let defaultTone: string
     try {
-      currency = enumField(settingsForm.currency, "Currency", ["CAD", "USD"] as const)
+      // USD is not supported end-to-end yet — currency is CAD-only for now.
+      currency = enumField(settingsForm.currency, "Currency", ["CAD"] as const)
       defaultTone = enumField(settingsForm.default_tone, "Default tone", [
         "friendly",
         "professional",
@@ -756,7 +1094,7 @@ export default function SettingsPage() {
               <div className="grid gap-2">
                 <Label>Trades</Label>
                 <p className="text-xs text-muted-foreground">
-                  Select all that apply — used in your profile and client job request matching.
+                  Select all that apply. These show in your profile and help match client job requests.
                 </p>
                 <TradeMultiSelect
                   value={
@@ -904,6 +1242,11 @@ export default function SettingsPage() {
           </Card>
         </form>
 
+        {/* ── Plan & billing (contractor's own subscription) ── */}
+        {profile?.role === "contractor" && (
+          <BillingCard profile={profile} onChanged={() => void loadData()} />
+        )}
+
         {/* ── Stripe Connect payments ── */}
         {profile?.role === "contractor" && (
           <StripeConnectCard stripeAccountId={profile?.stripe_account_id ?? null} />
@@ -914,23 +1257,23 @@ export default function SettingsPage() {
           <ClientRequestLinkCard requestSlug={profile.request_slug} />
         )}
 
-        {/* ── Account ── */}
+        {/* ── Account (self-serve email / password) ── */}
+        <AccountCard currentEmail={userEmail} />
+
+        {/* ── Setup wizard ── */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Account</CardTitle>
+            <CardTitle className="text-base">Guided setup</CardTitle>
             <CardDescription>
-              Your login email and password are managed by the sign-in system.
+              Re-run the guided setup to update your profile, services, and defaults.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
-            <p className="text-sm text-muted-foreground">
-              To change your email or password, contact support.
-            </p>
+          <CardContent>
             <div className="flex items-center justify-between rounded-lg border border-border p-4">
               <div className="grid gap-0.5">
                 <p className="text-sm font-medium">Setup wizard</p>
                 <p className="text-xs text-muted-foreground">
-                  Re-run the guided setup to update your profile, services, and defaults.
+                  Walk through your profile, services, and follow-up defaults again.
                 </p>
               </div>
               <Button variant="outline" size="sm" asChild>

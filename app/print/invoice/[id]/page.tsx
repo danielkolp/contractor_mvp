@@ -378,7 +378,7 @@ export default async function InvoicePrintPage({
           {isPaid && invoice.paid_at && (
             <div className="print-avoid-break border-t border-emerald-200 bg-emerald-50 px-8 py-3 print:py-2">
               <p className="text-xs font-semibold text-emerald-700">
-                ✓ Payment received —{" "}
+                ✓ Payment received on{" "}
                 {new Intl.DateTimeFormat("en-CA", { month: "long", day: "numeric", year: "numeric" }).format(new Date(invoice.paid_at))}
               </p>
             </div>

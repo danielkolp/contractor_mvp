@@ -34,7 +34,7 @@ const URGENCY_OPTIONS: { value: JobUrgency; label: string; description: string }
   {
     value: "flexible",
     label: "Flexible",
-    description: "No rush — I can wait for the right contractor.",
+    description: "No rush. I can wait for the right contractor.",
   },
   {
     value: "soon",
@@ -141,7 +141,7 @@ export function ClientSetupWizard() {
         return
       }
 
-      toast.success("Job request submitted — contractors in your area will be notified.")
+      toast.success("Job request submitted. Contractors in your area will be notified.")
       router.push("/client/dashboard")
       router.refresh()
     } finally {

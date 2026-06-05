@@ -85,7 +85,7 @@ export default async function PaymentSuccessPage({
             <h1 className="mt-5 text-2xl font-bold text-gray-900">Payment processing</h1>
             <p className="mt-3 text-sm leading-relaxed text-gray-500">
               Your payment is being confirmed. This page will reflect the final status
-              once the transaction settles — usually within a few minutes.
+              once the transaction settles, usually within a few minutes.
             </p>
           </>
         ) : (

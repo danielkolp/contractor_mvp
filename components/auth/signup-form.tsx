@@ -508,7 +508,7 @@ export function SignupForm() {
                   <div className="grid gap-2">
                     <Label>Trades</Label>
                     <p className="text-xs text-muted-foreground -mt-0.5">
-                      Select all that apply — clients discover you based on these.
+                      Select all that apply. Clients discover you based on these.
                     </p>
                     <TradeMultiSelect
                       name="trade"

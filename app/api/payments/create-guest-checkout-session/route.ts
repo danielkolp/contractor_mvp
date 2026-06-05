@@ -8,7 +8,7 @@ import {
 } from "@/lib/stripe/accounts-v2"
 import { createServiceClient } from "@/lib/supabase/service"
 import {
-  depositApplicationFee,
+  chargeApplicationFee,
   resolveBalanceCents,
   resolveDepositCents,
 } from "@/lib/pricing"
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
   if (paymentType === "balance") {
     chargeAmountCents = balanceCents
     isFullPayment     = true
-    productName       = `Balance — Estimate ${estimate.estimate_number}`
+    productName       = `Balance for Estimate ${estimate.estimate_number}`
   } else if (paymentType === "full") {
     chargeAmountCents = clientTotal
     isFullPayment     = true
@@ -174,10 +174,12 @@ export async function POST(req: NextRequest) {
     isFullPayment     = depositCents >= clientTotal
     productName       = isFullPayment
       ? `Estimate ${estimate.estimate_number}`
-      : `Deposit — Estimate ${estimate.estimate_number}`
+      : `Deposit for Estimate ${estimate.estimate_number}`
   }
 
-  const appFee   = depositApplicationFee(chargeAmountCents, platformFee, clientTotal)
+  // Application fee = proportional platform fee + Stripe's processing fee on this
+  // charge, so the contractor receives their quoted amount in full.
+  const appFee   = chargeApplicationFee(chargeAmountCents, platformFee, clientTotal)
   const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   const cancelUrl  = `${appUrl}/guest/project/${guestToken}`
   const successUrl = `${appUrl}/guest/project/${guestToken}/success?session_id={CHECKOUT_SESSION_ID}`

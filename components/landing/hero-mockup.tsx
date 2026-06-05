@@ -344,7 +344,7 @@ export function AnimatedHeroMockup() {
                 <Sparkles className="size-4" />
               </m.div>
               <div>
-                <div className="text-sm font-black">AI draft ready</div>
+                <div className="text-sm font-black">Draft ready to send</div>
                 <div className="text-xs text-ef-mist/80">
                   &ldquo;Hi Sam, quick reminder on invoice INV-1048…&rdquo;
                 </div>

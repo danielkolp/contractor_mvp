@@ -37,7 +37,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_NEXT: Record<string, string> = {
   new:              "Your contractor is reviewing your request.",
   reviewed:         "Your contractor is preparing an estimate.",
-  estimate_created: "An estimate is ready — open the project to review it.",
+  estimate_created: "An estimate is ready. Open the project to review it.",
   accepted:         "Your contractor will be in touch to schedule the work.",
   declined:         "The estimate was not accepted.",
   closed:           "This project has been closed.",

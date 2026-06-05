@@ -27,6 +27,7 @@ import {
   ClipboardList,
   Clock,
   Copy,
+  CircleDollarSign,
   CreditCard,
   Database,
   ExternalLink,
@@ -40,7 +41,13 @@ import {
 import { toast } from "sonner"
 
 import { AddRecoveryDialog } from "@/components/dashboard/add-recovery-dialog"
+import { ColdStart } from "@/components/dashboard/cold-start"
 import { CheckBackDialog } from "@/components/dashboard/check-back-dialog"
+import {
+  MarkPaidDialog,
+  PAYMENT_METHOD_LABEL,
+  type PaymentMethod,
+} from "@/components/dashboard/mark-paid-dialog"
 import { RecoveryCard, type ReplyInfo } from "@/components/dashboard/recovery-card"
 import { RecoveryRepliesDialog } from "@/components/dashboard/recovery-replies-dialog"
 import { SendFollowUpDialog } from "@/components/dashboard/send-follow-up-dialog"
@@ -201,6 +208,7 @@ export function TodayPage() {
   const [activeEstimates, setActiveEstimates] = useState<EstimateRow[]>([])
   const [workDays, setWorkDays] = useState<WorkDayRow[]>([])
   const [jobRequests, setJobRequests] = useState<JobRequestRow[]>([])
+  const [recoveredYtd, setRecoveredYtd] = useState(0)
   const [requestSlug, setRequestSlug] = useState<string | null>(null)
   // null = unknown (still loading); false = cannot receive payments yet.
   const [stripeReady, setStripeReady] = useState<boolean | null>(null)
@@ -212,7 +220,10 @@ export function TodayPage() {
   const [checkBackItem, setCheckBackItem] = useState<RecoveryItem | null>(null)
   const [sendFollowUpItem, setSendFollowUpItem] = useState<RecoveryItem | null>(null)
   const [viewRepliesItem, setViewRepliesItem] = useState<RecoveryItem | null>(null)
+  const [markPaidItem, setMarkPaidItem] = useState<RecoveryItem | null>(null)
+  const [markPaidInvoice, setMarkPaidInvoice] = useState<InvoiceRow | null>(null)
   const [isDemoSeeding, setIsDemoSeeding] = useState(false)
+  const [coldStartSkipped, setColdStartSkipped] = useState(false)
   const actionSectionRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -240,6 +251,7 @@ export function TodayPage() {
       jobRequestsResult,
       scheduledWorkResult,
       profileResult,
+      recoveredResult,
     ] =
       await Promise.all([
         supabase
@@ -302,7 +314,18 @@ export function TodayPage() {
           .select("request_slug, stripe_charges_enabled")
           .eq("user_id", user.id)
           .maybeSingle(),
+        // North-star: money the chase actually brought in this year.
+        supabase
+          .from("recovery_items")
+          .select("amount")
+          .eq("user_id", user.id)
+          .eq("status", "resolved")
+          .gte("updated_at", `${new Date().getFullYear()}-01-01`),
       ])
+
+    setRecoveredYtd(
+      (recoveredResult.data ?? []).reduce((sum, r) => sum + (r.amount ?? 0), 0)
+    )
 
     const loadedItems = itemsResult.data ?? []
     setItems(loadedItems)
@@ -579,7 +602,7 @@ export function TodayPage() {
     setIsSaving(true)
     const label = days === 1 ? "tomorrow" : days === 3 ? "in 3 days" : "next week"
     const ok = await updateItem(item.id, { check_back_date: addDaysIso(days) })
-    if (ok) toast.success(`Snoozed — check back ${label}.`)
+    if (ok) toast.success(`Snoozed. Check back ${label}.`)
     setIsSaving(false)
   }
 
@@ -590,7 +613,7 @@ export function TodayPage() {
   async function handleDone(item: RecoveryItem) {
     setIsSaving(true)
     const ok = await updateItem(item.id, { status: "archived" })
-    if (ok) toast.success(`${item.client_name} — marked as handled.`)
+    if (ok) toast.success(`${item.client_name} marked as handled.`)
     setIsSaving(false)
   }
 
@@ -620,10 +643,24 @@ export function TodayPage() {
     setIsSaving(false)
   }
 
-  async function handlePaid(item: RecoveryItem) {
+  function handlePaid(item: RecoveryItem) {
+    setMarkPaidItem(item)
+  }
+
+  async function handleMarkPaidConfirm(method: PaymentMethod) {
+    if (!markPaidItem) return
     setIsSaving(true)
-    const ok = await updateItem(item.id, { status: "resolved" })
-    if (ok) toast.success(`${item.client_name} marked as paid / booked.`)
+    const ok = await updateItem(markPaidItem.id, {
+      status: "resolved",
+      payment_method: method,
+      paid_at: new Date().toISOString(),
+    })
+    if (ok) {
+      toast.success(
+        `${markPaidItem.client_name} marked paid by ${PAYMENT_METHOD_LABEL[method].toLowerCase()}.`
+      )
+    }
+    setMarkPaidItem(null)
     setIsSaving(false)
   }
 
@@ -687,11 +724,15 @@ export function TodayPage() {
 
   // ─── Invoice handlers ─────────────────────────────────────────
 
-  async function handleInvoiceMarkPaid(invoice: InvoiceRow) {
-    if (!userId) return
+  function handleInvoiceMarkPaid(invoice: InvoiceRow) {
+    setMarkPaidInvoice(invoice)
+  }
+
+  async function handleInvoiceMarkPaidConfirm(method: PaymentMethod) {
+    if (!userId || !markPaidInvoice) return
     let invoiceId: string
     try {
-      invoiceId = uuidField(invoice.id, "Invoice")
+      invoiceId = uuidField(markPaidInvoice.id, "Invoice")
     } catch (error) {
       toast.error(inputErrorMessage(error))
       return
@@ -700,15 +741,18 @@ export function TodayPage() {
     setIsSaving(true)
     const { error } = await supabase
       .from("invoices")
-      .update({ status: "Paid", paid_at: new Date().toISOString() })
+      .update({ status: "Paid", paid_at: new Date().toISOString(), payment_method: method })
       .eq("id", invoiceId)
       .eq("user_id", userId)
     if (error) {
       toast.error(error.message)
     } else {
       setOverdueInvoices((prev) => prev.filter((i) => i.id !== invoiceId))
-      toast.success(`${invoice.client_name || invoice.invoice_number} marked as paid.`)
+      toast.success(
+        `${markPaidInvoice.client_name || markPaidInvoice.invoice_number} marked paid by ${PAYMENT_METHOD_LABEL[method].toLowerCase()}.`
+      )
     }
+    setMarkPaidInvoice(null)
     setIsSaving(false)
   }
 
@@ -949,6 +993,24 @@ export function TodayPage() {
         onClose={() => setViewRepliesItem(null)}
       />
 
+      <MarkPaidDialog
+        open={markPaidItem !== null}
+        onClose={() => setMarkPaidItem(null)}
+        clientName={markPaidItem?.client_name}
+        amountLabel={markPaidItem ? money.format(markPaidItem.amount) : null}
+        isSaving={isSaving}
+        onConfirm={(method) => void handleMarkPaidConfirm(method)}
+      />
+
+      <MarkPaidDialog
+        open={markPaidInvoice !== null}
+        onClose={() => setMarkPaidInvoice(null)}
+        clientName={markPaidInvoice?.client_name ?? markPaidInvoice?.invoice_number}
+        amountLabel={markPaidInvoice ? money.format(markPaidInvoice.amount) : null}
+        isSaving={isSaving}
+        onConfirm={(method) => void handleInvoiceMarkPaidConfirm(method)}
+      />
+
       <div className="grid gap-4 p-4 sm:p-6 lg:p-8">
         <ContentReveal isLoading={isLoading} skeleton={<LoadingSkeleton />}>
           {/* Stripe not connected — block on getting paid, surfaced up top. */}
@@ -957,15 +1019,35 @@ export function TodayPage() {
               <StripeNotConnectedBanner />
             </div>
           )}
+          {recoveredYtd > 0 && (
+            <div className="ef-reveal ef-d0 mb-6 flex items-center gap-3 rounded-xl border border-ef-200 bg-ef-mist px-4 py-3">
+              <CircleDollarSign className="size-5 shrink-0 text-ef-ocean" />
+              <p className="text-sm text-ef-ocean">
+                Euroflo has recovered{" "}
+                <span className="font-bold tabular-nums">{money.format(recoveredYtd)}</span> for you
+                this year.
+              </p>
+            </div>
+          )}
           {!hasAnyItems ? (
             <div className="grid gap-6">
               <div className="ef-reveal ef-d0">
-                <OnboardingState
-                  requestLink={shareableLink}
-                  onAdd={() => setAddOpen(true)}
-                  onDemo={() => void handleUseDemoData()}
-                  isDemoSeeding={isDemoSeeding}
-                />
+                {userId && !coldStartSkipped ? (
+                  <ColdStart
+                    userId={userId}
+                    onSeeded={() => void load()}
+                    onDemo={() => void handleUseDemoData()}
+                    onSkip={() => setColdStartSkipped(true)}
+                    isDemoSeeding={isDemoSeeding}
+                  />
+                ) : (
+                  <OnboardingState
+                    requestLink={shareableLink}
+                    onAdd={() => setAddOpen(true)}
+                    onDemo={() => void handleUseDemoData()}
+                    isDemoSeeding={isDemoSeeding}
+                  />
+                )}
               </div>
             </div>
           ) : (
@@ -1161,7 +1243,7 @@ function CompactSummary({
         <span className="text-white/40"> to follow up</span>
       </>
     )
-    subline = "No new job requests — share your link to get more."
+    subline = "No new job requests. Share your link to get more."
   } else {
     headline = (
       <>
@@ -1506,7 +1588,7 @@ function RequestLinkCard({ link }: { link: string }) {
   function copy() {
     navigator.clipboard.writeText(link).then(() => {
       setCopied(true)
-      toast.success("Request link copied — share it to get new jobs.")
+      toast.success("Request link copied. Share it to get new jobs.")
       setTimeout(() => setCopied(false), 2000)
     })
   }
@@ -1522,7 +1604,7 @@ function RequestLinkCard({ link }: { link: string }) {
           {link}
         </p>
         <p className="mt-1 text-xs text-ef-ocean/70 dark:text-ef-cyan">
-          Share this with clients — new jobs land here. No account needed on their end.
+          Share this with clients and new jobs land here. No account needed on their end.
         </p>
       </div>
       <div className="flex shrink-0 gap-2">
@@ -1625,7 +1707,7 @@ function buildScheduleHeadline(
   const joined = segs.join(" and ")
   // Lead with "No inspections today" when only work is booked (the contractor's
   // own phrasing) so the absence is explicit, not just implied.
-  if (insp === 0) return `No inspections today — you have ${joined}.`
+  if (insp === 0) return `No inspections today. You have ${joined}.`
   return `You have ${joined} today.`
 }
 
@@ -2172,7 +2254,7 @@ function OnboardingState({
     if (!requestLink) return
     navigator.clipboard.writeText(requestLink).then(() => {
       setCopied(true)
-      toast.success("Request link copied — share it to get your first job.")
+      toast.success("Request link copied. Share it to get your first job.")
       setTimeout(() => setCopied(false), 2000)
     })
   }
@@ -2193,7 +2275,7 @@ function OnboardingState({
         </h2>
         <p className="mt-4 text-sm leading-7 text-white/55">
           Share your request link and new jobs show up right here. Clients fill
-          out a quick form — no account needed — and you turn it into an estimate
+          out a quick form, with no account needed, and you turn it into an estimate
           and get paid.
         </p>
 

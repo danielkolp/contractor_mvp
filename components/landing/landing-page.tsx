@@ -971,8 +971,8 @@ function RankedQueueSection() {
           <h2>Scattered follow-ups, sorted into one clear order.</h2>
           <p>
             Overdue invoices, quiet estimates, and win-backs land in a single
-            queue ranked by what is most worth your time right now. No
-            spreadsheet, no guessing.
+            queue ranked by what is most worth your time right now. You skip the
+            spreadsheet and the mental math.
           </p>
           <button type="button" className="ef-sort-btn" onClick={resort}>
             <RotateCcw className="ef-icon-sm" />

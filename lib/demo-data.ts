@@ -22,7 +22,7 @@ export function buildDemoRecoveryItems(userId: string): RecoveryItemInsert[] {
       contacted_date: ago(14),
       status: "needs_follow_up",
       message_body:
-        "Hi Mike, just following up on the estimate I sent you for $3,200 in roofing repairs. It's been a couple weeks — are you ready to move forward, or do you have any questions? Happy to adjust scope if needed. Thanks!",
+        "Hi Mike, just following up on the estimate I sent you for $3,200 in roofing repairs. It's been a couple weeks. Are you ready to move forward, or do you have any questions? Happy to adjust scope if needed. Thanks!",
       is_demo: true,
     },
     {
@@ -46,7 +46,7 @@ export function buildDemoRecoveryItems(userId: string): RecoveryItemInsert[] {
       contacted_date: ago(21),
       status: "message_ready",
       message_body:
-        "Hi Sarah, you mentioned wanting to revisit the deck project later in the season. Just checking back in — are you ready to move forward on the $1,750 project? I have availability coming up in the next few weeks. Thanks!",
+        "Hi Sarah, you mentioned wanting to revisit the deck project later in the season. Just checking back in. Are you ready to move forward on the $1,750 project? I have availability coming up in the next few weeks. Thanks!",
       is_demo: true,
     },
   ]
@@ -110,7 +110,7 @@ export async function seedDemoData(
         email: "derek@peakreno.ca",
         phone: "(604) 555-0188",
         payment_reliability: "Slow payer" as const,
-        notes: "Usually pays 2–3 weeks late. Send firm reminder after 10 days.",
+        notes: "Usually pays 2-3 weeks late. Send firm reminder after 10 days.",
       },
       {
         user_id: userId,
@@ -170,7 +170,7 @@ export async function seedDemoData(
         client_id: byCompany["Peak Renovations"],
         client_name: "Peak Renovations",
         invoice_number: "INV-1042",
-        project_name: "Kitchen reno — Phase 2",
+        project_name: "Kitchen reno, Phase 2",
         trade: "Renovation",
         amount: 8750,
         issue_date: daysAgo(55),
@@ -183,7 +183,7 @@ export async function seedDemoData(
         client_id: byCompany["Cedarline Electrical"],
         client_name: "Cedarline Electrical",
         invoice_number: "INV-1037",
-        project_name: "Panel upgrade — retail unit",
+        project_name: "Panel upgrade, retail unit",
         trade: "Electrical",
         amount: 12600,
         issue_date: daysAgo(75),
@@ -196,7 +196,7 @@ export async function seedDemoData(
         client_id: byCompany["Harbour Plumbing"],
         client_name: "Harbour Plumbing",
         invoice_number: "INV-1055",
-        project_name: "Rough-in plumbing — new build",
+        project_name: "Rough-in plumbing, new build",
         trade: "Plumbing",
         amount: 5400,
         issue_date: daysAgo(20),
@@ -275,7 +275,7 @@ export async function seedDemoData(
         user_id: userId,
         invoice_id: byNumber["INV-1037"],
         stage: "escalated" as const,
-        action_type: "Escalated — dispute unresolved",
+        action_type: "Escalated: dispute unresolved",
         status: "Pending" as const,
         contact_method: "Email" as const,
         recommended_next_action:

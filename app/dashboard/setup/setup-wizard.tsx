@@ -680,7 +680,7 @@ export function SetupWizard() {
 
     let currency: string
     try {
-      currency = enumField(estimateForm.currency, "Currency", ["CAD", "USD"] as const)
+      currency = enumField(estimateForm.currency, "Currency", ["CAD"] as const)
     } catch (error) {
       toast.error(inputErrorMessage(error))
       return
@@ -1131,18 +1131,12 @@ export function SetupWizard() {
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="currency">Currency</Label>
-            <Select
-              value={estimateForm.currency}
-              onValueChange={(v) => setEstimateForm((p) => ({ ...p, currency: v }))}
+            <div
+              id="currency"
+              className="flex h-9 items-center rounded-lg border border-input bg-muted/40 px-3 text-sm text-muted-foreground"
             >
-              <SelectTrigger id="currency">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CAD">CAD — Canadian Dollar</SelectItem>
-                <SelectItem value="USD">USD — US Dollar</SelectItem>
-              </SelectContent>
-            </Select>
+              CAD (Canadian Dollar)
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1210,7 +1204,7 @@ export function SetupWizard() {
 
         <SetupInsight
           title="How follow-ups work"
-          description="Euroflo uses these defaults to remind you when to follow up with clients. You stay in control — messages are never sent automatically."
+          description="Euroflo uses these defaults to remind you when to follow up with clients. You stay in control. Messages are never sent automatically."
         />
 
         <div className="grid gap-4">
@@ -1416,7 +1410,7 @@ export function SetupWizard() {
 
         <SetupInsight
           title="How payments work"
-          description="Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set — Euroflo adds a 15% platform fee on top, which your client pays."
+          description="Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set. Euroflo adds a 15% platform fee on top, which your client pays."
         />
 
         {/* Status card */}
@@ -1599,7 +1593,7 @@ export function SetupWizard() {
               step: 5,
               label: "Confirm the payment button appears",
               desc: isPaymentsComplete
-                ? "Stripe is connected — the pay button will appear on accepted estimates."
+                ? "Stripe is connected. The pay button will appear on accepted estimates."
                 : "Skip this step if you have not connected Stripe yet.",
               optional: !isPaymentsComplete,
             },

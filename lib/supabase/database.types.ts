@@ -81,6 +81,7 @@ export type Database = {
           issue_date: string | null
           due_date: string | null
           paid_at: string | null
+          payment_method: "e_transfer" | "cash" | "cheque" | "card" | null
           status: Database["public"]["Enums"]["invoice_status"]
           trade: string | null
           notes: string | null
@@ -107,6 +108,7 @@ export type Database = {
           issue_date?: string | null
           due_date?: string | null
           paid_at?: string | null
+          payment_method?: "e_transfer" | "cash" | "cheque" | "card" | null
           status?: Database["public"]["Enums"]["invoice_status"]
           trade?: string | null
           notes?: string | null
@@ -133,6 +135,7 @@ export type Database = {
           issue_date?: string | null
           due_date?: string | null
           paid_at?: string | null
+          payment_method?: "e_transfer" | "cash" | "cheque" | "card" | null
           status?: Database["public"]["Enums"]["invoice_status"]
           trade?: string | null
           notes?: string | null
@@ -173,6 +176,7 @@ export type Database = {
           client_total_cents: number | null
           payment_status: string
           paid_at: string | null
+          payment_method: "e_transfer" | "cash" | "cheque" | "card" | null
           stripe_checkout_session_id: string | null
           stripe_payment_intent_id: string | null
           gst_cents: number | null
@@ -218,6 +222,7 @@ export type Database = {
           job_completed_at?: string | null
           payment_status?: string
           paid_at?: string | null
+          payment_method?: "e_transfer" | "cash" | "cheque" | "card" | null
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
           created_at?: string
@@ -257,6 +262,7 @@ export type Database = {
           job_completed_at?: string | null
           payment_status?: string
           paid_at?: string | null
+          payment_method?: "e_transfer" | "cash" | "cheque" | "card" | null
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
           created_at?: string
@@ -587,6 +593,12 @@ export type Database = {
           stripe_charges_enabled: boolean
           stripe_payouts_enabled: boolean
           stripe_details_submitted: boolean
+          plan: Database["public"]["Enums"]["plan_tier"]
+          plan_status: string
+          plan_interval: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          current_period_end: string | null
           created_at: string
           updated_at: string
         }
@@ -606,6 +618,12 @@ export type Database = {
           stripe_charges_enabled?: boolean
           stripe_payouts_enabled?: boolean
           stripe_details_submitted?: boolean
+          plan?: Database["public"]["Enums"]["plan_tier"]
+          plan_status?: string
+          plan_interval?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          current_period_end?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -625,6 +643,12 @@ export type Database = {
           stripe_charges_enabled?: boolean
           stripe_payouts_enabled?: boolean
           stripe_details_submitted?: boolean
+          plan?: Database["public"]["Enums"]["plan_tier"]
+          plan_status?: string
+          plan_interval?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          current_period_end?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -976,6 +1000,8 @@ export type Database = {
           follow_up_count: number
           notes: string | null
           is_demo: boolean
+          payment_method: "e_transfer" | "cash" | "cheque" | "card" | null
+          paid_at: string | null
           created_at: string
           updated_at: string
         }
@@ -994,6 +1020,8 @@ export type Database = {
           follow_up_count?: number
           notes?: string | null
           is_demo?: boolean
+          payment_method?: "e_transfer" | "cash" | "cheque" | "card" | null
+          paid_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1012,6 +1040,8 @@ export type Database = {
           follow_up_count?: number
           notes?: string | null
           is_demo?: boolean
+          payment_method?: "e_transfer" | "cash" | "cheque" | "card" | null
+          paid_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1082,6 +1112,7 @@ export type Database = {
         | "closed"
       job_request_urgency: "flexible" | "soon" | "urgent"
       payment_reliability: "Reliable" | "Slow payer" | "High risk" | "New client"
+      plan_tier: "free" | "pro" | "team"
       recovery_action_status: "Pending" | "Completed" | "Skipped" | "Cancelled"
       recovery_stage:
         | "newly_overdue"

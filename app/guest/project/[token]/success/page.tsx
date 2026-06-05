@@ -11,7 +11,7 @@ export default async function GuestPaymentSuccessPage({
   const { token } = await params
 
   return (
-    <div className="force-light mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-16 text-center">
+    <div className="force-light flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist px-6 py-16 text-center text-foreground">
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-ef-mist">
         <CheckCircle2 className="h-10 w-10 text-ef-ocean" />
       </div>

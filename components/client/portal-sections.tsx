@@ -155,7 +155,7 @@ export function buildTimeline(
   if (sentEstimate) {
     items.push({
       title:    "Estimate Sent",
-      notes:    `${sentEstimate.estimate_number} — ${money.format(sentEstimate.amount)}`,
+      notes:    `${sentEstimate.estimate_number}: ${money.format(sentEstimate.amount)}`,
       date:     sentEstimate.sent_date ? portalDateInput(sentEstimate.sent_date) : sentEstimate.created_at,
       priority: 2,
     })
@@ -402,6 +402,7 @@ export function PayButton({
   guestToken?: string
 }) {
   const [isLoading, setIsLoading] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const stripeEst     = estimate as StripeEstimate
   const clientTotal   = stripeEst.client_total_cents ?? 0
@@ -458,20 +459,49 @@ export function PayButton({
     }
   }
 
+  if (confirming) {
+    return (
+      <div className="flex flex-wrap items-center gap-2" data-testid="estimate-pay-confirm">
+        <span className="text-xs text-gray-600">
+          Continue to secure card payment for {depositLabel}?
+        </span>
+        <Button
+          size="sm"
+          className="bg-ef-ocean text-white hover:bg-ef-ocean"
+          disabled={isLoading}
+          data-testid="estimate-pay-confirm-button"
+          onClick={() => void handlePay()}
+        >
+          {isLoading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CreditCard className="h-3.5 w-3.5" />
+          )}
+          {isLoading ? "Redirecting…" : "Yes, continue"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+          disabled={isLoading}
+          onClick={() => setConfirming(false)}
+        >
+          Cancel
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <Button
       size="sm"
       className="bg-ef-ocean text-white hover:bg-ef-ocean"
       disabled={isLoading}
       data-testid="estimate-pay-button"
-      onClick={() => void handlePay()}
+      onClick={() => setConfirming(true)}
     >
-      {isLoading ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <CreditCard className="h-3.5 w-3.5" />
-      )}
-      {isLoading ? "Redirecting…" : `Pay deposit ${depositLabel}`}
+      <CreditCard className="h-3.5 w-3.5" />
+      {`Pay deposit ${depositLabel}`}
     </Button>
   )
 }
@@ -691,7 +721,7 @@ export function InspectionCard({
           {notes && <p className="mt-1 text-xs text-gray-500 whitespace-pre-wrap">{notes}</p>}
           {awaitingAck && (
             <p className="mt-2 text-xs text-amber-700 font-medium">
-              You suggested {fmtDate(clientProp)} — waiting for contractor to confirm.
+              You suggested {fmtDate(clientProp)}. Waiting for the contractor to confirm.
             </p>
           )}
         </div>
@@ -820,7 +850,7 @@ export function WorkScheduleCard({ workDays }: { workDays: WorkDay[] }) {
                   <p className="flex items-center gap-1.5 text-sm text-gray-800">
                     {done && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />}
                     <span className={done ? "text-gray-500 line-through" : ""}>{start}</span>
-                    {end && <span className="text-gray-500">– {end}</span>}
+                    {end && <span className="text-gray-500">to {end}</span>}
                   </p>
                   {day.notes && (
                     <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-gray-500">
@@ -1058,7 +1088,9 @@ export function EstimatesSection({
                       }}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      Accept Estimate
+                      {hasOnlinePayment
+                        ? `Accept & pay deposit ${money.format(depositCents / 100)}`
+                        : "Accept Estimate"}
                     </Button>
                     <Button
                       size="sm"
@@ -1073,7 +1105,24 @@ export function EstimatesSection({
                   </>
                 )}
 
-                {isAccepted && !isPaid && !isDepPaid && (
+                {canRespond && hasOnlinePayment && (
+                  <p className="basis-full text-xs text-gray-500">
+                    Paying the deposit by card locks in your spot and gets the work booked. Prefer
+                    e-transfer? Accept here and arrange it with your contractor directly.
+                  </p>
+                )}
+
+                {isAccepted && !isPaid && !isDepPaid && hasOnlinePayment && (
+                  <div className="basis-full rounded-xl border border-ef-200 bg-ef-mist p-4">
+                    <p className="text-sm font-semibold text-ef-ocean">Lock in your booking</p>
+                    <p className="mt-0.5 mb-3 text-xs text-gray-600">
+                      Pay your {money.format(depositCents / 100)} deposit now to secure your spot.
+                      The rest is due when the work&apos;s done.
+                    </p>
+                    <PayButton estimate={est} guestToken={guestToken} />
+                  </div>
+                )}
+                {isAccepted && !isPaid && !isDepPaid && !hasOnlinePayment && (
                   <PayButton estimate={est} guestToken={guestToken} />
                 )}
                 {isAccepted && isDepPaid && (
@@ -1101,9 +1150,11 @@ export function RatingCard({
   contractorId:   string
   existingRating?: number | null
 }) {
-  const stripeEst   = estimate as StripeEstimate
+  const stripeEst   = estimate as StripeEstimate & { job_completed_at?: string | null }
   const payStatus   = stripeEst.payment_status ?? "unpaid"
-  const isEligible  = payStatus === "paid" || payStatus === "deposit_paid"
+  // Rating should reflect the finished job — fire once the work is done or the
+  // job is fully paid, NOT just because a deposit landed.
+  const isEligible  = payStatus === "paid" || Boolean(stripeEst.job_completed_at)
 
   const [selected,  setSelected]  = useState<number>(existingRating ?? 0)
   const [comment,   setComment]   = useState("")
@@ -1153,7 +1204,7 @@ export function RatingCard({
         return
       }
       setSubmitted(true)
-      toast.success("Rating submitted — thank you!")
+      toast.success("Rating submitted. Thank you!")
     } catch {
       toast.error("Could not reach the server. Please try again.")
     } finally {

@@ -50,8 +50,15 @@
 }
 
 .ef-landing a {
-  color: inherit;
   text-decoration: none;
+}
+
+/* Only non-button links inherit text colour. `.ef-landing a { color: inherit }`
+   used to win (specificity 0,1,1) over the `.ef-btn-*` colour rules (0,1,0),
+   so button links inherited the section's dark text and rendered dark-on-dark
+   on light sections. Excluding `.ef-btn` lets each button keep its own colour. */
+.ef-landing a:not(.ef-btn) {
+  color: inherit;
 }
 
 .ef-landing button {
@@ -888,14 +895,39 @@
 .ef-price-band {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(160deg, var(--ef-ink) 0%, var(--ef-navy) 55%, var(--ef-deep) 100%);
   color: #fff;
+  /* Rich deep-ocean field: warm-blue highlights bloom over a saturated navy
+     base. Fixed literals (not --ef-ink/--ef-navy) so dark mode can never
+     desaturate it into the old grey-and-navy mud. */
+  background:
+    radial-gradient(115% 90% at 6% -5%, rgba(44, 167, 255, 0.30), transparent 50%),
+    radial-gradient(95% 85% at 100% 105%, rgba(65, 205, 233, 0.22), transparent 55%),
+    linear-gradient(162deg, #063055 0%, #04356a 46%, #022a52 100%);
 }
 
 .ef-flowband {
   margin-top: -3.5vw;
   padding: 150px 0;
   clip-path: polygon(0 0, 100% 3.5vw, 100% 100%, 0 calc(100% - 3.5vw));
+}
+
+/* Slow drifting aurora so the band feels alive instead of a flat slab. */
+.ef-flowband::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10%;
+  z-index: 0;
+  background:
+    radial-gradient(38% 50% at 22% 30%, rgba(44, 167, 255, 0.22), transparent 70%),
+    radial-gradient(34% 46% at 78% 66%, rgba(65, 205, 233, 0.18), transparent 70%);
+  filter: blur(6px);
+  animation: ef-aurora 16s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes ef-aurora {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); opacity: 0.7; }
+  to   { transform: translate3d(4%, 3%, 0) scale(1.08); opacity: 1; }
 }
 
 .ef-flow-glow {
@@ -906,6 +938,13 @@
   height: 70%;
   background: radial-gradient(closest-side, rgba(44, 167, 255, 0.22), transparent);
   pointer-events: none;
+}
+
+.ef-flowband h2,
+.ef-flow-sub,
+.ef-flow {
+  position: relative;
+  z-index: 1;
 }
 
 .ef-flowband h2 {
@@ -922,7 +961,7 @@
 
 .ef-flow-sub {
   max-width: 42rem;
-  margin: 0 auto 60px;
+  margin: 0 auto 64px;
   color: var(--ef-foam);
   font-size: 17px;
   line-height: 1.55;
@@ -930,7 +969,6 @@
 }
 
 .ef-flow {
-  position: relative;
   display: flex;
   max-width: 940px;
   align-items: flex-start;
@@ -940,22 +978,39 @@
 
 .ef-flow-track {
   position: absolute;
-  top: 34px;
+  top: 37px;
   right: 8%;
   left: 8%;
   z-index: 0;
-  height: 3px;
-  border-radius: 3px;
-  background: rgba(199, 232, 255, 0.18);
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(199, 232, 255, 0.16);
 }
 
 .ef-flow-track div {
+  position: relative;
   height: 100%;
   width: var(--flow-progress, 0%);
-  border-radius: 3px;
+  border-radius: 4px;
   background: linear-gradient(90deg, var(--ef-blue), var(--ef-cyan-300));
-  box-shadow: 0 0 16px rgba(65, 205, 233, 0.6);
-  transition: width 0.15s linear;
+  box-shadow: 0 0 18px rgba(65, 205, 233, 0.7);
+  transition: width 0.18s linear;
+}
+
+/* Glowing comet that rides the leading edge of the progress fill. */
+.ef-flow-track div::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #eafbff;
+  box-shadow:
+    0 0 0 4px rgba(65, 205, 233, 0.28),
+    0 0 18px 4px rgba(65, 205, 233, 0.85);
+  transform: translateY(-50%);
 }
 
 .ef-flow-step {
@@ -965,42 +1020,70 @@
   width: 160px;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   text-align: center;
 }
 
 .ef-flow-node {
+  position: relative;
   display: grid;
-  width: 70px;
-  height: 70px;
+  width: 78px;
+  height: 78px;
   place-items: center;
-  border: 2px solid rgba(199, 232, 255, 0.25);
+  border: 2px solid rgba(199, 232, 255, 0.22);
   border-radius: 50%;
-  background: #0a2138;
+  /* OPAQUE base — the connector line runs behind the nodes and must never
+     bleed through them. The old lit state used a translucent fill, which let
+     the line show straight across the icons. */
+  background: #07223c;
   color: rgba(199, 232, 255, 0.5);
   transition:
-    transform 0.4s cubic-bezier(0.12, 0.8, 0.2, 1.1),
-    background-color 0.4s,
-    border-color 0.4s,
-    box-shadow 0.4s,
-    color 0.4s;
+    transform 0.45s cubic-bezier(0.12, 0.8, 0.2, 1.1),
+    background-color 0.45s,
+    border-color 0.45s,
+    box-shadow 0.45s,
+    color 0.45s;
+}
+
+/* Conic ring that sweeps in when a step activates. */
+.ef-flow-node::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  padding: 2px;
+  background: conic-gradient(from 140deg, transparent, var(--ef-cyan-300), var(--ef-blue), transparent 78%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transform: rotate(-35deg) scale(0.9);
+  transition: opacity 0.5s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
 }
 
 .ef-flow-step.is-on .ef-flow-node {
-  border-color: var(--ef-cyan-300);
-  background: rgba(65, 205, 233, 0.16);
+  border-color: transparent;
+  background: linear-gradient(160deg, #0d3a5d, #0a2b49);
   color: var(--ef-cyan-300);
   box-shadow:
-    0 0 0 8px rgba(65, 205, 233, 0.12),
-    0 0 30px rgba(65, 205, 233, 0.4);
-  transform: scale(1.08);
+    0 0 0 7px rgba(65, 205, 233, 0.10),
+    0 12px 30px rgba(65, 205, 233, 0.30);
+  transform: translateY(-3px) scale(1.06);
+}
+
+.ef-flow-step.is-on .ef-flow-node::before {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
 }
 
 .ef-flow-label {
   color: #fff;
   font-size: 15px;
   font-weight: 800;
-  opacity: 0.62;
+  opacity: 0.6;
+  transition: opacity 0.4s;
 }
 
 .ef-flow-step.is-on .ef-flow-label {
@@ -1012,7 +1095,8 @@
   color: var(--ef-foam);
   font-size: 12px;
   line-height: 1.4;
-  opacity: 0.54;
+  opacity: 0.5;
+  transition: opacity 0.4s;
 }
 
 .ef-flow-step.is-on .ef-flow-desc {

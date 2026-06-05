@@ -40,7 +40,7 @@ type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
 function getClientLabel(client: ClientRow): string {
   if (client.company) {
     return client.name && client.name !== client.company
-      ? `${client.company} — ${client.name}`
+      ? `${client.company} (${client.name})`
       : client.company
   }
   return client.name || "Unnamed client"

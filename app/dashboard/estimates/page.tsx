@@ -61,6 +61,12 @@ import { Label } from "@/components/ui/label"
 import { money as moneyFormatter } from "@/lib/format-money"
 import { computePricing } from "@/lib/pricing"
 import {
+  FREE_FEE_CAP_CENTS,
+  effectivePlan,
+  transactionFeePercent,
+  type PlanTier,
+} from "@/lib/plans"
+import {
   INPUT_LIMITS,
   InputValidationError,
   enumField,
@@ -339,6 +345,7 @@ export default function EstimatesPage() {
   const [clients, setClients] = useState<ClientRow[]>([])
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [plan, setPlan] = useState<PlanTier>("free")
   const [searchQuery, setSearchQuery] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingEstimate, setEditingEstimate] = useState<EstimateRow | null>(
@@ -364,11 +371,22 @@ export default function EstimatesPage() {
   const hasLineItems = form.lineItems.length > 0
 
   // ─── Stripe payout breakdown via shared pricing helper ───────────────────────
+  // Plan-based fee: Free 5% (capped) / Pro 2% / Team 1%, charged to the client on top.
+  const feeOptions = useMemo(
+    () => ({
+      feePercent: transactionFeePercent(plan),
+      feeCapCents: plan === "free" ? FREE_FEE_CAP_CENTS : null,
+    }),
+    [plan]
+  )
   const contractorDollars = parseFloat(form.contractorAmountCents) || 0
   const rawContractorCents = Math.round(contractorDollars * 100)
   const rawDepositCents    = Math.round((parseFloat(form.depositAmountCents) || 0) * 100)
   const pricing = rawContractorCents > 0
-    ? computePricing(rawContractorCents, rawDepositCents > 0 ? rawDepositCents : null)
+    ? computePricing(rawContractorCents, {
+        depositInputCents: rawDepositCents > 0 ? rawDepositCents : null,
+        ...feeOptions,
+      })
     : null
   const contractorCents   = pricing?.contractorSubtotalCents ?? 0
   const clientTotalCents  = pricing?.clientTotalCents ?? 0
@@ -397,7 +415,7 @@ export default function EstimatesPage() {
 
     setUserId(user.id)
 
-    const [clientsResult, estimatesResult] = await Promise.all([
+    const [clientsResult, estimatesResult, profileResult] = await Promise.all([
       supabase
         .from("clients")
         .select("*")
@@ -408,7 +426,19 @@ export default function EstimatesPage() {
         .select("*")
         .eq("user_id", user.id)
         .order("sent_date", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("plan, plan_status")
+        .eq("user_id", user.id)
+        .maybeSingle(),
     ])
+
+    setPlan(
+      effectivePlan(
+        profileResult.data?.plan ?? "free",
+        profileResult.data?.plan_status ?? "active"
+      )
+    )
 
     const firstError = clientsResult.error || estimatesResult.error
 
@@ -600,7 +630,10 @@ export default function EstimatesPage() {
       const safeDepositCents = Math.round(depositAmount * 100)
       const safePricing =
         safeContractorCents > 0
-          ? computePricing(safeContractorCents, safeDepositCents > 0 ? safeDepositCents : null)
+          ? computePricing(safeContractorCents, {
+              depositInputCents: safeDepositCents > 0 ? safeDepositCents : null,
+              ...feeOptions,
+            })
           : null
       const resolvedClientName = selectedClient
         ? optionalTextField(getClientLabel(selectedClient), "Client name", {
@@ -1206,8 +1239,8 @@ export default function EstimatesPage() {
               <div>
                 <p className="text-sm font-semibold">Collect deposit online</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Enter what you want to receive. Euroflo adds the service fee and GST on top
-                  so the customer sees the full card price.
+                  Enter what you want to receive. Euroflo adds the service fee, GST, and card
+                  processing on top, so the customer sees the full card price and you keep your full amount.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1495,7 +1528,7 @@ export default function EstimatesPage() {
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
                     {searchQuery
                       ? "Try a different search."
-                      : "Add an estimate after you send a quote — the app will tell you when to follow up."}
+                      : "Add an estimate after you send a quote, and the app will tell you when to follow up."}
                   </p>
                   {!searchQuery && (
                     <Button className="mt-5" onClick={openAddEstimate}>

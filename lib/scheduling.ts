@@ -24,12 +24,12 @@ const timeFmt = new Intl.DateTimeFormat("en-CA", {
 
 /**
  * Human-readable range for a work day, e.g.
- *   "Monday, June 8, 2026, 8:00 a.m." or "… 8:00 a.m. – 4:00 p.m."
+ *   "Monday, June 8, 2026, 8:00 a.m." or "… 8:00 a.m. to 4:00 p.m."
  */
 export function formatWorkDayRange(day: Pick<WorkDay, "starts_at" | "ends_at">): string {
   const start = dayRangeFmt.format(new Date(day.starts_at))
   if (!day.ends_at) return start
-  return `${start} – ${timeFmt.format(new Date(day.ends_at))}`
+  return `${start} to ${timeFmt.format(new Date(day.ends_at))}`
 }
 
 /** Effective end instant for overlap math (falls back to a default block). */

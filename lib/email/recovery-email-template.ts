@@ -13,6 +13,8 @@ export interface RecoveryEmailArgs {
   contractorWebsite?:  string | null
   inboundReplyToEmail?: string | null // when set, replies are tracked in-app
   appName?:            string        // defaults to "Euroflo"
+  payUrl?:             string | null // when set, a prominent "Pay now" button renders
+  payLabel?:           string        // button text, defaults to "Pay now"
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -58,7 +60,26 @@ export function renderRecoveryEmailHtml(args: RecoveryEmailArgs): string {
     contractorWebsite,
     inboundReplyToEmail,
     appName = "Euroflo",
+    payUrl,
+    payLabel = "Pay now",
   } = args
+
+  // Prominent "Pay now" button — the easiest path to getting paid is one tap.
+  const payButton = payUrl
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(safeHref(payUrl))}"
+                       style="display:inline-block; background-color:#024D8B; color:#FFFFFF;
+                              font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+                              font-size:16px; font-weight:600; text-decoration:none;
+                              padding:14px 32px; border-radius:8px;">
+                      ${escapeHtml(payLabel)}
+                    </a>
+                  </td>
+                </tr>
+              </table>`
+    : ""
 
   const safeSubject       = escapeHtml(subject)
   const safeCompany       = escapeHtml(companyName)
@@ -150,6 +171,9 @@ export function renderRecoveryEmailHtml(args: RecoveryEmailArgs): string {
                 ${messageParagraphs}
               </div>
 
+              <!-- Pay now -->
+              ${payButton}
+
               <!-- Signature -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0"
                      style="margin-top:28px; border-top:1px solid #E5E7EB;">
@@ -211,6 +235,8 @@ export function renderRecoveryEmailText(args: RecoveryEmailArgs): string {
     contractorWebsite,
     inboundReplyToEmail,
     appName = "Euroflo",
+    payUrl,
+    payLabel = "Pay now",
   } = args
 
   const sigParts = [contractorName, companyName]
@@ -228,6 +254,7 @@ export function renderRecoveryEmailText(args: RecoveryEmailArgs): string {
     "─".repeat(subject.length),
     "",
     messageBody,
+    ...(payUrl ? ["", `${payLabel}: ${safeHref(payUrl)}`] : []),
     "",
     "--",
     ...sigParts,

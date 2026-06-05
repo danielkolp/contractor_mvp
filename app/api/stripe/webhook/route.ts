@@ -5,6 +5,7 @@ import { inputErrorMessage, uuidField } from "@/lib/security/input"
 import { createServiceClient } from "@/lib/supabase/service"
 import { stripe } from "@/lib/stripe/server"
 import type { Json } from "@/lib/supabase/database.types"
+import { normalizePlanStatus, planFromPriceId, type PlanTier } from "@/lib/plans"
 import {
   renderPaymentReceivedContractorHtml,
   renderPaymentReceivedClientHtml,
@@ -71,8 +72,21 @@ export async function POST(req: NextRequest) {
   try {
     switch (event.type) {
       case "checkout.session.completed":
-      case "checkout.session.async_payment_succeeded":
-        await handleCheckoutSuccess(event.data.object as Stripe.Checkout.Session, service)
+      case "checkout.session.async_payment_succeeded": {
+        const session = event.data.object as Stripe.Checkout.Session
+        // Subscription Checkout (contractor's own plan) vs. Connect payment.
+        if (session.mode === "subscription") {
+          await handleSubscriptionCheckout(session, service)
+        } else {
+          await handleCheckoutSuccess(session, service)
+        }
+        break
+      }
+
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await handleSubscriptionChange(event.data.object as Stripe.Subscription, service)
         break
 
       case "checkout.session.async_payment_failed":
@@ -168,6 +182,74 @@ async function handleCheckoutSuccess(
 
   // Send email notifications if Resend is configured
   await sendPaymentEmails(estimateId, service)
+}
+
+// ── Subscription (contractor's own plan) ────────────────────────────────────
+
+async function handleSubscriptionCheckout(
+  session: Stripe.Checkout.Session,
+  service: ServiceClient
+) {
+  // The subscription.created/updated event carries the full picture; here we just
+  // make sure we have the subscription and apply it (covers races where the
+  // checkout.session.completed lands first).
+  const subscriptionId =
+    typeof session.subscription === "string"
+      ? session.subscription
+      : (session.subscription as Stripe.Subscription | null)?.id ?? null
+  if (!subscriptionId) return
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  await handleSubscriptionChange(subscription, service)
+}
+
+async function handleSubscriptionChange(
+  subscription: Stripe.Subscription,
+  service: ServiceClient
+) {
+  const customerId =
+    typeof subscription.customer === "string"
+      ? subscription.customer
+      : subscription.customer?.id ?? null
+
+  // Resolve which plan/interval this subscription's price maps to.
+  const priceId = subscription.items.data[0]?.price?.id ?? null
+  const mapped = priceId ? planFromPriceId(priceId) : null
+
+  const canceled = subscription.status === "canceled"
+  const status = normalizePlanStatus(subscription.status)
+
+  // A canceled/ended subscription drops the contractor back to Free.
+  const plan: PlanTier = canceled ? "free" : mapped?.plan ?? "free"
+  const interval = canceled ? null : mapped?.interval ?? null
+
+  const periodEnd = subscription.items.data[0]?.current_period_end ?? null
+
+  // Find the profile: prefer metadata, fall back to customer id.
+  const profileUserId = subscription.metadata?.profile_user_id ?? null
+
+  const update = {
+    plan,
+    plan_status: status,
+    plan_interval: interval,
+    stripe_subscription_id: canceled ? null : subscription.id,
+    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+  }
+
+  let query = service.from("profiles").update(update)
+  if (profileUserId) {
+    query = query.eq("user_id", profileUserId)
+  } else if (customerId) {
+    query = query.eq("stripe_customer_id", customerId)
+  } else {
+    console.warn("[stripe/webhook] subscription change with no profile reference")
+    return
+  }
+
+  const { error } = await query
+  if (error) {
+    console.error("[stripe/webhook] Failed to update plan:", error)
+  }
 }
 
 async function handleCheckoutFailed(

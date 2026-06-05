@@ -92,7 +92,7 @@ function scheduledVisitFor(document: ScheduledSource, job: ScheduledSource | nul
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  Draft: "Draft", Sent: "Sent — Awaiting Response",
+  Draft: "Draft", Sent: "Sent, Awaiting Response",
   "Follow-up Needed": "Follow-up Needed", "Follow-up Sent": "Follow-up Sent",
   Interested: "Interested", Accepted: "Accepted", Won: "Accepted",
   Declined: "Declined", Lost: "Declined", Archived: "Archived",
@@ -487,7 +487,7 @@ export default async function EstimatePrintPage({
             )}
             {isPaid && (
               <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-4 py-2">
-                <p className="text-xs font-semibold text-blue-700">✓ Payment received — this estimate has been paid in full.</p>
+                <p className="text-xs font-semibold text-blue-700">✓ Payment received. This estimate has been paid in full.</p>
               </div>
             )}
             {/* Contractor-only: show fee breakdown on print */}
@@ -500,6 +500,18 @@ export default async function EstimatePrintPage({
                   {(stripeEst.gst_cents ?? 0) > 0 && (
                     <div><span className="text-zinc-400">GST on fee: </span><span className="font-semibold text-zinc-800">{money.format((stripeEst.gst_cents ?? 0) / 100)}</span></div>
                   )}
+                  {(() => {
+                    // Stripe processing is folded into the client total; surface it so the
+                    // contractor's breakdown reconciles to what the customer pays.
+                    const cardCents =
+                      (stripeEst.client_total_cents ?? 0) -
+                      (stripeEst.contractor_amount_cents ?? 0) -
+                      (stripeEst.platform_fee_cents ?? 0) -
+                      (stripeEst.gst_cents ?? 0)
+                    return cardCents > 0 ? (
+                      <div><span className="text-zinc-400">Card processing: </span><span className="font-semibold text-zinc-800">{money.format(cardCents / 100)}</span></div>
+                    ) : null
+                  })()}
                   <div><span className="text-zinc-400">Customer pays: </span><span className="font-semibold text-ef-ocean">{money.format(total)}</span></div>
                 </div>
               </div>

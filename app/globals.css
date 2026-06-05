@@ -183,7 +183,11 @@
   --sidebar-border: #2a2a2e;
   --sidebar-ring: #2ca7ff;
 }
-/* Forces light-mode CSS variables regardless of the global .dark class */
+/* Forces light-mode CSS variables regardless of the global .dark class.
+   Also re-pins the Euroflo brand tokens to their LIGHT values: in dark mode
+   --ef-ink / --ef-navy / --ef-canvas turn charcoal-grey, and any force-light
+   subtree (landing page, public success pages) would otherwise inherit those
+   greyed-out values and paint muddy "grey + navy" gradients. */
 .force-light {
   color-scheme: light;
   --background: oklch(0.975 0.004 75);
@@ -204,6 +208,15 @@
   --border: oklch(0.905 0.004 75);
   --input: oklch(0.9 0.004 75);
   --ring: #2ca7ff;
+
+  /* Brand tokens pinned light */
+  --ef-ink: #002453;
+  --ef-navy: #033258;
+  --ef-ocean: #024d8b;
+  --ef-mist: #eaf5fd;
+  --ef-canvas: #f6f5f2;
+  --ef-200: #d5e6f2;
+  --ef-300: #afd3eb;
 }
 
 @layer base {

@@ -248,7 +248,7 @@ export function LoginForm({ message, next }: { message?: string; next?: string }
       {magicLinkState === "sent" ? (
         <div className="rounded-lg border border-ef-200 bg-ef-mist p-3 text-sm text-ef-ocean">
           <p className="font-medium">Check your email for your private login link.</p>
-          <p className="mt-1 text-xs text-ef-navy/80">No password needed — just click the link.</p>
+          <p className="mt-1 text-xs text-ef-navy/80">No password needed. Just click the link.</p>
         </div>
       ) : (
         <div className="grid gap-2">

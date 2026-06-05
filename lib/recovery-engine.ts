@@ -102,7 +102,7 @@ export function getRecommendedAction(overdueStage: OverdueStage): string {
     case "second_reminder":
       return "Send a firmer follow-up message."
     case "final_notice":
-      return "Send a final notice — or escalate to owner review."
+      return "Send a final notice, or escalate to owner review."
   }
 }
 
@@ -126,7 +126,7 @@ export function generateFollowUpMessage(params: {
       return `Hi ${name}, following up on invoice ${invoiceNumber} for ${fmt}. This invoice is now ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue. Could you let me know when we can expect payment? Thanks.`
 
     case "second_reminder":
-      return `Hi ${name}, I'm following up again on invoice ${invoiceNumber} for ${fmt}, which is now ${daysOverdue} days overdue. Please send payment or let me know if there's anything holding this up — I'd appreciate a firm date.`
+      return `Hi ${name}, I'm following up again on invoice ${invoiceNumber} for ${fmt}, which is now ${daysOverdue} days overdue. Please send payment or let me know if there's anything holding this up. I'd appreciate a firm date.`
 
     case "final_notice":
       return `Hi ${name}, this is a final notice for invoice ${invoiceNumber} for ${fmt}, which is now ${daysOverdue} days past due. Please make payment immediately or contact us to discuss. Continued non-payment may require us to take further action.`
@@ -153,7 +153,7 @@ export function getFollowUpSubtext(overdueStage: OverdueStage): string {
 
 export function getFollowUpActionText(recoveryStage: RecoveryStage): string {
   const map: Record<RecoveryStage, string> = {
-    newly_overdue: "Friendly reminder sent. Follow up again in 3–5 days if no response.",
+    newly_overdue: "Friendly reminder sent. Follow up again in 3-5 days if no response.",
     first_follow_up: "First follow-up sent. Wait for client response.",
     second_follow_up: "Second follow-up sent. Prepare final notice if still unpaid.",
     final_notice: "Final notice sent. Review before escalation.",
@@ -186,15 +186,15 @@ export function generateRecoveryItemMessage(params: {
   if (isFollowUp) {
     switch (reason) {
       case "estimate_no_reply":
-        return `Hi ${name}, I'm reaching out again about the estimate for ${fmt}. I'd love to get this scheduled for you — could you let me know where you're at? Even a quick reply helps. Thanks.`
+        return `Hi ${name}, I'm reaching out again about the estimate for ${fmt}. I'd love to get this scheduled for you. Could you let me know where you're at? Even a quick reply helps. Thanks.`
       case "invoice_overdue":
-        return `Hi ${name}, I'm following up again on the outstanding balance of ${fmt}. I'd really appreciate hearing from you — please let me know when we can sort this out. Thanks.`
+        return `Hi ${name}, I'm following up again on the outstanding balance of ${fmt}. I'd really appreciate hearing from you. Please let me know when we can sort this out. Thanks.`
       case "maybe_later":
         return `Hi ${name}, checking in again on the ${fmt} project. I want to make sure I have availability when you're ready. Just a quick yes or no would help me plan. Thanks!`
       case "work_not_paid":
         return `Hi ${name}, I need to follow up again on the ${fmt} that's still outstanding for work already completed. Please let me know when this will be settled. Thanks.`
       default:
-        return `Hi ${name}, following up again. The ${fmt} is still pending — could you give me an update? Thanks.`
+        return `Hi ${name}, following up again. The ${fmt} is still pending. Could you give me an update? Thanks.`
     }
   }
 
@@ -204,9 +204,9 @@ export function generateRecoveryItemMessage(params: {
     case "invoice_overdue":
       return `Hi ${name}, following up on the invoice for ${fmt} that's now overdue. Could you let me know when payment will be sent? If there's anything holding it up, I'm happy to talk through options. Thanks.`
     case "maybe_later":
-      return `Hi ${name}, you mentioned wanting to revisit this project later. Just checking back in — are you ready to move forward on the ${fmt} project? I have availability coming up. Thanks!`
+      return `Hi ${name}, you mentioned wanting to revisit this project later. Just checking back in. Are you ready to move forward on the ${fmt} project? I have availability coming up. Thanks!`
     case "work_not_paid":
-      return `Hi ${name}, reaching out about the work completed — ${fmt} is still outstanding. Could you let me know when I can expect payment? Thanks.`
+      return `Hi ${name}, reaching out about the completed work. The ${fmt} is still outstanding. Could you let me know when I can expect payment? Thanks.`
     default:
       return `Hi ${name}, just following up on our conversation regarding ${fmt}. Please let me know the best next step. Thanks.`
   }

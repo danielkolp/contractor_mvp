@@ -166,7 +166,7 @@ function PostSubmitScreen({
   }
 
   return (
-    <div data-testid="request-confirmed" className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist/40 px-4 pb-16 pt-12">
+    <div data-testid="request-confirmed" className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist px-4 pb-16 pt-12">
       <div className="mx-auto max-w-lg space-y-5">
 
         {/* Check + headline */}
@@ -204,13 +204,13 @@ function PostSubmitScreen({
                 </div>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                Your private Euroflo link is waiting in your inbox. Click it to track the job — no
+                Your private Euroflo link is waiting in your inbox. Click it to track the job. No
                 account creation needed.
               </p>
               <div className="mt-4 border-t border-gray-100 pt-4">
                 {resendState === "sent" ? (
                   <p className="text-center text-xs text-ef-ocean">
-                    Login link sent — check your email.
+                    Login link sent. Check your email.
                   </p>
                 ) : resendState === "error" ? (
                   <p className="text-center text-xs text-red-600">
@@ -292,7 +292,7 @@ function PostSubmitScreen({
               Your portal link
             </p>
             <p className="mt-2 text-xs leading-relaxed text-gray-500">
-              Copy or bookmark this link to access your job portal at any time — no sign-in needed.
+              Copy or bookmark this link to access your job portal at any time. No sign-in needed.
             </p>
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
               <span className="flex-1 truncate text-xs text-gray-600 select-all">{guestLink}</span>
@@ -651,7 +651,7 @@ export default function RequestPage({
     : "Request an estimate"
 
   return (
-    <div className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist/40 px-4 pb-16 pt-8">
+    <div className="force-light min-h-screen bg-gradient-to-b from-[#f6f5f2] via-[#faf9f7] to-ef-mist px-4 pb-16 pt-8">
       <div className="mx-auto max-w-lg">
         <div className="mb-8 text-center">
           {profileLoading ? (
@@ -791,7 +791,7 @@ export default function RequestPage({
                 name="description"
                 required
                 rows={5}
-                placeholder="Describe the work you need done. A sentence or two is fine to start — add measurements, materials, or timing if you have them."
+                placeholder="Describe the work you need done. A sentence or two is fine to start. Add measurements, materials, or timing if you have them."
                 className={cn(inputClass, "resize-y")}
               />
             </div>
@@ -844,7 +844,7 @@ export default function RequestPage({
                 id="photo_notes"
                 name="photo_notes"
                 rows={2}
-                placeholder="Anything else your contractor should know — reference photos, access instructions, materials on hand, etc."
+                placeholder="Anything else your contractor should know, like reference photos, access instructions, or materials on hand."
                 className={cn(inputClass, "resize-none")}
               />
             </div>

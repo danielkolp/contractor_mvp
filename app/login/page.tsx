@@ -90,7 +90,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </h1>
             <p className="mt-4 text-base leading-7 text-zinc-600">
               See who owes money, what needs a follow-up today, and the next
-              practical step — all in one clean dashboard.
+              practical step, all in one clean dashboard.
             </p>
             <div className="mt-8 grid gap-3">
               {trustPoints.map((point) => (
