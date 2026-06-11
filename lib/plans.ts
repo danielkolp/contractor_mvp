@@ -1,18 +1,24 @@
 /**
  * Plans, gating, and per-plan transaction fees — the business model in one file.
  *
- * Three tiers (see TODO P0 feature matrix):
- *   free  — fee-only. Requests, clients, basic estimates, client portal + online
- *           payment (so Free can still earn Euroflo a fee), basic recovery follow-ups.
- *   pro   ($49/mo) — adds automated follow-up cadences, reply tracking, CRM /
- *           reliability badges, branded estimates, deposits.
- *   team  ($199/mo) — adds multi-user workspaces, advanced reporting, team mgmt.
+ * Two tiers are sold (MVP):
+ *   free — $0/mo, fee-only. Requests, clients, basic estimates, client portal +
+ *          online payment (so Free still earns Euroflo a fee), manual recovery
+ *          follow-ups, offline payment recording (e-transfer/cash/cheque, no fee).
+ *   pro  — $49/mo. Everything in Free, plus a lower card fee (2% capped at $25),
+ *          branded estimates, custom deposit control, and follow-up tone presets.
+ *
+ * The "team" tier still exists in the DB enum and in PlanTier for forward
+ * compatibility, but it is NOT sold: it is excluded from PAID_PLANS, has no
+ * Stripe price wiring, and must never appear in user-facing UI.
  *
  * Transaction fee (application fee Euroflo takes on each card charge):
- *   free 5%  ·  pro 2%  ·  team 1%
+ *   free 5% capped at $50/transaction · pro 2% capped at $25/transaction
+ *   Offline payments (e-transfer / cash / cheque) never carry a Euroflo fee.
  *
  * This file is the single source of truth. Server routes call requireFeature();
- * UI calls hasPlanFeature(); charge creation calls transactionFeeBps().
+ * UI calls hasPlanFeature(); charge creation calls transactionFeeCents() or
+ * planFeeOptions() (for lib/pricing's computePricing).
  */
 
 export const PLAN_TIERS = ["free", "pro", "team"] as const
@@ -43,14 +49,10 @@ export type PlanFeature =
   | "basicEstimates"
   | "clientPortalPayment"
   | "basicRecovery"
-  | "automatedCadences"
-  | "replyTracking"
-  | "crmReliabilityBadges"
+  | "offlinePayments"
   | "brandedEstimates"
-  | "deposits"
-  | "multiUser"
-  | "advancedReporting"
-  | "teamManagement"
+  | "customDeposits"
+  | "followUpPresets"
 
 const FREE_FEATURES: PlanFeature[] = [
   "requests",
@@ -58,28 +60,22 @@ const FREE_FEATURES: PlanFeature[] = [
   "basicEstimates",
   "clientPortalPayment",
   "basicRecovery",
+  "offlinePayments",
 ]
 
 const PRO_FEATURES: PlanFeature[] = [
   ...FREE_FEATURES,
-  "automatedCadences",
-  "replyTracking",
-  "crmReliabilityBadges",
   "brandedEstimates",
-  "deposits",
-]
-
-const TEAM_FEATURES: PlanFeature[] = [
-  ...PRO_FEATURES,
-  "multiUser",
-  "advancedReporting",
-  "teamManagement",
+  "customDeposits",
+  "followUpPresets",
 ]
 
 const PLAN_FEATURE_MAP: Record<PlanTier, ReadonlySet<PlanFeature>> = {
   free: new Set(FREE_FEATURES),
   pro: new Set(PRO_FEATURES),
-  team: new Set(TEAM_FEATURES),
+  // Team is not sold yet — internally it unlocks the same features as Pro so a
+  // legacy/manually-set team plan never behaves worse than Pro.
+  team: new Set(PRO_FEATURES),
 }
 
 /** The full feature set a plan unlocks. */
@@ -95,8 +91,7 @@ export function hasPlanFeature(plan: PlanTier, feature: PlanFeature): boolean {
 /** The lowest plan that unlocks a feature — used for "Upgrade to Pro" copy. */
 export function minimumPlanFor(feature: PlanFeature): PlanTier {
   if (PLAN_FEATURE_MAP.free.has(feature)) return "free"
-  if (PLAN_FEATURE_MAP.pro.has(feature)) return "pro"
-  return "team"
+  return "pro"
 }
 
 export class PlanGateError extends Error {
@@ -125,7 +120,7 @@ export function requireFeature(plan: PlanTier, feature: PlanFeature): void {
 const PLAN_FEE_BPS: Record<PlanTier, number> = {
   free: 500, // 5%
   pro: 200, // 2%
-  team: 100, // 1%
+  team: 200, // not sold; mirrors Pro so a legacy team plan never pays more
 }
 
 /**
@@ -136,26 +131,50 @@ export const FREE_FEE_CAP_CENTS: number | null = process.env.EUROFLO_FREE_FEE_CA
   ? Number(process.env.EUROFLO_FREE_FEE_CAP_CENTS)
   : 5000
 
+/** Per-transaction cap on the Pro tier's 2%. Locked at $25/transaction. */
+export const PRO_FEE_CAP_CENTS = 2500
+
+const PLAN_FEE_CAP_CENTS: Record<PlanTier, number | null> = {
+  free: FREE_FEE_CAP_CENTS,
+  pro: PRO_FEE_CAP_CENTS,
+  team: PRO_FEE_CAP_CENTS, // not sold; mirrors Pro
+}
+
 /** Fee in basis points (1% = 100 bps) for a plan. */
 export function transactionFeeBps(plan: PlanTier): number {
   return PLAN_FEE_BPS[normalizePlan(plan)]
 }
 
-/** Fee as a percentage number (e.g. 5, 2, 1) for display / pricing math. */
+/** Fee as a percentage number (e.g. 5, 2) for display / pricing math. */
 export function transactionFeePercent(plan: PlanTier): number {
   return transactionFeeBps(plan) / 100
 }
 
+/** Per-transaction cap on the plan's fee in cents (null = uncapped). */
+export function transactionFeeCapCents(plan: PlanTier): number | null {
+  return PLAN_FEE_CAP_CENTS[normalizePlan(plan)]
+}
+
+/**
+ * Per-plan options for lib/pricing's computePricing — the one place callers
+ * should get { feePercent, feeCapCents } from, so every estimate/payment
+ * breakdown uses the contractor's actual current plan fee.
+ */
+export function planFeeOptions(plan: PlanTier): { feePercent: number; feeCapCents: number | null } {
+  return {
+    feePercent: transactionFeePercent(plan),
+    feeCapCents: transactionFeeCapCents(plan),
+  }
+}
+
 /**
  * The application fee in cents for a charge of `amountCents` under `plan`,
- * applying the Free-tier cap when configured.
+ * applying the plan's per-transaction cap.
  */
 export function transactionFeeCents(plan: PlanTier, amountCents: number): number {
   const raw = Math.round((amountCents * transactionFeeBps(plan)) / 10_000)
-  if (normalizePlan(plan) === "free" && FREE_FEE_CAP_CENTS != null) {
-    return Math.min(raw, FREE_FEE_CAP_CENTS)
-  }
-  return raw
+  const cap = transactionFeeCapCents(plan)
+  return cap != null ? Math.min(raw, cap) : raw
 }
 
 // ── Plan display metadata + Stripe price wiring ───────────────────────────────
@@ -165,8 +184,6 @@ export type PlanMeta = {
   name: string
   /** Monthly price in dollars (display only; Stripe holds the real amount). */
   monthlyPrice: number
-  /** Annual price in dollars for the year (≈10–20% discount baked into Stripe price). */
-  annualPrice: number
   tagline: string
   feeLabel: string
   highlights: string[]
@@ -177,54 +194,53 @@ export const PLAN_META: Record<PlanTier, PlanMeta> = {
     tier: "free",
     name: "Free",
     monthlyPrice: 0,
-    annualPrice: 0,
     tagline: "Get paid online. Pay only when you get paid.",
-    feeLabel: "5% card fee",
+    feeLabel: "5% card fee · capped at $50/transaction",
     highlights: [
-      "Requests, clients & estimates",
-      "Client portal + online payment",
-      "Basic recovery follow-ups",
+      "Public request link, job requests & clients",
+      "Estimates, invoices & client portal",
+      "Online card payments + manual follow-ups",
+      "Record e-transfer / cash / cheque — no fee",
     ],
   },
   pro: {
     tier: "pro",
     name: "Pro",
     monthlyPrice: 49,
-    annualPrice: 490, // ~17% off (2 months free)
-    tagline: "Chase on autopilot and close more jobs.",
-    feeLabel: "2% card fee",
+    tagline: "Lower fees, better follow-ups, branded estimates, and deposit control.",
+    feeLabel: "2% card fee · capped at $25/transaction",
     highlights: [
       "Everything in Free",
-      "Automated follow-up cadences + reply tracking",
-      "Reliability badges, branded estimates, deposits",
+      "2% card fee capped at $25 (vs 5% capped at $50)",
+      "Your branding on estimates & invoices",
+      "Custom deposit amounts on estimates",
+      "Follow-up tone presets (friendly / professional / firm)",
     ],
   },
+  // Not sold — kept only so internal code indexing PLAN_META by PlanTier
+  // stays total. Never render this entry in user-facing UI.
   team: {
     tier: "team",
     name: "Team",
-    monthlyPrice: 199,
-    annualPrice: 1990, // ~17% off (2 months free)
-    tagline: "Run a crew with shared visibility and reporting.",
-    feeLabel: "1% card fee",
-    highlights: [
-      "Everything in Pro",
-      "Multi-user workspaces & team management",
-      "Advanced reporting (dollars recovered)",
-    ],
+    monthlyPrice: 0,
+    tagline: "",
+    feeLabel: "",
+    highlights: [],
   },
 }
 
-/** Paid plans only, in display order. */
-export const PAID_PLANS: PlanTier[] = ["pro", "team"]
+/** Plans that can be purchased, in display order. Team is intentionally absent. */
+export const PAID_PLANS: PlanTier[] = ["pro"]
 
 /**
- * Resolve the Stripe price id for a paid plan + interval from env.
- * Env vars: STRIPE_PRICE_PRO_MONTH, STRIPE_PRICE_PRO_YEAR,
- *           STRIPE_PRICE_TEAM_MONTH, STRIPE_PRICE_TEAM_YEAR.
+ * Resolve the Stripe price id for a purchasable plan + interval from env.
+ * MVP only requires STRIPE_PRICE_PRO_MONTH. STRIPE_PRICE_PRO_YEAR is read if
+ * present (so an existing annual subscription still maps back to Pro in the
+ * webhook) but nothing depends on it. Team has no price wiring on purpose.
  */
 export function stripePriceId(plan: PlanTier, interval: BillingInterval): string | null {
-  if (plan === "free") return null
-  const key = `STRIPE_PRICE_${plan.toUpperCase()}_${interval === "year" ? "YEAR" : "MONTH"}`
+  if (plan !== "pro") return null
+  const key = interval === "year" ? "STRIPE_PRICE_PRO_YEAR" : "STRIPE_PRICE_PRO_MONTH"
   return process.env[key] ?? null
 }
 
@@ -253,7 +269,14 @@ export function normalizePlanStatus(status: string): string {
   return known.includes(status) ? status : "incomplete"
 }
 
-/** Whether a plan_status counts as actively entitling paid features. */
+/**
+ * Whether a plan_status counts as actively entitling paid features.
+ *
+ * Deliberate choice: `past_due` still counts as active — the contractor keeps
+ * Pro during Stripe's dunning/grace window instead of being yanked to Free the
+ * moment a card fails. Stripe moves the subscription to `canceled`/`unpaid`
+ * when dunning is exhausted, and the webhook then downgrades the profile.
+ */
 export function isPlanActive(status: string): boolean {
   return status === "active" || status === "trialing" || status === "past_due"
 }
@@ -261,7 +284,7 @@ export function isPlanActive(status: string): boolean {
 /**
  * The plan that should actually be enforced. A paid plan whose subscription has
  * lapsed (canceled/unpaid/incomplete) falls back to free. past_due keeps access
- * during Stripe's dunning grace period.
+ * during Stripe's dunning grace period (see isPlanActive).
  */
 export function effectivePlan(plan: PlanTier, status: string): PlanTier {
   const tier = normalizePlan(plan)

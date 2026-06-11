@@ -106,24 +106,69 @@ export function getRecommendedAction(overdueStage: OverdueStage): string {
   }
 }
 
+/**
+ * Message tone presets — a Pro feature (`followUpPresets` in lib/plans.ts).
+ * Free always drafts in the default "friendly" tone; Pro applies the
+ * contractor's saved `settings.default_tone`.
+ */
+export type MessageTone = "friendly" | "professional" | "firm"
+
+export function normalizeMessageTone(value: unknown): MessageTone {
+  return value === "professional" || value === "firm" ? value : "friendly"
+}
+
 export function generateFollowUpMessage(params: {
   clientName: string
   invoiceNumber: string
   amount: number
   daysOverdue: number
   overdueStage: OverdueStage
+  tone?: MessageTone
 }): string {
   const { clientName, invoiceNumber, amount, daysOverdue, overdueStage } =
     params
+  const tone = normalizeMessageTone(params.tone)
   const fmt = moneyFormatter.format(amount)
   const name = clientName || "there"
+  const dayWord = `${daysOverdue} day${daysOverdue === 1 ? "" : "s"}`
 
+  if (tone === "professional") {
+    switch (overdueStage) {
+      case "friendly_reminder":
+        return `Hello ${name}, this is a reminder that invoice ${invoiceNumber} for ${fmt} is now due. Please advise when payment will be issued. Thank you.`
+      case "first_reminder":
+        return `Hello ${name}, invoice ${invoiceNumber} for ${fmt} is now ${dayWord} past due. Please confirm the expected payment date at your earliest convenience. Thank you.`
+      case "second_reminder":
+        return `Hello ${name}, invoice ${invoiceNumber} for ${fmt} remains outstanding at ${dayWord} past due. Please arrange payment or contact us with a firm payment date. Thank you.`
+      case "final_notice":
+        return `Hello ${name}, this is a final notice regarding invoice ${invoiceNumber} for ${fmt}, now ${dayWord} past due. Please remit payment immediately or contact us to discuss. Further action may be required if the balance remains unpaid.`
+      default:
+        return `Hello ${name}, this is a reminder regarding invoice ${invoiceNumber} for ${fmt}. Please advise when payment will be issued. Thank you.`
+    }
+  }
+
+  if (tone === "firm") {
+    switch (overdueStage) {
+      case "friendly_reminder":
+        return `Hi ${name}, invoice ${invoiceNumber} for ${fmt} is due. Please send payment today or reply with a payment date.`
+      case "first_reminder":
+        return `Hi ${name}, invoice ${invoiceNumber} for ${fmt} is ${dayWord} overdue. I need a payment date from you this week. Please respond.`
+      case "second_reminder":
+        return `Hi ${name}, invoice ${invoiceNumber} for ${fmt} is now ${dayWord} overdue and I have not received payment or a date. Please settle this immediately or call me today.`
+      case "final_notice":
+        return `${name}, this is a final notice for invoice ${invoiceNumber} for ${fmt}, ${dayWord} past due. Payment is required immediately. If it is not received, I will have to pursue further collection steps.`
+      default:
+        return `Hi ${name}, invoice ${invoiceNumber} for ${fmt} is outstanding. Please send payment or reply with a payment date.`
+    }
+  }
+
+  // friendly (default)
   switch (overdueStage) {
     case "friendly_reminder":
       return `Hi ${name}, just a friendly reminder that invoice ${invoiceNumber} for ${fmt} is now due. Please let me know when payment will be sent. Thank you!`
 
     case "first_reminder":
-      return `Hi ${name}, following up on invoice ${invoiceNumber} for ${fmt}. This invoice is now ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue. Could you let me know when we can expect payment? Thanks.`
+      return `Hi ${name}, following up on invoice ${invoiceNumber} for ${fmt}. This invoice is now ${dayWord} overdue. Could you let me know when we can expect payment? Thanks.`
 
     case "second_reminder":
       return `Hi ${name}, I'm following up again on invoice ${invoiceNumber} for ${fmt}, which is now ${daysOverdue} days overdue. Please send payment or let me know if there's anything holding this up. I'd appreciate a firm date.`

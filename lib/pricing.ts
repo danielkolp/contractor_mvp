@@ -3,8 +3,9 @@
  *
  * Money rules (per the locked fee model):
  *   contractor subtotal  = what the contractor wants to receive (they always get this)
- *   platform fee         = plan fee % of contractor subtotal (Free 5 / Pro 2 / Team 1),
- *                          Free capped per transaction
+ *   platform fee         = plan fee % of contractor subtotal, capped per transaction
+ *                          (Free 5% capped $50 / Pro 2% capped $25 — see lib/plans.ts;
+ *                          pass planFeeOptions(plan) as the fee options)
  *   taxable subtotal     = contractor subtotal + platform fee
  *   GST                  = 5 % of taxable subtotal
  *   pre-Stripe total     = taxable subtotal + GST
@@ -50,11 +51,13 @@ export interface PricingBreakdown {
 export interface ComputePricingOptions {
   /** Explicit deposit in cents; null/undefined → default 30 % of client total. */
   depositInputCents?: number | null
-  /** Platform fee percentage (e.g. 5, 2, 1). Defaults to PLATFORM_FEE_PERCENT. */
+  /** Platform fee percentage (e.g. 5, 2). Defaults to PLATFORM_FEE_PERCENT. */
   feePercent?: number
   /**
-   * Cap on the platform fee in cents (used for the Free tier). null = uncapped.
-   * Defaults to the Free-tier cap so it pairs with the default Free fee.
+   * Per-transaction cap on the platform fee in cents. null = uncapped.
+   * Defaults to the Free-tier cap so it pairs with the default Free fee —
+   * callers should pass planFeeOptions(plan) from lib/plans.ts instead of
+   * assembling these two options by hand.
    */
   feeCapCents?: number | null
   /** Gross up the client total to cover Stripe's processing fee. Default true. */

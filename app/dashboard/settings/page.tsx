@@ -34,15 +34,12 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/lib/supabase/database.types"
 import {
-  PAID_PLANS,
   PLAN_META,
-  comparePlans,
+  effectivePlan,
+  hasPlanFeature,
   isPlanActive,
   normalizePlan,
-  type BillingInterval,
-  type PlanTier,
 } from "@/lib/plans"
-import { formatMoney } from "@/lib/format-money"
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"]
@@ -223,15 +220,15 @@ function AccountCard({ currentEmail }: { currentEmail: string | null }) {
 // ── Billing / subscription card ───────────────────────────────────────────────
 
 function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onChanged: () => void }) {
-  const [interval, setInterval] = useState<BillingInterval>(
-    (profile?.plan_interval as BillingInterval) ?? "month"
-  )
-  const [pendingPlan, setPendingPlan] = useState<PlanTier | null>(null)
+  const [isUpgrading, setIsUpgrading] = useState(false)
   const [openingPortal, setOpeningPortal] = useState(false)
 
   const currentPlan = normalizePlan(profile?.plan)
   const status = profile?.plan_status ?? "active"
   const active = isPlanActive(status)
+  // What the contractor is actually entitled to right now — a lapsed Pro
+  // subscription renders as Free here.
+  const effective = effectivePlan(currentPlan, status)
   const periodEnd = profile?.current_period_end
     ? new Date(profile.current_period_end).toLocaleDateString("en-CA", {
         year: "numeric",
@@ -257,13 +254,13 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
     }
   }, [onChanged])
 
-  async function startCheckout(plan: PlanTier) {
-    setPendingPlan(plan)
+  async function startCheckout() {
+    setIsUpgrading(true)
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, interval }),
+        body: JSON.stringify({ plan: "pro" }),
       })
       const data = (await res.json()) as { url?: string; error?: string }
       if (!res.ok || !data.url) {
@@ -274,7 +271,7 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
     } catch {
       toast.error("Could not reach Stripe. Please try again.")
     } finally {
-      setPendingPlan(null)
+      setIsUpgrading(false)
     }
   }
 
@@ -302,7 +299,7 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
           <div>
             <CardTitle className="text-base">Plan &amp; billing</CardTitle>
             <CardDescription>
-              Your Euroflo subscription. Lower plans mean a lower card fee on every job you collect.
+              Pro gets you lower fees, better follow-ups, branded estimates, and deposit control.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -324,29 +321,11 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
           </p>
         )}
 
-        {/* Monthly / annual toggle */}
-        <div className="inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1 text-xs">
-          {(["month", "year"] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setInterval(opt)}
-              className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-                interval === opt ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {opt === "month" ? "Monthly" : "Annual"}
-              {opt === "year" && <span className="ml-1 text-ef-ocean">save ~17%</span>}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          {(["free", ...PAID_PLANS] as PlanTier[]).map((tier) => {
+        {/* Free vs Pro comparison */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["free", "pro"] as const).map((tier) => {
             const meta = PLAN_META[tier]
-            const isCurrent = tier === currentPlan
-            const direction = comparePlans(tier, currentPlan)
-            const priceDollars = tier === "free" ? 0 : interval === "year" ? meta.annualPrice : meta.monthlyPrice
+            const isCurrent = tier === effective
 
             return (
               <div
@@ -364,10 +343,8 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
                   )}
                 </div>
                 <p className="mt-1 text-lg font-bold">
-                  {tier === "free" ? "$0" : formatMoney(priceDollars)}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {tier === "free" ? "" : interval === "year" ? "/yr" : "/mo"}
-                  </span>
+                  {tier === "free" ? "$0" : "$49"}
+                  <span className="text-xs font-normal text-muted-foreground">/month</span>
                 </p>
                 <p className="mt-0.5 text-xs font-medium text-ef-ocean">{meta.feeLabel}</p>
                 <ul className="mt-3 flex flex-1 flex-col gap-1.5">
@@ -379,8 +356,8 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
                   ))}
                 </ul>
                 <div className="mt-4">
-                  {isCurrent ? (
-                    tier === "free" ? (
+                  {tier === "free" ? (
+                    isCurrent ? (
                       <p className="text-center text-xs text-muted-foreground">Your current plan</p>
                     ) : (
                       <Button
@@ -388,34 +365,31 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
                         size="sm"
                         className="w-full"
                         onClick={() => void openPortal()}
-                        disabled={openingPortal}
+                        disabled={openingPortal || !profile?.stripe_customer_id}
                       >
-                        {openingPortal ? <Loader2 className="size-3.5 animate-spin" /> : <CreditCard className="size-3.5" />}
-                        Manage billing
+                        Downgrade
                       </Button>
                     )
-                  ) : tier === "free" ? (
+                  ) : isCurrent ? (
                     <Button
                       variant="outline"
                       size="sm"
                       className="w-full"
                       onClick={() => void openPortal()}
-                      disabled={openingPortal || !profile?.stripe_customer_id}
+                      disabled={openingPortal}
                     >
-                      Downgrade
+                      {openingPortal ? <Loader2 className="size-3.5 animate-spin" /> : <CreditCard className="size-3.5" />}
+                      Manage billing
                     </Button>
                   ) : (
                     <Button
                       size="sm"
                       className="w-full"
-                      variant={direction > 0 ? "default" : "outline"}
-                      onClick={() => void startCheckout(tier)}
-                      disabled={pendingPlan !== null}
+                      onClick={() => void startCheckout()}
+                      disabled={isUpgrading}
                     >
-                      {pendingPlan === tier ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : null}
-                      {direction > 0 ? `Upgrade to ${meta.name}` : `Switch to ${meta.name}`}
+                      {isUpgrading ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                      Upgrade to Pro
                     </Button>
                   )}
                 </div>
@@ -426,6 +400,87 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
         <p className="text-xs text-muted-foreground">
           Plans and cancellation are handled securely by Stripe. Downgrades and cancellations take effect at the end of your billing period.
         </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Branding card (Pro) ───────────────────────────────────────────────────────
+
+function BrandingCard({ profile, onChanged }: { profile: ProfileRow | null; onChanged: () => void }) {
+  const supabase = useMemo(() => createClient(), [])
+  const [footer, setFooter] = useState(profile?.branding_footer ?? "")
+  const [isSaving, setIsSaving] = useState(false)
+
+  const plan = effectivePlan(normalizePlan(profile?.plan), profile?.plan_status ?? "active")
+  const isPro = hasPlanFeature(plan, "brandedEstimates")
+
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!profile) return
+    const value = footer.trim()
+    if (value.length > 300) {
+      toast.error("Keep the branded footer under 300 characters.")
+      return
+    }
+    setIsSaving(true)
+    const { error } = await supabase
+      .from("profiles")
+      .update({ branding_footer: value || null })
+      .eq("user_id", profile.user_id)
+    if (error) {
+      toast.error("Failed to save branding")
+    } else {
+      toast.success("Branding saved")
+      onChanged()
+    }
+    setIsSaving(false)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Branding</CardTitle>
+            <CardDescription>
+              Your company name {profile?.company_name ? `(${profile.company_name}) ` : ""}
+              already appears on estimates. Pro adds a branded footer message to your
+              estimates and invoices. Logo upload is coming.
+            </CardDescription>
+          </div>
+          <Badge variant={isPro ? "default" : "secondary"}>Pro</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isPro ? (
+          <form noValidate onSubmit={(e) => void save(e)} className="grid gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="branding_footer">Branded footer message</Label>
+              <textarea
+                id="branding_footer"
+                value={footer}
+                onChange={(e) => setFooter(e.target.value)}
+                maxLength={300}
+                placeholder='e.g. "Licensed & insured · Serving the North Shore since 2012 · Thank you for your business!"'
+                className="min-h-16 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                disabled={isSaving}
+              />
+              <p className="text-xs text-muted-foreground">
+                Shows at the bottom of every estimate and invoice you share.
+              </p>
+            </div>
+            <Button type="submit" size="sm" variant="outline" className="w-fit" disabled={isSaving}>
+              {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+              Save branding
+            </Button>
+          </form>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Upgrade to Pro to add a branded footer message to your estimates and
+            invoices — it makes every document you send look more professional.
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -822,6 +877,11 @@ export default function SettingsPage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const canUseTonePresets = hasPlanFeature(
+    effectivePlan(normalizePlan(profile?.plan), profile?.plan_status ?? "active"),
+    "followUpPresets"
+  )
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -1237,7 +1297,29 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* default_tone is stored in DB but not yet wired to message generation */}
+              {/* ── Follow-up tone preset (Pro) ── */}
+              <div className="grid gap-2 sm:max-w-xs">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="default_tone">Follow-up tone</Label>
+                  <Badge variant="secondary" className="text-[0.6rem]">Pro</Badge>
+                </div>
+                <select
+                  id="default_tone"
+                  value={settingsForm.default_tone}
+                  onChange={(e) => updateSettings("default_tone", e.target.value)}
+                  disabled={!canUseTonePresets}
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="friendly">Friendly</option>
+                  <option value="professional">Professional</option>
+                  <option value="firm">Firm</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {canUseTonePresets
+                    ? "Drafted follow-up messages use this tone."
+                    : "Upgrade to Pro to choose the tone of drafted follow-ups."}
+                </p>
+              </div>
             </CardContent>
           </Card>
         </form>
@@ -1245,6 +1327,11 @@ export default function SettingsPage() {
         {/* ── Plan & billing (contractor's own subscription) ── */}
         {profile?.role === "contractor" && (
           <BillingCard profile={profile} onChanged={() => void loadData()} />
+        )}
+
+        {/* ── Branding (Pro) ── */}
+        {profile?.role === "contractor" && (
+          <BrandingCard profile={profile} onChanged={() => void loadData()} />
         )}
 
         {/* ── Stripe Connect payments ── */}

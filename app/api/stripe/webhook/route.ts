@@ -217,9 +217,19 @@ async function handleSubscriptionChange(
   const mapped = priceId ? planFromPriceId(priceId) : null
 
   const canceled = subscription.status === "canceled"
+  // Note: past_due is stored as-is and still counts as an active Pro plan
+  // (see isPlanActive in lib/plans.ts) — the contractor keeps access during
+  // Stripe's dunning window; canceled/unpaid downgrades to Free.
   const status = normalizePlanStatus(subscription.status)
 
-  // A canceled/ended subscription drops the contractor back to Free.
+  // A canceled/ended subscription drops the contractor back to Free. An
+  // unrecognized price also maps to Free — log it so a misconfigured
+  // STRIPE_PRICE_PRO_MONTH doesn't silently downgrade paying users.
+  if (!canceled && !mapped) {
+    console.warn(
+      `[stripe/webhook] Subscription ${subscription.id} has unmapped price ${priceId}; treating as Free. Check STRIPE_PRICE_PRO_MONTH.`
+    )
+  }
   const plan: PlanTier = canceled ? "free" : mapped?.plan ?? "free"
   const interval = canceled ? null : mapped?.interval ?? null
 
@@ -234,6 +244,9 @@ async function handleSubscriptionChange(
     plan_interval: interval,
     stripe_subscription_id: canceled ? null : subscription.id,
     current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    // Keep the customer id in sync (covers profiles created before checkout
+    // saved it, or restored from a backup).
+    ...(customerId ? { stripe_customer_id: customerId } : {}),
   }
 
   let query = service.from("profiles").update(update)

@@ -20,53 +20,64 @@ Companion docs: `BUSINESS_PLAN.md` (detail) · `EUROFLO_CAVEMAN.md` (north star)
 
 ---
 
-## 🔒 Decisions to lock (do these on paper before/while building P0)
-- [ ] **Fee mechanics:** make the platform % an **application fee on top of
-      contractor-paid Stripe (~2.9% + 30¢)** — otherwise the 1–2% tiers run
-      negative and lose money on every transaction.
-- [ ] **Who bears the fee:** contractor-paid (recommended — honest pricing, no
-      "total higher than I quoted" friction), optionally passable to the customer on Pro.
-- [ ] **Per-transaction cap on the Free 5%** so big jobs don't flee off-platform.
-- [ ] **Lock the final tier feature matrix** (the table in P0) before gating code.
+## 🔒 Decisions — LOCKED (2026-06-11)
+- [x] **Two tiers only for the MVP: Free and Pro.** Team is parked — the `team`
+      enum stays in the DB for forward compatibility but is not sold, not shown,
+      and has no Stripe price wiring.
+- [x] **Fee mechanics:** platform % is an application fee charged to the client
+      on top (plus grossed-up Stripe processing), so the contractor always
+      receives their quoted amount (`lib/pricing.ts`).
+- [x] **Per-transaction caps:** Free 5% capped at **$50** · Pro 2% capped at
+      **$25** (`lib/plans.ts` is the single source of truth).
+- [x] **Pro pitch:** "Lower fees, better follow-ups, branded estimates, and
+      deposit control."
 
 ---
 
-## 🥇 P0 — Subscriptions & tier gating  *(the business itself — nothing earns without it)*
+## 🥇 P0 — Subscriptions & tier gating  *(SHIPPED 2026-06-11, except live Stripe verification)*
 
-The app today only has Stripe Connect for contractors getting **paid by
-customers**. There is **no subscription billing** for the contractor to pay
-$49/$199. This is the revenue model — build it.
+**Billing — built**
+- [x] **Stripe Billing** (subscription Checkout + customer portal) for the
+      contractor's own plan — `app/api/billing/checkout` + `app/api/billing/portal`
+- [x] `profiles.plan` + `stripe_subscription_id`, `plan_status`,
+      `current_period_end` (`20260604100000_subscription_billing.sql`)
+- [x] Webhook for subscription created/updated/canceled → updates `profiles.plan`,
+      `plan_status`, `stripe_subscription_id`, `stripe_customer_id`,
+      `current_period_end`; canceled/unpaid downgrades to Free; `past_due`
+      keeps Pro during Stripe dunning (explicit in `isPlanActive`)
+- [x] Billing card in Settings: current plan, Free vs Pro comparison with fee
+      caps, Upgrade to Pro, Manage billing (Stripe portal)
+- [x] Single required env var: `STRIPE_PRICE_PRO_MONTH`. Missing → clear error
+      (dev names the var; prod says "Pro checkout is temporarily unavailable")
+- [~] **Annual billing** — parked. `STRIPE_PRICE_PRO_YEAR` is read if set (so an
+      existing annual sub maps back to Pro) but nothing depends on it.
 
-**Billing**
-- [ ] Add **Stripe Billing** (subscription Checkout + customer portal) for the
-      contractor's own plan — separate from the Connect/payments flow
-- [ ] `profiles.plan` (`free` | `pro` | `team`) + `stripe_subscription_id`,
-      `plan_status`, `current_period_end` (new migration)
-- [ ] Webhook handling for subscription created/updated/canceled → update `profiles.plan`
-- [ ] **Annual billing** option with 10–20% discount (separate Stripe prices)
-- [ ] Billing section in Settings: current plan, upgrade/downgrade, manage via Stripe portal
+**Plans & gating — built**
+- [x] Central `planFeatures(plan)` / `hasPlanFeature` / `requireFeature` in `lib/plans.ts`
+- [x] Per-plan fee with caps applied everywhere estimates are priced
+      (`planFeeOptions(plan)` → `computePricing`)
 
-**Plans & gating**
-- [ ] Central `planFeatures(plan)` helper + a `requirePlan()` guard (server + UI)
-- [ ] Set transaction fee % by plan when creating Connect charges: Free 5% · Pro 2% · Team 1%
+| Capability | Free | Pro ($49/mo) |
+|---|---|---|
+| Public request link, job requests, clients | ✅ | ✅ |
+| Estimates, invoices, client portal + online card payment | ✅ | ✅ |
+| Manual recovery follow-ups (the hook) | ✅ | ✅ |
+| Record offline payments (e-transfer/cash/cheque) — no fee | ✅ | ✅ |
+| Branded footer on estimates & invoices | — | ✅ |
+| Custom deposit amount (Free uses the 30% default) | — | ✅ |
+| Follow-up tone presets (friendly/professional/firm) | — | ✅ |
+| Card transaction fee | 5%, capped $50 | 2%, capped $25 |
 
-| Capability | Free | Pro ($49) | Team ($199) |
-|---|---|---|---|
-| Requests / clients / basic estimates | ✅ | ✅ | ✅ |
-| Client portal + online payment (so Free can earn a fee) | ✅ | ✅ | ✅ |
-| Basic recovery follow-ups (the hook) | ✅ | ✅ | ✅ |
-| Automated follow-up cadences + reply tracking | — | ✅ | ✅ |
-| CRM / reliability badges, branded estimates, deposits | — | ✅ | ✅ |
-| Multi-user, advanced reporting, team mgmt | — | — | ✅ |
-| Card transaction fee | 5% (capped) | 2% | 1% |
+**Still open for Pro**
+- [ ] Branding logo upload (column/migration pattern is in place; needs storage upload UI)
+- [ ] Branded footer on the client portal pages (currently on printable estimates + invoices)
+- [ ] Tone presets on estimate follow-ups & Today-page recovery items
+      (currently applied to invoice follow-up drafts)
+- [ ] Saved custom follow-up templates (beyond tone presets) — only if contractors ask
 
-- [ ] **Multi-user / team accounts** (Team tier) — invite teammates to one workspace
-- [ ] **Advanced reporting** (Team) — at minimum the "dollars recovered" report (see north-star)
-- [ ] Done when: a contractor can subscribe to Pro, get Pro features unlocked, see
-      the 2% fee applied, and manage/cancel billing themselves.
-
-> Note: building can proceed locally, but **testing real subscription charges
-> needs an environment where Stripe's hosts are reachable** (blocked in the sandbox).
+> Note: **testing real subscription charges needs an environment where Stripe's
+> hosts are reachable** (blocked in the sandbox). The flow is built; run one
+> live Free → Pro → cancel → Free pass before launch.
 
 ---
 
@@ -196,4 +207,4 @@ card. Me no care. Just mark job paid."*
 ## ⭐ North-star metric
 - [ ] Make **"dollars recovered for you"** visible in-app (e.g. "Euroflo has
       recovered $14,200 for you this year") — the number that justifies the price
-      and powers Team-tier reporting.
+      and will power reporting on a future Team tier (parked).

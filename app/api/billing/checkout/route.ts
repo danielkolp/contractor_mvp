@@ -4,10 +4,11 @@ import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { stripe } from "@/lib/stripe/server"
 import { enumField, inputErrorMessage } from "@/lib/security/input"
-import { PAID_PLANS, stripePriceId, type BillingInterval, type PlanTier } from "@/lib/plans"
+import { PAID_PLANS, stripePriceId, type PlanTier } from "@/lib/plans"
 
-// Subscription Checkout for the contractor's OWN plan ($49 Pro / $199 Team).
-// Separate from the Connect/payments flow (clients paying contractors).
+// Subscription Checkout for the contractor's OWN plan ($49/mo Pro — the only
+// purchasable plan in the MVP). Separate from the Connect/payments flow
+// (clients paying contractors).
 export async function POST(req: NextRequest) {
   // ── 1. Auth: contractor only ─────────────────────────────────────────────────
   const supabase = await createClient()
@@ -22,23 +23,23 @@ export async function POST(req: NextRequest) {
   catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
 
   let plan: PlanTier
-  let interval: BillingInterval
   try {
-    const raw = body as { plan?: unknown; interval?: unknown }
+    const raw = body as { plan?: unknown }
     plan = enumField(raw.plan, "plan", PAID_PLANS as readonly PlanTier[])
-    interval = raw.interval === undefined || raw.interval === null
-      ? "month"
-      : enumField(raw.interval, "interval", ["month", "year"] as const)
   } catch (error) {
     return NextResponse.json({ error: inputErrorMessage(error) }, { status: 400 })
   }
 
-  const priceId = stripePriceId(plan, interval)
+  // Monthly only for the MVP — annual billing is intentionally not wired up.
+  const priceId = stripePriceId(plan, "month")
   if (!priceId) {
-    return NextResponse.json(
-      { error: "This plan is not available for purchase yet. Please contact support." },
-      { status: 422 }
-    )
+    // Explicit env handling: never show a vague "not available" message.
+    const message =
+      process.env.NODE_ENV === "production"
+        ? "Pro checkout is temporarily unavailable."
+        : "Pro checkout is not configured. Missing STRIPE_PRICE_PRO_MONTH."
+    console.error("[billing/checkout] STRIPE_PRICE_PRO_MONTH is not set")
+    return NextResponse.json({ error: message }, { status: 503 })
   }
 
   const service = createServiceClient()

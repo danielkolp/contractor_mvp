@@ -1011,26 +1011,23 @@ function PricingSection() {
         <div className="ef-price-copy ef-reveal">
           <div className="ef-eyebrow ef-eyebrow-left">
             <CircleDollarSign className="ef-icon-sm" />
-            Early access pricing
+            Simple pricing
           </div>
-          <h2>Start with the invoices you already know are overdue.</h2>
+          <h2>Start free. Pay only when you get paid.</h2>
           <p>
-            A focused workspace for estimates, invoices, clients, and drafted
-            follow-ups. It only needs to recover one missed payment to make the
-            math obvious.
+            The Free plan has everything you need to send estimates, invoice,
+            and chase what you&apos;re owed — for a 5% card fee (capped at $50
+            per transaction) only when a client pays you online. Recording
+            e-transfer, cash, or cheque payments is always free.
           </p>
           <div className="ef-mini-row">
             <span>
               <i />
-              3 follow-ups ready
+              Free: $0/mo · 5% card fee, capped at $50
             </span>
             <span>
               <i />
-              Quote follow-up due
-            </span>
-            <span>
-              <i />
-              Invoice reminder drafted
+              Pro: $49/mo · 2% card fee, capped at $25
             </span>
           </div>
         </div>
@@ -1038,13 +1035,13 @@ function PricingSection() {
         <div className="ef-price-card ef-reveal">
           <div className="ef-price-top">
             <div>
-              <h3>Early access</h3>
+              <h3>Pro</h3>
               <p>
-                For contractors who want the recovery workflow before full
-                integrations.
+                Lower fees, better follow-ups, branded estimates, and deposit
+                control.
               </p>
             </div>
-            <span>beta</span>
+            <span>$0 to start</span>
           </div>
           <div className="ef-price">
             <strong className="ef-num">$49</strong>
@@ -1052,9 +1049,10 @@ function PricingSection() {
           </div>
           <div className="ef-price-list">
             {[
-              "Recovery queue and ranked follow-ups",
-              "Drafted text and email messages",
-              "Invoice and estimate tracking",
+              "2% card fee capped at $25 (Free: 5% capped at $50)",
+              "Your branding on estimates and invoices",
+              "Custom deposit amounts on estimates",
+              "Follow-up tone presets for drafted messages",
               "Cancel any time",
             ].map((item) => (
               <div key={item}>
@@ -1064,9 +1062,9 @@ function PricingSection() {
             ))}
           </div>
           <CtaLink href="/signup" className="ef-full-btn">
-            Start recovering revenue
+            Start free
           </CtaLink>
-          <p className="ef-price-note">No credit card required to try.</p>
+          <p className="ef-price-note">No credit card required. Upgrade to Pro any time.</p>
         </div>
       </div>
     </section>

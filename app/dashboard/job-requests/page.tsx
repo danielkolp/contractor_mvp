@@ -60,8 +60,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { money } from "@/lib/format-money"
 import { computePricing } from "@/lib/pricing"
 import {
-  FREE_FEE_CAP_CENTS,
   effectivePlan,
+  hasPlanFeature,
+  planFeeOptions,
+  transactionFeeCapCents,
   transactionFeePercent,
   type PlanTier,
 } from "@/lib/plans"
@@ -790,19 +792,16 @@ export default function ContractorJobRequestsPage() {
     : parseAmount(estimateForm.flatAmount)
 
   // ── Stripe payout derivations via shared pricing helper ──────────────────────
-  // Plan-based fee: Free 5% (capped) / Pro 2% / Team 1%, charged to the client on top.
-  const feeOptions = useMemo(
-    () => ({
-      feePercent: transactionFeePercent(plan),
-      feeCapCents: plan === "free" ? FREE_FEE_CAP_CENTS : null,
-    }),
-    [plan]
-  )
+  // Plan-based fee, charged to the client on top: Free 5% capped at $50 /
+  // Pro 2% capped at $25 per transaction (see lib/plans.ts).
+  const feeOptions = useMemo(() => planFeeOptions(plan), [plan])
+  // Custom deposit amounts are a Pro feature; Free uses the default 30% deposit.
+  const canCustomDeposit = hasPlanFeature(plan, "customDeposits")
   const rawContractorCents = Math.round((parseFloat(estimateForm.contractorAmount) || 0) * 100)
   const rawDepositCents    = Math.round((parseFloat(estimateForm.depositAmount) || 0) * 100)
   const pricing = rawContractorCents > 0
     ? computePricing(rawContractorCents, {
-        depositInputCents: rawDepositCents > 0 ? rawDepositCents : null,
+        depositInputCents: canCustomDeposit && rawDepositCents > 0 ? rawDepositCents : null,
         ...feeOptions,
       })
     : null
@@ -1371,7 +1370,9 @@ export default function ContractorJobRequestsPage() {
       pricingForSave =
         contractorAmountCents > 0
           ? computePricing(contractorAmountCents, {
-              depositInputCents: depositAmountCents > 0 ? depositAmountCents : null,
+              // Custom deposits are Pro-only; Free always gets the 30% default.
+              depositInputCents:
+                canCustomDeposit && depositAmountCents > 0 ? depositAmountCents : null,
               ...feeOptions,
             })
           : null
@@ -1911,6 +1912,10 @@ export default function ContractorJobRequestsPage() {
                       so the customer sees the full card price. Leave blank if you will collect by
                       cash, cheque, or e-transfer.
                     </p>
+                    <p className="mt-1 text-xs font-medium text-ef-ocean">
+                      Your plan&apos;s card fee: {transactionFeePercent(plan)}%, capped at{" "}
+                      {money.format((transactionFeeCapCents(plan) ?? 0) / 100)} per transaction.
+                    </p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="grid gap-2">
@@ -1927,7 +1932,7 @@ export default function ContractorJobRequestsPage() {
                         disabled={isSaving}
                       />
                     </div>
-                    {hasStripePayment && (
+                    {hasStripePayment && canCustomDeposit && (
                       <div className="grid gap-2">
                         <Label htmlFor="estimate-deposit-amount">Deposit to collect now (CAD)</Label>
                         <Input
@@ -1941,6 +1946,18 @@ export default function ContractorJobRequestsPage() {
                           step="0.01"
                           disabled={isSaving}
                         />
+                      </div>
+                    )}
+                    {hasStripePayment && !canCustomDeposit && (
+                      <div className="grid gap-2">
+                        <Label>Deposit to collect now</Label>
+                        <div className="flex h-9 items-center rounded-lg border border-input bg-muted/40 px-3 text-sm tabular-nums">
+                          {money.format(depositCents / 100)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Free plan uses a 30% deposit. Upgrade to Pro to set your own
+                          deposit amount.
+                        </p>
                       </div>
                     )}
                   </div>

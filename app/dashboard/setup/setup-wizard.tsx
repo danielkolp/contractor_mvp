@@ -51,7 +51,7 @@ import {
 } from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
-import { effectivePlan, transactionFeePercent } from "@/lib/plans"
+import { effectivePlan, transactionFeeCapCents, transactionFeePercent } from "@/lib/plans"
 import type { Database } from "@/lib/supabase/database.types"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -833,6 +833,7 @@ export function SetupWizard() {
   // ── Plan-based card fee (shown in the payments step) ──
   const plan = effectivePlan(profileRow?.plan ?? "free", profileRow?.plan_status ?? "active")
   const planFeePercent = transactionFeePercent(plan)
+  const planFeeCapDollars = (transactionFeeCapCents(plan) ?? 0) / 100
 
   // ── Completion checks ──
   const isProfileComplete = Boolean(profileRow?.company_name && profileRow?.owner_name)
@@ -1418,7 +1419,7 @@ export function SetupWizard() {
 
         <SetupInsight
           title="How payments work"
-          description={`Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set. Euroflo adds a ${planFeePercent}% card fee on top, which your client pays.`}
+          description={`Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set. Euroflo adds a ${planFeePercent}% card fee (capped at $${planFeeCapDollars} per transaction) on top, which your client pays.`}
         />
 
         {/* Status card */}

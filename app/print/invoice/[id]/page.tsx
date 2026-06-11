@@ -5,6 +5,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/env"
 import { createClient } from "@/lib/supabase/server"
 import type { Database } from "@/lib/supabase/database.types"
 import { getProfileRole } from "@/lib/user-role"
+import { effectivePlan, hasPlanFeature, normalizePlan } from "@/lib/plans"
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"]
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
@@ -150,6 +151,18 @@ export default async function InvoicePrintPage({
 
   const companyName = profile?.company_name || profile?.owner_name || "Your Company"
   const ownerName   = profile?.owner_name || ""
+
+  // Branded footer is a Pro perk — shown only while the contractor's plan is
+  // actually entitled (a lapsed Pro subscription hides it without deleting it).
+  const contractorPlan = effectivePlan(
+    normalizePlan(profile?.plan),
+    profile?.plan_status ?? "active"
+  )
+  const brandingFooter =
+    hasPlanFeature(contractorPlan, "brandedEstimates") && profile?.branding_footer
+      ? profile.branding_footer
+      : null
+
   const clientName  = client?.name || invoice.client_name || "Client"
   const clientCo    = client?.company || ""
   const clientEmail = client?.email || ""
@@ -381,6 +394,13 @@ export default async function InvoicePrintPage({
                 ✓ Payment received on{" "}
                 {new Intl.DateTimeFormat("en-CA", { month: "long", day: "numeric", year: "numeric" }).format(new Date(invoice.paid_at))}
               </p>
+            </div>
+          )}
+
+          {/* ── Branded footer (Pro) ── */}
+          {brandingFooter && (
+            <div className="print-avoid-break border-t border-zinc-200 px-8 py-3 text-center">
+              <p className="text-[0.65rem] italic leading-relaxed text-zinc-500">{brandingFooter}</p>
             </div>
           )}
 

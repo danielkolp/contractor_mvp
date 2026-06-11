@@ -73,7 +73,10 @@ import {
   getOverdueStage,
   getRecommendedAction,
   isRecoverableInvoice,
+  normalizeMessageTone,
+  type MessageTone,
 } from "@/lib/recovery-engine"
+import { effectivePlan, hasPlanFeature, normalizePlan } from "@/lib/plans"
 import { money as moneyFormatter } from "@/lib/format-money"
 import {
   INPUT_LIMITS,
@@ -414,7 +417,8 @@ function isWaitingRecoveryDraft(draft: RecoveryDraftRow) {
 
 function buildRecoveryDraftPayload(
   invoice: InvoiceRow,
-  userId: string
+  userId: string,
+  tone: MessageTone = "friendly"
 ): RecoveryDraftInsert {
   const daysOverdue = getEffectiveRecoveryDays(invoice)
   const overdueStage = getOverdueStage(daysOverdue)
@@ -430,6 +434,7 @@ function buildRecoveryDraftPayload(
       amount: invoice.amount,
       daysOverdue,
       overdueStage,
+      tone,
     }),
     status: "needs_approval",
     recommended_action: getRecommendedAction(overdueStage),
@@ -676,6 +681,7 @@ export default function InvoicesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [followUpTone, setFollowUpTone] = useState<MessageTone>("friendly")
 
   // ─── Derived line item totals ──────────────────────────────────────────────
   const liSubtotal = useMemo(() => lineItemSubtotal(form.lineItems), [form.lineItems])
@@ -702,7 +708,7 @@ export default function InvoicesPage() {
 
     setUserId(user.id)
 
-    const [clientResult, invoiceResult, reminderResult] =
+    const [clientResult, invoiceResult, reminderResult, profileResult, settingsResult] =
       await Promise.all([
         supabase
           .from("clients")
@@ -719,7 +725,28 @@ export default function InvoicesPage() {
           .select("*")
           .eq("user_id", user.id)
           .order("reminder_date", { ascending: true }),
+        supabase
+          .from("profiles")
+          .select("plan, plan_status")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("settings")
+          .select("default_tone")
+          .eq("user_id", user.id)
+          .maybeSingle(),
       ])
+
+    // Tone presets are a Pro feature — Free always drafts in the friendly tone.
+    const plan = effectivePlan(
+      normalizePlan(profileResult.data?.plan),
+      profileResult.data?.plan_status ?? "active"
+    )
+    setFollowUpTone(
+      hasPlanFeature(plan, "followUpPresets")
+        ? normalizeMessageTone(settingsResult.data?.default_tone)
+        : "friendly"
+    )
 
     const firstError =
       clientResult.error ||
@@ -1110,7 +1137,7 @@ export default function InvoicesPage() {
         return
       }
 
-      const payload = buildRecoveryDraftPayload(invoice, userId)
+      const payload = buildRecoveryDraftPayload(invoice, userId, followUpTone)
       const { error: insertError } = await supabase
         .from("recovery_drafts")
         .insert(payload)

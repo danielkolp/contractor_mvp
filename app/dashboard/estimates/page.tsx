@@ -61,8 +61,10 @@ import { Label } from "@/components/ui/label"
 import { money as moneyFormatter } from "@/lib/format-money"
 import { computePricing } from "@/lib/pricing"
 import {
-  FREE_FEE_CAP_CENTS,
   effectivePlan,
+  hasPlanFeature,
+  planFeeOptions,
+  transactionFeeCapCents,
   transactionFeePercent,
   type PlanTier,
 } from "@/lib/plans"
@@ -371,20 +373,17 @@ export default function EstimatesPage() {
   const hasLineItems = form.lineItems.length > 0
 
   // ─── Stripe payout breakdown via shared pricing helper ───────────────────────
-  // Plan-based fee: Free 5% (capped) / Pro 2% / Team 1%, charged to the client on top.
-  const feeOptions = useMemo(
-    () => ({
-      feePercent: transactionFeePercent(plan),
-      feeCapCents: plan === "free" ? FREE_FEE_CAP_CENTS : null,
-    }),
-    [plan]
-  )
+  // Plan-based fee, charged to the client on top: Free 5% capped at $50 /
+  // Pro 2% capped at $25 per transaction (see lib/plans.ts).
+  const feeOptions = useMemo(() => planFeeOptions(plan), [plan])
+  // Custom deposit amounts are a Pro feature; Free uses the default 30% deposit.
+  const canCustomDeposit = hasPlanFeature(plan, "customDeposits")
   const contractorDollars = parseFloat(form.contractorAmountCents) || 0
   const rawContractorCents = Math.round(contractorDollars * 100)
   const rawDepositCents    = Math.round((parseFloat(form.depositAmountCents) || 0) * 100)
   const pricing = rawContractorCents > 0
     ? computePricing(rawContractorCents, {
-        depositInputCents: rawDepositCents > 0 ? rawDepositCents : null,
+        depositInputCents: canCustomDeposit && rawDepositCents > 0 ? rawDepositCents : null,
         ...feeOptions,
       })
     : null
@@ -631,7 +630,9 @@ export default function EstimatesPage() {
       const safePricing =
         safeContractorCents > 0
           ? computePricing(safeContractorCents, {
-              depositInputCents: safeDepositCents > 0 ? safeDepositCents : null,
+              // Custom deposits are Pro-only; Free always gets the 30% default.
+              depositInputCents:
+                canCustomDeposit && safeDepositCents > 0 ? safeDepositCents : null,
               ...feeOptions,
             })
           : null
@@ -1242,6 +1243,10 @@ export default function EstimatesPage() {
                   Enter what you want to receive. Euroflo adds the service fee, GST, and card
                   processing on top, so the customer sees the full card price and you keep your full amount.
                 </p>
+                <p className="mt-1 text-xs font-medium text-ef-ocean">
+                  Your plan&apos;s card fee: {transactionFeePercent(plan)}%, capped at{" "}
+                  {moneyFormatter.format((transactionFeeCapCents(plan) ?? 0) / 100)} per transaction.
+                </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
@@ -1257,7 +1262,7 @@ export default function EstimatesPage() {
                     disabled={isSaving}
                   />
                 </div>
-                {hasStripePayment && (
+                {hasStripePayment && canCustomDeposit && (
                   <div className="grid gap-2">
                     <Label htmlFor="deposit-amount">Deposit to collect now (CAD)</Label>
                     <Input
@@ -1271,6 +1276,18 @@ export default function EstimatesPage() {
                       step="0.01"
                       disabled={isSaving}
                     />
+                  </div>
+                )}
+                {hasStripePayment && !canCustomDeposit && (
+                  <div className="grid gap-2">
+                    <Label>Deposit to collect now</Label>
+                    <div className="flex h-9 items-center rounded-lg border border-input bg-muted/40 px-3 text-sm tabular-nums">
+                      {moneyFormatter.format(depositCents / 100)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Free plan uses a 30% deposit. Upgrade to Pro to set your own
+                      deposit amount.
+                    </p>
                   </div>
                 )}
               </div>

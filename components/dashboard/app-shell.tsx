@@ -20,8 +20,10 @@ import {
 import { logout } from "@/app/auth/actions"
 import { BrandLogo } from "@/components/brand-logo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import type { PlanTier } from "@/lib/plans"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -221,9 +223,11 @@ function getInitials(email?: string) {
 function TopBar({
   userEmail,
   counts,
+  plan,
 }: {
   userEmail?: string
   counts: Record<string, number>
+  plan: PlanTier
 }) {
   const [isPending, startTransition] = useTransition()
   const displayName = userEmail?.split("@")[0] || "Owner"
@@ -240,6 +244,11 @@ function TopBar({
         <BrandLogo variant="mark" className="size-8" />
       </Link>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        {plan === "pro" && (
+          <Badge variant="info" className="hidden sm:inline-flex">
+            Pro
+          </Badge>
+        )}
         <ThemeToggle />
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <DropdownMenu>
@@ -258,7 +267,14 @@ function TopBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-52">
             <DropdownMenuLabel>
-              <div className="text-sm font-medium">Owner workspace</div>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                Owner workspace
+                {plan === "pro" && (
+                  <Badge variant="info" className="font-semibold">
+                    Pro
+                  </Badge>
+                )}
+              </div>
               <div className="text-xs font-normal text-muted-foreground">
                 {userEmail || "Signed in"}
               </div>
@@ -291,9 +307,11 @@ function TopBar({
 export function AppShell({
   children,
   userEmail,
+  plan,
 }: {
   children: React.ReactNode
   userEmail?: string
+  plan: PlanTier
 }) {
   const supabase = useMemo(() => createClient(), [])
   const pathname = usePathname()
@@ -327,7 +345,7 @@ export function AppShell({
       <div className="flex min-h-screen">
         <Sidebar counts={counts} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar userEmail={userEmail} counts={counts} />
+          <TopBar userEmail={userEmail} counts={counts} plan={plan} />
           <main key={pathname} className="flex-1 ef-page-in">{children}</main>
         </div>
       </div>
