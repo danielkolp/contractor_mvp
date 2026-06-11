@@ -270,7 +270,7 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
         toast.error(data.error ?? "Could not start checkout")
         return
       }
-      window.location.href = data.url
+      window.location.assign(data.url)
     } catch {
       toast.error("Could not reach Stripe. Please try again.")
     } finally {
@@ -287,7 +287,7 @@ function BillingCard({ profile, onChanged }: { profile: ProfileRow | null; onCha
         toast.error(data.error ?? "Could not open billing portal")
         return
       }
-      window.location.href = data.url
+      window.location.assign(data.url)
     } catch {
       toast.error("Could not reach Stripe. Please try again.")
     } finally {
