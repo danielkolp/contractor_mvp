@@ -19,10 +19,17 @@
  * All amounts are integers in cents.
  */
 
-/** Legacy/default platform fee % when no plan fee is supplied. */
-export const PLATFORM_FEE_PERCENT = Number(
-  process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? 15
-)
+import { FREE_FEE_CAP_CENTS, transactionFeePercent } from "./plans"
+
+/**
+ * Default platform fee % when no explicit plan fee is supplied. Falls back to
+ * the contractor's baseline plan fee (the Free tier, 5%) rather than a flat 15%,
+ * so estimates always reflect the real per-plan card fee from `lib/plans.ts`.
+ * An env override (`NEXT_PUBLIC_PLATFORM_FEE_PERCENT`) still wins when set.
+ */
+export const PLATFORM_FEE_PERCENT = process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT
+  ? Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT)
+  : transactionFeePercent("free")
 export const GST_PERCENT = 5
 
 /** Stripe standard card processing fee (CAD): 2.9% + 30¢. */
@@ -45,7 +52,10 @@ export interface ComputePricingOptions {
   depositInputCents?: number | null
   /** Platform fee percentage (e.g. 5, 2, 1). Defaults to PLATFORM_FEE_PERCENT. */
   feePercent?: number
-  /** Cap on the platform fee in cents (used for the Free tier). null = uncapped. */
+  /**
+   * Cap on the platform fee in cents (used for the Free tier). null = uncapped.
+   * Defaults to the Free-tier cap so it pairs with the default Free fee.
+   */
   feeCapCents?: number | null
   /** Gross up the client total to cover Stripe's processing fee. Default true. */
   includeStripeFee?: boolean
@@ -74,7 +84,7 @@ export function computePricing(
   const {
     depositInputCents,
     feePercent = PLATFORM_FEE_PERCENT,
-    feeCapCents = null,
+    feeCapCents = FREE_FEE_CAP_CENTS,
     includeStripeFee = true,
   } = options
 

@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -50,6 +51,7 @@ import {
 } from "@/lib/security/input"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { effectivePlan, transactionFeePercent } from "@/lib/plans"
 import type { Database } from "@/lib/supabase/database.types"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -349,6 +351,8 @@ export function SetupWizard() {
   // ── Stage state ──
   const [currentStage, setCurrentStage] = useState(0)
   const [completedStages, setCompletedStages] = useState<Set<number>>(new Set())
+  // Direction of the last navigation, so step content slides in accordingly.
+  const [direction, setDirection] = useState<"forward" | "back">("forward")
 
   // ── Loaded data ──
   const [profileRow, setProfileRow] = useState<ProfileRow | null>(null)
@@ -533,7 +537,9 @@ export function SetupWizard() {
   }
 
   function goToStage(n: number) {
-    setCurrentStage(Math.max(0, Math.min(n, TOTAL - 1)))
+    const next = Math.max(0, Math.min(n, TOTAL - 1))
+    setDirection(next >= currentStage ? "forward" : "back")
+    setCurrentStage(next)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -824,6 +830,10 @@ export function SetupWizard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // ── Plan-based card fee (shown in the payments step) ──
+  const plan = effectivePlan(profileRow?.plan ?? "free", profileRow?.plan_status ?? "active")
+  const planFeePercent = transactionFeePercent(plan)
+
   // ── Completion checks ──
   const isProfileComplete = Boolean(profileRow?.company_name && profileRow?.owner_name)
   const isServicesComplete = Boolean(profileRow?.trade || profileRow?.service_area)
@@ -872,9 +882,7 @@ export function SetupWizard() {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <div className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-ef-mist text-ef-ocean dark:bg-ef-ink/40 dark:text-ef-300">
-            <span className="text-2xl">🐊</span>
-          </div>
+          <BrandLogo className="mb-5" priority />
           <h1 className="text-2xl font-bold tracking-tight">
             Get one job request link working first
           </h1>
@@ -1410,7 +1418,7 @@ export function SetupWizard() {
 
         <SetupInsight
           title="How payments work"
-          description="Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set. Euroflo adds a 15% platform fee on top, which your client pays."
+          description={`Connect Stripe so clients can pay accepted estimates online. You receive the full amount you set. Euroflo adds a ${planFeePercent}% card fee on top, which your client pays.`}
         />
 
         {/* Status card */}
@@ -1758,7 +1766,9 @@ export function SetupWizard() {
           <div className="mx-auto max-w-xl">
             <div
               key={currentStage}
-              className="animate-[content-reveal_0.2s_ease-out_both] motion-reduce:animate-none"
+              className={cn(
+                direction === "back" ? "wizard-step-back" : "wizard-step-forward"
+              )}
             >
               {currentStage === 0 && renderWelcome()}
               {currentStage === 1 && renderBusinessProfile()}
